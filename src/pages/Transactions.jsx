@@ -1,0 +1,75 @@
+import { motion } from 'framer-motion'
+import ExportMenu from '@/components/common/ExportMenu'
+import { formatCurrency, formatDateTime } from '@/utils/formatters'
+
+const transactions = [
+  { id: 'TP-260524-0001', date: '2026-05-24T14:30:00', cashier: 'Grace K.', items: 3, subtotal: 13.48, tax: 2.02, total: 15.50, method: 'Cash', branch: 'Main' },
+  { id: 'TP-260524-0002', date: '2026-05-24T14:22:00', cashier: 'Tatenda M.', items: 7, subtotal: 37.17, tax: 5.58, total: 42.75, method: 'EcoCash', branch: 'Main' },
+  { id: 'TP-260524-0003', date: '2026-05-24T14:15:00', cashier: 'Grace K.', items: 2, subtotal: 7.13, tax: 1.07, total: 8.20, method: 'Cash', branch: 'CBD' },
+  { id: 'TP-260524-0004', date: '2026-05-24T14:08:00', cashier: 'Farai N.', items: 12, subtotal: 59.04, tax: 8.86, total: 67.90, method: 'Visa', branch: 'Main' },
+  { id: 'TP-260524-0005', date: '2026-05-24T13:55:00', cashier: 'Grace K.', items: 4, subtotal: 20.00, tax: 3.00, total: 23.00, method: 'InnBucks', branch: 'Mall' },
+]
+
+const exportColumns = [
+  { header: 'Receipt #', key: 'id' },
+  { header: 'Date', key: 'date' },
+  { header: 'Cashier', key: 'cashier' },
+  { header: 'Items', key: 'items' },
+  { header: 'Subtotal', key: 'subtotal' },
+  { header: 'Tax', key: 'tax' },
+  { header: 'Total', key: 'total' },
+  { header: 'Method', key: 'method' },
+  { header: 'Branch', key: 'branch' },
+]
+
+export default function Transactions() {
+  return (
+    <div className="p-6">
+      <div className="mb-6 flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-extrabold text-slate-900 dark:text-white">Transactions</h1>
+          <p className="text-sm text-slate-500">Detailed transaction history</p>
+        </div>
+        <ExportMenu data={transactions} columns={exportColumns} title="Transactions" filename="tengapos_transactions" />
+      </div>
+
+      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
+        <div className="overflow-x-auto">
+          <table className="w-full">
+            <thead>
+              <tr className="border-b border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-900">
+                {['Receipt #', 'Date', 'Cashier', 'Items', 'Subtotal', 'Tax', 'Total', 'Payment', 'Branch'].map((h) => (
+                  <th key={h} className="px-4 py-3 text-left text-xs font-semibold uppercase text-slate-500">{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {transactions.map((t) => (
+                <motion.tr
+                  key={t.id}
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  className="border-b border-slate-100 hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-800/50"
+                >
+                  <td className="px-4 py-3 font-mono text-sm font-medium text-slate-900 dark:text-white">{t.id}</td>
+                  <td className="px-4 py-3 text-sm text-slate-600 dark:text-slate-400">{formatDateTime(t.date)}</td>
+                  <td className="px-4 py-3 text-sm text-slate-600 dark:text-slate-400">{t.cashier}</td>
+                  <td className="px-4 py-3 text-sm text-slate-600 dark:text-slate-400">{t.items}</td>
+                  <td className="px-4 py-3 text-sm text-slate-600 dark:text-slate-400">{formatCurrency(t.subtotal)}</td>
+                  <td className="px-4 py-3 text-sm text-slate-600 dark:text-slate-400">{formatCurrency(t.tax)}</td>
+                  <td className="px-4 py-3 text-sm font-semibold text-slate-900 dark:text-white">{formatCurrency(t.total)}</td>
+                  <td className="px-4 py-3">
+                    <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-700 dark:bg-slate-800 dark:text-slate-300">
+                      {t.method}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 text-sm text-slate-600 dark:text-slate-400">{t.branch}</td>
+                </motion.tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  )
+}
