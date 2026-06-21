@@ -2,17 +2,22 @@ import { useState } from 'react'
 import { motion } from 'framer-motion'
 import {
   Settings as SettingsIcon, Store, CreditCard, Receipt,
-  Bell, Shield, Palette, Globe, ExternalLink,
+  Bell, Shield, Palette, Globe, ExternalLink, Cpu,
+  CheckCircle, AlertTriangle, Loader, Power, PowerOff,
 } from 'lucide-react'
 import Button from '@/components/common/Button'
 import ThemeToggle from '@/components/common/ThemeToggle'
 import { useThemeStore } from '@/stores/themeStore'
+import { useFiscalStore } from '@/stores/fiscalStore'
+import { pingDevice } from '@/lib/fiscalApi'
+import toast from 'react-hot-toast'
 
 const sections = [
   { id: 'general', label: 'General', icon: SettingsIcon },
   { id: 'store', label: 'Store', icon: Store },
   { id: 'payments', label: 'Payments', icon: CreditCard },
   { id: 'receipts', label: 'Receipts', icon: Receipt },
+  { id: 'fiscalisation', label: 'ZIMRA Fiscal', icon: Cpu },
   { id: 'notifications', label: 'Notifications', icon: Bell },
   { id: 'security', label: 'Security', icon: Shield },
   { id: 'appearance', label: 'Appearance', icon: Palette },
@@ -22,6 +27,41 @@ const sections = [
 export default function Settings() {
   const [activeSection, setActiveSection] = useState('general')
   const { posMode, setPosMode } = useThemeStore()
+  const fiscal = useFiscalStore()
+  const [fiscalForm, setFiscalForm] = useState({
+    deviceID: fiscal.deviceID,
+    activationKey: fiscal.activationKey,
+    deviceSerialNo: fiscal.deviceSerialNo,
+    deviceModelName: fiscal.deviceModelName,
+    deviceModelVersionNo: fiscal.deviceModelVersionNo,
+    tin: fiscal.tin,
+    vatNumber: fiscal.vatNumber,
+    branchName: fiscal.branchName,
+    branchAddress: fiscal.branchAddress,
+    branchContacts: fiscal.branchContacts,
+  })
+  const [pingLoading, setPingLoading] = useState(false)
+
+  const handleFiscalSave = () => {
+    fiscal.setConfig(fiscalForm)
+    toast.success('ZIMRA settings saved')
+  }
+
+  const handlePingDevice = async () => {
+    if (!fiscal.isEnabled) {
+      toast.error('Enable fiscalisation first')
+      return
+    }
+    setPingLoading(true)
+    try {
+      await pingDevice({ deviceID: fiscal.deviceID })
+      toast.success('Device reachable — connection OK')
+    } catch {
+      toast.error('Device unreachable — check credentials or Edge Function deployment')
+    } finally {
+      setPingLoading(false)
+    }
+  }
 
   return (
     <div className="p-6">
@@ -173,6 +213,206 @@ export default function Settings() {
                   </label>
                 </div>
                 <Button>Save Changes</Button>
+              </div>
+            )}
+
+            {activeSection === 'fiscalisation' && (
+              <div className="space-y-6">
+                <div className="flex items-start justify-between">
+                  <div>
+                    <h3 className="text-lg font-bold text-slate-900 dark:text-white">ZIMRA Fiscalisation</h3>
+                    <p className="text-sm text-slate-500">Connect your ZIMRA fiscal device to issue compliant receipts. $20/device/month.</p>
+                  </div>
+                  {fiscal.isRegistered && (
+                    <span className="flex items-center gap-1.5 rounded-full bg-green-100 px-3 py-1 text-xs font-semibold text-green-700 dark:bg-green-950 dark:text-green-400">
+                      <CheckCircle className="h-3.5 w-3.5" />
+                      Registered
+                    </span>
+                  )}
+                </div>
+
+                {/* Enable toggle */}
+                <div className="flex items-center justify-between rounded-xl bg-slate-50 p-4 dark:bg-slate-800">
+                  <div>
+                    <span className="text-sm font-semibold text-slate-900 dark:text-white">Enable Fiscalisation</span>
+                    <p className="text-xs text-slate-500">Receipts will be submitted to ZIMRA FDMS on each sale</p>
+                  </div>
+                  <label className="relative inline-flex cursor-pointer items-center">
+                    <input
+                      type="checkbox"
+                      checked={fiscal.isEnabled}
+                      onChange={(e) => fiscal.setEnabled(e.target.checked)}
+                      className="peer sr-only"
+                    />
+                    <div className="peer h-5 w-9 rounded-full bg-slate-300 after:absolute after:left-[2px] after:top-[2px] after:h-4 after:w-4 after:rounded-full after:bg-white after:transition-all peer-checked:bg-brand-600 peer-checked:after:translate-x-full dark:bg-slate-600" />
+                  </label>
+                </div>
+
+                {/* Fiscal day status */}
+                <div className="rounded-xl border border-slate-200 p-4 dark:border-slate-700">
+                  <div className="mb-3 flex items-center justify-between">
+                    <span className="text-sm font-semibold text-slate-900 dark:text-white">Fiscal Day Status</span>
+                    <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${
+                      fiscal.fiscalDayStatus === 'FiscalDayOpened'
+                        ? 'bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-400'
+                        : fiscal.fiscalDayStatus === 'FiscalDayClosed'
+                        ? 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400'
+                        : 'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-400'
+                    }`}>
+                      {fiscal.fiscalDayStatus}
+                    </span>
+                  </div>
+                  <div className="text-xs text-slate-500">Day No: {fiscal.fiscalDayNo} &nbsp;|&nbsp; Last Receipt No: {fiscal.lastReceiptGlobalNo}</div>
+                  {fiscal.certificateValidTill && (
+                    <div className="mt-1 text-xs text-slate-500">
+                      Certificate valid till: {new Date(fiscal.certificateValidTill).toLocaleDateString()}
+                    </div>
+                  )}
+                </div>
+
+                <div className="border-t border-slate-200 pt-4 dark:border-slate-700">
+                  <h4 className="mb-4 text-sm font-bold uppercase text-slate-500 tracking-wide">Device Credentials</h4>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="mb-1.5 block text-xs font-medium text-slate-700 dark:text-slate-300">Device ID</label>
+                      <input
+                        type="text"
+                        value={fiscalForm.deviceID}
+                        onChange={(e) => setFiscalForm(f => ({ ...f, deviceID: e.target.value }))}
+                        placeholder="e.g. 1234567890"
+                        className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                      />
+                    </div>
+                    <div>
+                      <label className="mb-1.5 block text-xs font-medium text-slate-700 dark:text-slate-300">Activation Key</label>
+                      <input
+                        type="password"
+                        value={fiscalForm.activationKey}
+                        onChange={(e) => setFiscalForm(f => ({ ...f, activationKey: e.target.value }))}
+                        placeholder="Device activation key"
+                        className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                      />
+                    </div>
+                    <div>
+                      <label className="mb-1.5 block text-xs font-medium text-slate-700 dark:text-slate-300">Device Serial No</label>
+                      <input
+                        type="text"
+                        value={fiscalForm.deviceSerialNo}
+                        onChange={(e) => setFiscalForm(f => ({ ...f, deviceSerialNo: e.target.value }))}
+                        placeholder="e.g. SN-ABC123"
+                        className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                      />
+                    </div>
+                    <div>
+                      <label className="mb-1.5 block text-xs font-medium text-slate-700 dark:text-slate-300">Device Model Name</label>
+                      <input
+                        type="text"
+                        value={fiscalForm.deviceModelName}
+                        onChange={(e) => setFiscalForm(f => ({ ...f, deviceModelName: e.target.value }))}
+                        placeholder="e.g. tengaPOS-v2"
+                        className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                      />
+                    </div>
+                    <div className="col-span-2">
+                      <label className="mb-1.5 block text-xs font-medium text-slate-700 dark:text-slate-300">Device Model Version</label>
+                      <input
+                        type="text"
+                        value={fiscalForm.deviceModelVersionNo}
+                        onChange={(e) => setFiscalForm(f => ({ ...f, deviceModelVersionNo: e.target.value }))}
+                        placeholder="e.g. 2.0.0"
+                        className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="border-t border-slate-200 pt-4 dark:border-slate-700">
+                  <h4 className="mb-4 text-sm font-bold uppercase text-slate-500 tracking-wide">Taxpayer Information</h4>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="mb-1.5 block text-xs font-medium text-slate-700 dark:text-slate-300">TIN (Tax ID Number)</label>
+                      <input
+                        type="text"
+                        value={fiscalForm.tin}
+                        onChange={(e) => setFiscalForm(f => ({ ...f, tin: e.target.value }))}
+                        placeholder="10-digit TIN"
+                        maxLength={10}
+                        className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                      />
+                    </div>
+                    <div>
+                      <label className="mb-1.5 block text-xs font-medium text-slate-700 dark:text-slate-300">VAT Registration No</label>
+                      <input
+                        type="text"
+                        value={fiscalForm.vatNumber}
+                        onChange={(e) => setFiscalForm(f => ({ ...f, vatNumber: e.target.value }))}
+                        placeholder="VAT number"
+                        className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="border-t border-slate-200 pt-4 dark:border-slate-700">
+                  <h4 className="mb-4 text-sm font-bold uppercase text-slate-500 tracking-wide">Branch / Trading Address</h4>
+                  <div className="space-y-3">
+                    <div>
+                      <label className="mb-1.5 block text-xs font-medium text-slate-700 dark:text-slate-300">Branch Name</label>
+                      <input
+                        type="text"
+                        value={fiscalForm.branchName}
+                        onChange={(e) => setFiscalForm(f => ({ ...f, branchName: e.target.value }))}
+                        placeholder="e.g. Main Branch"
+                        className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                      />
+                    </div>
+                    <div>
+                      <label className="mb-1.5 block text-xs font-medium text-slate-700 dark:text-slate-300">Branch Address</label>
+                      <input
+                        type="text"
+                        value={fiscalForm.branchAddress}
+                        onChange={(e) => setFiscalForm(f => ({ ...f, branchAddress: e.target.value }))}
+                        placeholder="e.g. 123 Samora Machel Ave, Harare"
+                        className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                      />
+                    </div>
+                    <div>
+                      <label className="mb-1.5 block text-xs font-medium text-slate-700 dark:text-slate-300">Branch Contacts</label>
+                      <input
+                        type="text"
+                        value={fiscalForm.branchContacts}
+                        onChange={(e) => setFiscalForm(f => ({ ...f, branchContacts: e.target.value }))}
+                        placeholder="e.g. +263 77 123 4567"
+                        className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex gap-3 border-t border-slate-200 pt-4 dark:border-slate-700">
+                  <Button onClick={handleFiscalSave}>Save Configuration</Button>
+                  <button
+                    onClick={handlePingDevice}
+                    disabled={pingLoading}
+                    className="flex items-center gap-2 rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+                  >
+                    {pingLoading ? (
+                      <Loader className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <CheckCircle className="h-4 w-4" />
+                    )}
+                    Test Connection
+                  </button>
+                </div>
+
+                <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 dark:border-amber-900 dark:bg-amber-950">
+                  <div className="flex items-start gap-2">
+                    <AlertTriangle className="mt-0.5 h-4 w-4 flex-shrink-0 text-amber-600" />
+                    <div className="text-xs text-amber-700 dark:text-amber-400">
+                      <strong>Backend required.</strong> ZIMRA API calls are handled by Supabase Edge Functions (mTLS certificate stays server-side). Deploy the Edge Functions before going live. Testing environment: fdmsapitest.zimra.co.zw
+                    </div>
+                  </div>
+                </div>
               </div>
             )}
 

@@ -5,6 +5,7 @@ import {
   CreditCard, Banknote, Smartphone, Receipt, X,
 } from 'lucide-react'
 import Button from '@/components/common/Button'
+import ZimraReceipt from '@/components/common/ZimraReceipt'
 import { useCartStore } from '@/stores/cartStore'
 import { useThemeStore } from '@/stores/themeStore'
 import { DEMO_PRODUCTS, DEMO_CATEGORIES, RESTAURANT_DEMO_PRODUCTS, PAYMENT_METHODS } from '@/utils/constants'
@@ -109,7 +110,7 @@ export default function POS() {
 
         {/* Product Grid */}
         <div className="flex-1 overflow-auto p-4">
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
             {filtered.map((product) => (
               <motion.button
                 key={product.id}
@@ -118,16 +119,27 @@ export default function POS() {
                 onClick={() => cart.addItem(product)}
                 className="group rounded-xl border border-slate-200 bg-white p-3 text-left transition-shadow hover:shadow-lg dark:border-slate-800 dark:bg-slate-900"
               >
-                <div className={`mb-2 flex h-20 items-center justify-center rounded-lg ${
+                <div className={`mb-2 flex h-36 items-center justify-center rounded-lg ${
                   isRestaurant ? 'bg-restaurant-50 dark:bg-restaurant-950' : 'bg-brand-50 dark:bg-brand-950'
                 }`}>
-                  <Package className={`h-8 w-8 ${
-                    isRestaurant ? 'text-restaurant-300' : 'text-brand-300'
-                  }`} />
+                  {product.image ? (
+                    <img
+                      src={product.image}
+                      alt={product.name}
+                      className="h-full w-full rounded-lg object-cover"
+                    />
+                  ) : (
+                    <Package className={`h-12 w-12 ${
+                      isRestaurant ? 'text-restaurant-300' : 'text-brand-300'
+                    }`} />
+                  )}
                 </div>
                 <h4 className="truncate text-sm font-semibold text-slate-900 dark:text-white">
                   {product.name}
                 </h4>
+                {product.brand && (
+                  <p className="truncate text-xs text-slate-400">{product.brand}</p>
+                )}
                 <div className="mt-1 flex items-center justify-between">
                   <span className={`text-lg font-extrabold ${
                     isRestaurant ? 'text-restaurant-600 dark:text-restaurant-400' : 'text-brand-600 dark:text-brand-400'
@@ -284,78 +296,13 @@ export default function POS() {
         </div>
       </div>
 
-      {/* Receipt Modal */}
-      <AnimatePresence>
-        {showReceipt && receiptData && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-              onClick={() => setShowReceipt(false)}
-            />
-            <motion.div
-              initial={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.9 }}
-              className="relative w-full max-w-sm rounded-2xl bg-white p-6 shadow-2xl dark:bg-slate-900"
-            >
-              <button
-                onClick={() => setShowReceipt(false)}
-                className="absolute right-4 top-4 text-slate-400 hover:text-slate-600"
-              >
-                <X className="h-5 w-5" />
-              </button>
-              <div className="text-center">
-                <div className={`mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full ${
-                  isRestaurant ? 'bg-restaurant-100 dark:bg-restaurant-900' : 'bg-brand-100 dark:bg-brand-900'
-                }`}>
-                  <Receipt className={`h-6 w-6 ${
-                    isRestaurant ? 'text-restaurant-600' : 'text-brand-600'
-                  }`} />
-                </div>
-                <h3 className="text-lg font-bold text-slate-900 dark:text-white">
-                  {isRestaurant ? 'Order Placed!' : 'Sale Complete!'}
-                </h3>
-                <p className="mt-1 text-sm text-slate-500">#{receiptData.receiptNumber}</p>
-              </div>
-              <div className="mt-4 space-y-2 rounded-xl bg-slate-50 p-4 dark:bg-slate-800">
-                {receiptData.items.map((item) => (
-                  <div key={item.id} className="flex justify-between text-sm">
-                    <span className="text-slate-600 dark:text-slate-400">
-                      {item.name} x{item.quantity}
-                    </span>
-                    <span className="font-medium text-slate-900 dark:text-white">
-                      {formatCurrency(item.price * item.quantity)}
-                    </span>
-                  </div>
-                ))}
-                <div className="border-t border-slate-200 pt-2 dark:border-slate-700">
-                  <div className="flex justify-between text-sm">
-                    <span className="text-slate-500">Tax</span>
-                    <span className="text-slate-900 dark:text-white">{formatCurrency(receiptData.tax)}</span>
-                  </div>
-                  <div className="mt-1 flex justify-between font-bold">
-                    <span className="text-slate-900 dark:text-white">Total</span>
-                    <span className={isRestaurant ? 'text-restaurant-600' : 'text-brand-600'}>
-                      {formatCurrency(receiptData.total)}
-                    </span>
-                  </div>
-                </div>
-              </div>
-              <div className="mt-4 flex gap-2">
-                <Button variant="secondary" className="flex-1" onClick={() => setShowReceipt(false)}>
-                  Close
-                </Button>
-                <Button variant={isRestaurant ? 'restaurant' : 'primary'} className="flex-1">
-                  Print Receipt
-                </Button>
-              </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
+      {/* Receipt Modal — ZIMRA Receipt48 format */}
+      {showReceipt && receiptData && (
+        <ZimraReceipt
+          receipt={receiptData}
+          onClose={() => setShowReceipt(false)}
+        />
+      )}
     </div>
   )
 }
