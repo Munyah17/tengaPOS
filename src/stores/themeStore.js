@@ -22,6 +22,6 @@ export const useThemeStore = create(
           return state
         }),
     }),
-    { name: 'tengapos-theme' }
+    { name: 'tengapos-theme', partialize: (state) => ({ mode: state.mode }) }
   )
 )
