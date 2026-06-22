@@ -47,17 +47,35 @@ export default function Settings() {
     toast.success('ZIMRA settings saved')
   }
 
+  const isSupabaseConfigured = !!(
+    import.meta.env.VITE_SUPABASE_URL &&
+    import.meta.env.VITE_SUPABASE_URL !== 'https://placeholder.supabase.co'
+  )
+
   const handlePingDevice = async () => {
     if (!fiscal.isEnabled) {
       toast.error('Enable fiscalisation first')
+      return
+    }
+    if (!fiscal.deviceID) {
+      toast.error('Enter and save a Device ID first')
+      return
+    }
+    if (!isSupabaseConfigured) {
+      toast.error('Supabase not configured — add VITE_SUPABASE_URL to your environment variables')
       return
     }
     setPingLoading(true)
     try {
       await pingDevice({ deviceID: fiscal.deviceID })
       toast.success('Device reachable — connection OK')
-    } catch {
-      toast.error('Device unreachable — check credentials or Edge Function deployment')
+    } catch (err) {
+      const msg = err?.message || ''
+      if (msg.includes('not found') || msg.includes('404')) {
+        toast.error('Edge Function not deployed yet — deploy zimra-ping to Supabase first')
+      } else {
+        toast.error('ZIMRA device unreachable — check device ID and ZIMRA FDMS status')
+      }
     } finally {
       setPingLoading(false)
     }
@@ -393,8 +411,9 @@ export default function Settings() {
                   <Button onClick={handleFiscalSave}>Save Configuration</Button>
                   <button
                     onClick={handlePingDevice}
-                    disabled={pingLoading}
-                    className="flex items-center gap-2 rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+                    disabled={pingLoading || !isSupabaseConfigured}
+                    title={!isSupabaseConfigured ? 'Requires VITE_SUPABASE_URL environment variable' : 'Ping ZIMRA FDMS via Edge Function'}
+                    className="flex items-center gap-2 rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
                   >
                     {pingLoading ? (
                       <Loader className="h-4 w-4 animate-spin" />
@@ -405,11 +424,15 @@ export default function Settings() {
                   </button>
                 </div>
 
-                <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 dark:border-amber-900 dark:bg-amber-950">
+                <div className={`rounded-xl border p-4 ${isSupabaseConfigured ? 'border-amber-200 bg-amber-50 dark:border-amber-900 dark:bg-amber-950' : 'border-red-200 bg-red-50 dark:border-red-900 dark:bg-red-950'}`}>
                   <div className="flex items-start gap-2">
-                    <AlertTriangle className="mt-0.5 h-4 w-4 flex-shrink-0 text-amber-600" />
-                    <div className="text-xs text-amber-700 dark:text-amber-400">
-                      <strong>Backend required.</strong> ZIMRA API calls are handled by Supabase Edge Functions (mTLS certificate stays server-side). Deploy the Edge Functions before going live. Testing environment: fdmsapitest.zimra.co.zw
+                    <AlertTriangle className={`mt-0.5 h-4 w-4 flex-shrink-0 ${isSupabaseConfigured ? 'text-amber-600' : 'text-red-600'}`} />
+                    <div className={`text-xs ${isSupabaseConfigured ? 'text-amber-700 dark:text-amber-400' : 'text-red-700 dark:text-red-400'}`}>
+                      {!isSupabaseConfigured ? (
+                        <><strong>Supabase not connected.</strong> Set <code className="rounded bg-red-100 px-1 dark:bg-red-900">VITE_SUPABASE_URL</code> and <code className="rounded bg-red-100 px-1 dark:bg-red-900">VITE_SUPABASE_ANON_KEY</code> in your environment variables (Vercel dashboard → Project Settings → Environment Variables), then redeploy.</>
+                      ) : (
+                        <><strong>Edge Functions required.</strong> ZIMRA API calls route through Supabase Edge Functions — the device certificate (mTLS) stays server-side only. Deploy the <code className="rounded bg-amber-100 px-1 dark:bg-amber-900">zimra-*</code> Edge Functions before going live. ZIMRA test gateway: <code className="rounded bg-amber-100 px-1 dark:bg-amber-900">fdmsapitest.zimra.co.zw</code></>
+                      )}
                     </div>
                   </div>
                 </div>
