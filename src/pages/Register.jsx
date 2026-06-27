@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { UserPlus, ArrowLeft } from 'lucide-react'
+import posIcon from '@/assets/pos-icon.png'
 import Button from '@/components/common/Button'
 import { useAuthStore } from '@/stores/authStore'
 import toast from 'react-hot-toast'
@@ -55,9 +56,7 @@ export default function Register() {
           </Link>
 
           <div className="mb-8 text-center">
-            <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-brand-500 to-brand-700 text-lg font-extrabold text-white shadow-lg shadow-brand-600/30">
-              tP
-            </div>
+            <img src={posIcon} alt="tengaPOS" className="mx-auto mb-4 h-14 w-auto" />
             <h1 className="text-2xl font-extrabold text-white">Create your account</h1>
             <p className="mt-1 text-sm text-slate-400">Start your free 6-month trial</p>
           </div>

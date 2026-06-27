@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Menu, X, ExternalLink } from 'lucide-react'
 import ThemeToggle from '@/components/common/ThemeToggle'
+import posLogo from '@/assets/pos-logo.png'
 
 const navLinks = [
   { label: 'Features', href: '#features' },
@@ -17,13 +18,8 @@ export default function Navbar() {
     <nav className="fixed top-0 z-50 w-full border-b border-slate-200/80 bg-white/90 backdrop-blur-xl dark:border-white/5 dark:bg-slate-950/80">
       <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-3.5">
         {/* Logo */}
-        <Link to="/" className="flex items-center gap-2.5">
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-brand-500 to-brand-700 text-sm font-extrabold text-white shadow-lg shadow-brand-600/30">
-            tP
-          </div>
-          <span className="text-xl font-extrabold text-slate-900 dark:text-white">
-            tenga<span className="text-brand-500">POS</span>
-          </span>
+        <Link to="/" className="flex items-center">
+          <img src={posLogo} alt="tengaPOS" className="h-10 w-auto dark:brightness-0 dark:invert" />
         </Link>
 
         {/* Desktop nav links */}

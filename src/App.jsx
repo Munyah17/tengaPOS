@@ -22,6 +22,14 @@ import Fiscalisation from '@/pages/Fiscalisation'
 import Settings from '@/pages/Settings'
 import AppLayout from '@/components/layout/AppLayout'
 
+import AdminLayout from '@/components/admin/AdminLayout'
+import AdminDashboard from '@/pages/admin/AdminDashboard'
+import AdminTenants from '@/pages/admin/AdminTenants'
+import AdminStaff from '@/pages/admin/AdminStaff'
+import AdminSupport from '@/pages/admin/AdminSupport'
+import AdminReports from '@/pages/admin/AdminReports'
+import AdminSettings from '@/pages/admin/AdminSettings'
+
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
@@ -32,8 +40,16 @@ const queryClient = new QueryClient({
 })
 
 function ProtectedRoute({ children }) {
-  const { isAuthenticated } = useAuthStore()
+  const { isAuthenticated, userType } = useAuthStore()
   if (!isAuthenticated) return <Navigate to="/login" replace />
+  if (userType === 'app_owner') return <Navigate to="/admin/dashboard" replace />
+  return children
+}
+
+function AdminRoute({ children }) {
+  const { isAuthenticated, userType } = useAuthStore()
+  if (!isAuthenticated) return <Navigate to="/login" replace />
+  if (userType !== 'app_owner') return <Navigate to="/app/dashboard" replace />
   return children
 }
 
@@ -53,6 +69,8 @@ export default function App() {
           <Route path="/" element={<Landing />} />
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
+
+          {/* Tenant app routes */}
           <Route
             path="/app"
             element={
@@ -75,6 +93,25 @@ export default function App() {
             <Route path="fiscalisation" element={<Fiscalisation />} />
             <Route path="settings" element={<Settings />} />
           </Route>
+
+          {/* Admin panel routes */}
+          <Route
+            path="/admin"
+            element={
+              <AdminRoute>
+                <AdminLayout />
+              </AdminRoute>
+            }
+          >
+            <Route index element={<Navigate to="dashboard" replace />} />
+            <Route path="dashboard" element={<AdminDashboard />} />
+            <Route path="tenants" element={<AdminTenants />} />
+            <Route path="staff" element={<AdminStaff />} />
+            <Route path="support" element={<AdminSupport />} />
+            <Route path="reports" element={<AdminReports />} />
+            <Route path="settings" element={<AdminSettings />} />
+          </Route>
+
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </BrowserRouter>

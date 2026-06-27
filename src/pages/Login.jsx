@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Eye, EyeOff, LogIn, ChevronDown, ChevronUp, ArrowRight, ArrowLeft } from 'lucide-react'
+import posIcon from '@/assets/pos-icon.png'
 import { useAuthStore, DEMO_PERSONAS, ROLE_COLORS, ROLE_LABELS } from '@/stores/authStore'
 import toast from 'react-hot-toast'
 
@@ -19,9 +20,9 @@ export default function Login() {
     if (!email || !password) { toast.error('Please enter email and password'); return }
     setLoading(true)
     try {
-      await signIn(email, password)
+      const userType = await signIn(email, password)
       toast.success('Welcome back!')
-      navigate('/app/dashboard')
+      navigate(userType === 'app_owner' ? '/admin/dashboard' : '/app/dashboard')
     } catch (err) {
       toast.error(err.message || 'Sign in failed')
     } finally {
@@ -58,9 +59,7 @@ export default function Login() {
 
           {/* Logo */}
           <div className="mb-8 text-center">
-            <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-brand-500 to-brand-700 text-lg font-extrabold text-white shadow-lg shadow-brand-600/30">
-              tP
-            </div>
+            <img src={posIcon} alt="tengaPOS" className="mx-auto mb-4 h-14 w-auto" />
             <h1 className="text-2xl font-extrabold text-white">Welcome back</h1>
             <p className="mt-1 text-sm text-slate-400">Sign in to your tengaPOS account</p>
           </div>

@@ -90,6 +90,18 @@ export const NAV_PERMISSIONS = {
 }
 
 async function loadProfile(userId) {
+  // Check app_users first (Super Admin / Admin / Tech Support)
+  const { data: appUser } = await supabase
+    .from('app_users')
+    .select('*')
+    .eq('id', userId)
+    .maybeSingle()
+
+  if (appUser) {
+    return { ...appUser, userType: 'app_owner' }
+  }
+
+  // Tenant user
   const { data, error } = await supabase
     .from('users')
     .select('*, tenants(*)')
@@ -104,7 +116,7 @@ async function loadProfile(userId) {
     .eq('is_main', true)
     .maybeSingle()
 
-  return { ...data, branch }
+  return { ...data, branch, userType: 'tenant' }
 }
 
 export const useAuthStore = create(
@@ -116,6 +128,7 @@ export const useAuthStore = create(
       tenant: null,
       role: null,
       branch: null,
+      userType: null,
       isAuthenticated: false,
       isLoading: true,
       isDemo: false,
@@ -130,9 +143,10 @@ export const useAuthStore = create(
               user: session.user,
               session,
               profile: profileData,
-              tenant: profileData.tenants,
+              tenant: profileData.tenants || null,
               role: profileData.role,
-              branch: profileData.branch,
+              branch: profileData.branch || null,
+              userType: profileData.userType,
               isAuthenticated: true,
               isLoading: false,
               isDemo: false,
@@ -155,13 +169,15 @@ export const useAuthStore = create(
           user: data.user,
           session: data.session,
           profile: profileData,
-          tenant: profileData.tenants,
+          tenant: profileData.tenants || null,
           role: profileData.role,
-          branch: profileData.branch,
+          branch: profileData.branch || null,
+          userType: profileData.userType,
           isAuthenticated: true,
           isLoading: false,
           isDemo: false,
         })
+        return profileData.userType
       },
 
       signUp: async (email, password, name, businessName) => {
@@ -198,6 +214,7 @@ export const useAuthStore = create(
           tenant: null,
           role: null,
           branch: null,
+          userType: null,
           isAuthenticated: false,
           isLoading: false,
           isDemo: false,
@@ -217,6 +234,7 @@ export const useAuthStore = create(
         tenant: state.tenant,
         role: state.role,
         branch: state.branch,
+        userType: state.userType,
         isAuthenticated: state.isAuthenticated,
         isDemo: state.isDemo,
       }),
