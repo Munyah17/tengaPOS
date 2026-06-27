@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Eye, EyeOff, LogIn, ChevronDown, ChevronUp, ArrowRight } from 'lucide-react'
+import { Eye, EyeOff, LogIn, ChevronDown, ChevronUp, ArrowRight, ArrowLeft } from 'lucide-react'
 import { useAuthStore, DEMO_PERSONAS, ROLE_COLORS, ROLE_LABELS } from '@/stores/authStore'
 import toast from 'react-hot-toast'
 
@@ -47,6 +47,15 @@ export default function Login() {
         className="relative w-full max-w-md"
       >
         <div className="rounded-2xl border border-white/10 bg-slate-900/80 p-8 shadow-2xl backdrop-blur-xl">
+          {/* Back to home */}
+          <Link
+            to="/"
+            className="mb-6 inline-flex items-center gap-1.5 text-sm text-slate-400 transition-colors hover:text-white"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Back to home
+          </Link>
+
           {/* Logo */}
           <div className="mb-8 text-center">
             <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-brand-500 to-brand-700 text-lg font-extrabold text-white shadow-lg shadow-brand-600/30">
