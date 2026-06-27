@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
+import { supabase } from '@/lib/supabase'
 
 export const DEMO_PERSONAS = [
   {
@@ -88,9 +89,27 @@ export const NAV_PERMISSIONS = {
   tech_support: ['dashboard', 'pos', 'inventory', 'orders', 'kitchen', 'transactions', 'reports', 'staff', 'tasks', 'branches', 'fiscalisation', 'settings'],
 }
 
+async function loadProfile(userId) {
+  const { data, error } = await supabase
+    .from('users')
+    .select('*, tenants(*)')
+    .eq('id', userId)
+    .single()
+  if (error) throw error
+
+  const { data: branch } = await supabase
+    .from('branches')
+    .select('*')
+    .eq('tenant_id', data.tenant_id)
+    .eq('is_main', true)
+    .maybeSingle()
+
+  return { ...data, branch }
+}
+
 export const useAuthStore = create(
   persist(
-    (set) => ({
+    (set, get) => ({
       user: null,
       session: null,
       profile: null,
@@ -99,18 +118,61 @@ export const useAuthStore = create(
       branch: null,
       isAuthenticated: false,
       isLoading: true,
+      isDemo: false,
 
-      setAuth: ({ user, session, profile, tenant, role, branch }) =>
+      initAuth: async () => {
+        set({ isLoading: true })
+        try {
+          const { data: { session } } = await supabase.auth.getSession()
+          if (session?.user) {
+            const profileData = await loadProfile(session.user.id)
+            set({
+              user: session.user,
+              session,
+              profile: profileData,
+              tenant: profileData.tenants,
+              role: profileData.role,
+              branch: profileData.branch,
+              isAuthenticated: true,
+              isLoading: false,
+              isDemo: false,
+            })
+          } else {
+            const { isDemo, isAuthenticated } = get()
+            set({ isLoading: false, isAuthenticated: isDemo ? isAuthenticated : false })
+          }
+        } catch {
+          set({ isLoading: false, isAuthenticated: false })
+        }
+      },
+
+      signIn: async (email, password) => {
+        set({ isLoading: true })
+        const { data, error } = await supabase.auth.signInWithPassword({ email, password })
+        if (error) { set({ isLoading: false }); throw error }
+        const profileData = await loadProfile(data.user.id)
         set({
-          user,
-          session,
-          profile,
-          tenant,
-          role,
-          branch,
-          isAuthenticated: !!user,
+          user: data.user,
+          session: data.session,
+          profile: profileData,
+          tenant: profileData.tenants,
+          role: profileData.role,
+          branch: profileData.branch,
+          isAuthenticated: true,
           isLoading: false,
-        }),
+          isDemo: false,
+        })
+      },
+
+      signUp: async (email, password, name, businessName) => {
+        const { data, error } = await supabase.auth.signUp({
+          email,
+          password,
+          options: { data: { name, business_name: businessName } },
+        })
+        if (error) throw error
+        return data
+      },
 
       loginAsDemo: (persona) =>
         set({
@@ -122,9 +184,13 @@ export const useAuthStore = create(
           branch: { id: 'demo-branch', name: 'Main Branch' },
           isAuthenticated: true,
           isLoading: false,
+          isDemo: true,
         }),
 
-      clearAuth: () =>
+      clearAuth: async () => {
+        if (!get().isDemo) {
+          await supabase.auth.signOut()
+        }
         set({
           user: null,
           session: null,
@@ -134,7 +200,12 @@ export const useAuthStore = create(
           branch: null,
           isAuthenticated: false,
           isLoading: false,
-        }),
+          isDemo: false,
+        })
+      },
+
+      setAuth: ({ user, session, profile, tenant, role, branch }) =>
+        set({ user, session, profile, tenant, role, branch, isAuthenticated: !!user, isLoading: false }),
 
       setLoading: (isLoading) => set({ isLoading }),
     }),
@@ -147,6 +218,7 @@ export const useAuthStore = create(
         role: state.role,
         branch: state.branch,
         isAuthenticated: state.isAuthenticated,
+        isDemo: state.isDemo,
       }),
     }
   )

@@ -12,26 +12,21 @@ export default function Login() {
   const [loading, setLoading] = useState(false)
   const [demoOpen, setDemoOpen] = useState(false)
   const navigate = useNavigate()
-  const { setAuth, loginAsDemo } = useAuthStore()
+  const { signIn, loginAsDemo } = useAuthStore()
 
   const handleSubmit = async (e) => {
     e.preventDefault()
+    if (!email || !password) { toast.error('Please enter email and password'); return }
     setLoading(true)
-    if (email && password) {
-      setAuth({
-        user: { id: 'demo-user', email },
-        session: { access_token: 'demo-token' },
-        profile: { name: 'Demo Vendor', email, role: 'vendor' },
-        tenant: { id: 'demo-tenant', name: 'Demo Store' },
-        role: 'vendor',
-        branch: { id: 'demo-branch', name: 'Main Branch' },
-      })
+    try {
+      await signIn(email, password)
       toast.success('Welcome back!')
       navigate('/app/dashboard')
-    } else {
-      toast.error('Please enter email and password')
+    } catch (err) {
+      toast.error(err.message || 'Sign in failed')
+    } finally {
+      setLoading(false)
     }
-    setLoading(false)
   }
 
   const handleDemoLogin = (persona) => {

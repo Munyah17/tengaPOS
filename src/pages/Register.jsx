@@ -10,23 +10,26 @@ export default function Register() {
   const [form, setForm] = useState({ name: '', email: '', password: '', businessName: '', businessType: 'retail' })
   const [loading, setLoading] = useState(false)
   const navigate = useNavigate()
-  const { setAuth } = useAuthStore()
+  const { signUp } = useAuthStore()
 
   const handleSubmit = async (e) => {
     e.preventDefault()
+    if (form.password.length < 8) { toast.error('Password must be at least 8 characters'); return }
     setLoading(true)
-
-    setAuth({
-      user: { id: 'new-user', email: form.email },
-      session: { access_token: 'demo-token' },
-      profile: { name: form.name, email: form.email, role: 'vendor' },
-      tenant: { id: 'new-tenant', name: form.businessName },
-      role: 'vendor',
-      branch: { id: 'main-branch', name: 'Main Branch' },
-    })
-    toast.success('Account created successfully!')
-    navigate('/app/dashboard')
-    setLoading(false)
+    try {
+      const data = await signUp(form.email, form.password, form.name, form.businessName)
+      if (data.user && !data.session) {
+        toast.success('Check your email to confirm your account, then sign in.')
+        navigate('/login')
+      } else {
+        toast.success('Account created! Welcome to tengaPOS.')
+        navigate('/app/dashboard')
+      }
+    } catch (err) {
+      toast.error(err.message || 'Registration failed')
+    } finally {
+      setLoading(false)
+    }
   }
 
   const update = (field) => (e) => setForm({ ...form, [field]: e.target.value })

@@ -39,10 +39,12 @@ function ProtectedRoute({ children }) {
 
 export default function App() {
   const { initTheme } = useThemeStore()
+  const { initAuth } = useAuthStore()
 
   useEffect(() => {
     initTheme()
-  }, [initTheme])
+    initAuth()
+  }, [initTheme, initAuth])
 
   return (
     <QueryClientProvider client={queryClient}>

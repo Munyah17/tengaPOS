@@ -44,8 +44,8 @@ export default function Sidebar() {
   const displayName = profile?.name || 'User'
   const initial = displayName[0]?.toUpperCase() || 'U'
 
-  const handleSignOut = () => {
-    clearAuth()
+  const handleSignOut = async () => {
+    await clearAuth()
     navigate('/')
   }
 
