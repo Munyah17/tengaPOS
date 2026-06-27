@@ -1,9 +1,8 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { motion } from 'framer-motion'
-import { Eye, EyeOff, LogIn } from 'lucide-react'
-import Button from '@/components/common/Button'
-import { useAuthStore } from '@/stores/authStore'
+import { motion, AnimatePresence } from 'framer-motion'
+import { Eye, EyeOff, LogIn, ChevronDown, ChevronUp, ArrowRight } from 'lucide-react'
+import { useAuthStore, DEMO_PERSONAS, ROLE_COLORS, ROLE_LABELS } from '@/stores/authStore'
 import toast from 'react-hot-toast'
 
 export default function Login() {
@@ -11,14 +10,13 @@ export default function Login() {
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [demoOpen, setDemoOpen] = useState(false)
   const navigate = useNavigate()
-  const { setAuth } = useAuthStore()
+  const { setAuth, loginAsDemo } = useAuthStore()
 
   const handleSubmit = async (e) => {
     e.preventDefault()
     setLoading(true)
-
-    // Demo login
     if (email && password) {
       setAuth({
         user: { id: 'demo-user', email },
@@ -36,10 +34,16 @@ export default function Login() {
     setLoading(false)
   }
 
+  const handleDemoLogin = (persona) => {
+    loginAsDemo(persona)
+    toast.success(`Signed in as ${persona.name}`)
+    navigate('/app/dashboard')
+  }
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-slate-950 via-slate-900 to-brand-950 px-4">
+    <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-slate-950 via-slate-900 to-[#040c1a] px-4 py-12">
       <div className="absolute inset-0 bg-[linear-gradient(rgba(59,130,246,0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(59,130,246,0.03)_1px,transparent_1px)] bg-[size:64px_64px]" />
-      <div className="absolute top-1/3 left-1/2 h-[400px] w-[400px] -translate-x-1/2 rounded-full bg-brand-600/10 blur-[128px]" />
+      <div className="absolute left-1/2 top-1/3 h-[400px] w-[400px] -translate-x-1/2 rounded-full bg-brand-600/10 blur-[128px]" />
 
       <motion.div
         initial={{ opacity: 0, y: 20, scale: 0.98 }}
@@ -47,7 +51,7 @@ export default function Login() {
         transition={{ duration: 0.4 }}
         className="relative w-full max-w-md"
       >
-        <div className="rounded-2xl border border-white/10 bg-white/5 p-8 shadow-2xl backdrop-blur-xl">
+        <div className="rounded-2xl border border-white/10 bg-slate-900/80 p-8 shadow-2xl backdrop-blur-xl">
           {/* Logo */}
           <div className="mb-8 text-center">
             <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-brand-500 to-brand-700 text-lg font-extrabold text-white shadow-lg shadow-brand-600/30">
@@ -57,7 +61,7 @@ export default function Login() {
             <p className="mt-1 text-sm text-slate-400">Sign in to your tengaPOS account</p>
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-5">
+          <form onSubmit={handleSubmit} className="space-y-4">
             <div>
               <label className="mb-1.5 block text-sm font-medium text-slate-300">Email</label>
               <input
@@ -66,7 +70,6 @@ export default function Login() {
                 onChange={(e) => setEmail(e.target.value)}
                 className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white placeholder-slate-500 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
                 placeholder="you@example.com"
-                required
               />
             </div>
 
@@ -79,12 +82,11 @@ export default function Login() {
                   onChange={(e) => setPassword(e.target.value)}
                   className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white placeholder-slate-500 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
                   placeholder="••••••••"
-                  required
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-300"
                 >
                   {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
@@ -101,11 +103,74 @@ export default function Login() {
               </a>
             </div>
 
-            <Button type="submit" className="w-full" size="lg" disabled={loading}>
+            <button
+              type="submit"
+              disabled={loading}
+              className="flex w-full items-center justify-center gap-2 rounded-xl bg-brand-600 py-3 text-sm font-semibold text-white transition-colors hover:bg-brand-700 disabled:opacity-60"
+            >
               <LogIn className="h-4 w-4" />
               {loading ? 'Signing in...' : 'Sign In'}
-            </Button>
+            </button>
           </form>
+
+          {/* Demo role selector */}
+          <div className="mt-4">
+            <button
+              onClick={() => setDemoOpen(!demoOpen)}
+              className="flex w-full items-center justify-between rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-medium text-slate-300 transition-colors hover:bg-white/10"
+            >
+              <span>Try a demo role</span>
+              {demoOpen ? (
+                <ChevronUp className="h-4 w-4 text-slate-400" />
+              ) : (
+                <ChevronDown className="h-4 w-4 text-slate-400" />
+              )}
+            </button>
+
+            <AnimatePresence>
+              {demoOpen && (
+                <motion.div
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: 'auto' }}
+                  exit={{ opacity: 0, height: 0 }}
+                  className="overflow-hidden"
+                >
+                  <div className="mt-2 overflow-hidden rounded-xl border border-white/10 bg-slate-900">
+                    {DEMO_PERSONAS.map((persona) => {
+                      const colors = ROLE_COLORS[persona.role] || ROLE_COLORS.vendor
+                      return (
+                        <button
+                          key={persona.role}
+                          onClick={() => handleDemoLogin(persona)}
+                          className="flex w-full items-center justify-between border-b border-white/5 px-4 py-3 text-left transition-colors hover:bg-white/5 last:border-0"
+                        >
+                          <div className="flex items-center gap-3">
+                            <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-brand-600/20 text-sm font-bold text-brand-400">
+                              {persona.name[0]}
+                            </div>
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <span className="text-sm font-semibold text-white">
+                                  {persona.name}
+                                </span>
+                                <span
+                                  className={`rounded-full px-2 py-0.5 text-xs font-semibold ${colors.bg} ${colors.text}`}
+                                >
+                                  {ROLE_LABELS[persona.role]}
+                                </span>
+                              </div>
+                              <p className="mt-0.5 text-xs text-slate-500">{persona.description}</p>
+                            </div>
+                          </div>
+                          <ArrowRight className="h-4 w-4 flex-shrink-0 text-slate-600" />
+                        </button>
+                      )
+                    })}
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
 
           <p className="mt-6 text-center text-sm text-slate-400">
             {"Don't have an account? "}

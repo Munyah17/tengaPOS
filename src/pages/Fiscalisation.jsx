@@ -1,0 +1,350 @@
+import { useState } from 'react'
+import {
+  Cpu, CheckCircle, AlertTriangle, Loader, Power, PowerOff,
+  Calendar, Hash, Wifi,
+} from 'lucide-react'
+import { useFiscalStore } from '@/stores/fiscalStore'
+import { pingDevice } from '@/lib/fiscalApi'
+import toast from 'react-hot-toast'
+
+const isSupabaseConfigured = !!(
+  import.meta.env.VITE_SUPABASE_URL &&
+  !import.meta.env.VITE_SUPABASE_URL.includes('your-project')
+)
+
+export default function Fiscalisation() {
+  const fiscal = useFiscalStore()
+  const [fiscalForm, setFiscalForm] = useState({
+    deviceID: fiscal.deviceID,
+    activationKey: fiscal.activationKey,
+    deviceSerialNo: fiscal.deviceSerialNo,
+    deviceModelName: fiscal.deviceModelName,
+    deviceModelVersionNo: fiscal.deviceModelVersionNo,
+    tin: fiscal.tin,
+    vatNumber: fiscal.vatNumber,
+    branchName: fiscal.branchName,
+    branchAddress: fiscal.branchAddress,
+    branchContacts: fiscal.branchContacts,
+  })
+  const [pingLoading, setPingLoading] = useState(false)
+
+  const updateForm = (field) => (e) =>
+    setFiscalForm((prev) => ({ ...prev, [field]: e.target.value }))
+
+  const handleSave = () => {
+    fiscal.setConfig(fiscalForm)
+    toast.success('ZIMRA configuration saved')
+  }
+
+  const handleEnable = () => {
+    fiscal.setEnabled(!fiscal.isEnabled)
+    toast.success(fiscal.isEnabled ? 'ZIMRA fiscalisation disabled' : 'ZIMRA fiscalisation enabled')
+  }
+
+  const handlePing = async () => {
+    if (!fiscal.isEnabled) {
+      toast.error('Enable ZIMRA fiscalisation first')
+      return
+    }
+    if (!fiscal.deviceID) {
+      toast.error('Enter a Device ID before testing')
+      return
+    }
+    if (!isSupabaseConfigured) {
+      toast.error('Supabase not configured — Edge Functions unavailable')
+      return
+    }
+    setPingLoading(true)
+    try {
+      await pingDevice({ deviceID: fiscal.deviceID })
+      toast.success('ZIMRA FDMS is reachable — device connected!')
+    } catch (err) {
+      const msg = err?.message || ''
+      if (msg.includes('FunctionNotFound') || msg.includes('404')) {
+        toast.error('Edge Function not deployed yet — deploy zimra-ping to Supabase first')
+      } else {
+        toast.error(`Connection failed: ${msg || 'Unknown error'}`)
+      }
+    } finally {
+      setPingLoading(false)
+    }
+  }
+
+  const inputClass =
+    'w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-900 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 dark:border-slate-700 dark:bg-slate-900 dark:text-white'
+  const labelClass = 'mb-1.5 block text-sm font-medium text-slate-700 dark:text-slate-300'
+
+  return (
+    <div className="p-6">
+      <div className="mb-6 flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-extrabold text-slate-900 dark:text-white">Fiscalisation</h1>
+          <p className="text-sm text-slate-500 dark:text-slate-400">
+            ZIMRA FDMS device configuration and fiscal day management
+          </p>
+        </div>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={handleEnable}
+            className={`flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold transition-colors ${
+              fiscal.isEnabled
+                ? 'bg-green-600 text-white hover:bg-green-700'
+                : 'border border-slate-200 text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800'
+            }`}
+          >
+            {fiscal.isEnabled ? (
+              <><Power className="h-4 w-4" /> Enabled</>
+            ) : (
+              <><PowerOff className="h-4 w-4" /> Disabled</>
+            )}
+          </button>
+        </div>
+      </div>
+
+      {/* Status banners */}
+      {!isSupabaseConfigured && (
+        <div className="mb-6 flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 p-4 dark:border-red-800 dark:bg-red-950/40">
+          <AlertTriangle className="mt-0.5 h-5 w-5 flex-shrink-0 text-red-600 dark:text-red-400" />
+          <div className="text-sm text-red-800 dark:text-red-300">
+            <p className="font-semibold">Supabase not configured</p>
+            <p className="mt-1">
+              Set <code className="rounded bg-red-100 px-1 dark:bg-red-900">VITE_SUPABASE_URL</code> and{' '}
+              <code className="rounded bg-red-100 px-1 dark:bg-red-900">VITE_SUPABASE_ANON_KEY</code> in your{' '}
+              <code>.env</code> file. ZIMRA API calls require Supabase Edge Functions.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {isSupabaseConfigured && (
+        <div className="mb-6 flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 dark:border-amber-800 dark:bg-amber-950/40">
+          <AlertTriangle className="mt-0.5 h-5 w-5 flex-shrink-0 text-amber-600 dark:text-amber-400" />
+          <div className="text-sm text-amber-800 dark:text-amber-300">
+            <p className="font-semibold">Edge Functions not yet deployed</p>
+            <p className="mt-1">
+              Deploy <code className="rounded bg-amber-100 px-1 dark:bg-amber-900">zimra-ping</code>,{' '}
+              <code className="rounded bg-amber-100 px-1 dark:bg-amber-900">zimra-register-device</code>, and related functions to Supabase before using the ZIMRA integration.
+            </p>
+          </div>
+        </div>
+      )}
+
+      <div className="grid gap-6 lg:grid-cols-3">
+        <div className="space-y-6 lg:col-span-2">
+          {/* Device credentials */}
+          <div className="rounded-2xl border border-slate-200 bg-white p-6 dark:border-slate-800 dark:bg-slate-900">
+            <div className="mb-4 flex items-center gap-2">
+              <Cpu className="h-5 w-5 text-brand-600 dark:text-brand-400" />
+              <h2 className="font-bold text-slate-900 dark:text-white">Device Credentials</h2>
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div>
+                <label className={labelClass}>Device ID</label>
+                <input
+                  type="text"
+                  value={fiscalForm.deviceID}
+                  onChange={updateForm('deviceID')}
+                  className={inputClass}
+                  placeholder="e.g. ZW123456"
+                />
+              </div>
+              <div>
+                <label className={labelClass}>Activation Key</label>
+                <input
+                  type="password"
+                  value={fiscalForm.activationKey}
+                  onChange={updateForm('activationKey')}
+                  className={inputClass}
+                  placeholder="••••••••"
+                />
+              </div>
+              <div>
+                <label className={labelClass}>Device Serial No.</label>
+                <input
+                  type="text"
+                  value={fiscalForm.deviceSerialNo}
+                  onChange={updateForm('deviceSerialNo')}
+                  className={inputClass}
+                  placeholder="SN-XXXXXXXXXX"
+                />
+              </div>
+              <div>
+                <label className={labelClass}>Device Model Name</label>
+                <input
+                  type="text"
+                  value={fiscalForm.deviceModelName}
+                  onChange={updateForm('deviceModelName')}
+                  className={inputClass}
+                  placeholder="e.g. TengaFDMS-v1"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Taxpayer info */}
+          <div className="rounded-2xl border border-slate-200 bg-white p-6 dark:border-slate-800 dark:bg-slate-900">
+            <h2 className="mb-4 font-bold text-slate-900 dark:text-white">Taxpayer Information</h2>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div>
+                <label className={labelClass}>TIN</label>
+                <input
+                  type="text"
+                  value={fiscalForm.tin}
+                  onChange={updateForm('tin')}
+                  className={inputClass}
+                  placeholder="1234567890"
+                />
+              </div>
+              <div>
+                <label className={labelClass}>VAT Number</label>
+                <input
+                  type="text"
+                  value={fiscalForm.vatNumber}
+                  onChange={updateForm('vatNumber')}
+                  className={inputClass}
+                  placeholder="VAT-XXXXXXXXXX"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Branch info */}
+          <div className="rounded-2xl border border-slate-200 bg-white p-6 dark:border-slate-800 dark:bg-slate-900">
+            <h2 className="mb-4 font-bold text-slate-900 dark:text-white">Branch / Trading Address</h2>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="sm:col-span-2">
+                <label className={labelClass}>Branch / Trading Name</label>
+                <input
+                  type="text"
+                  value={fiscalForm.branchName}
+                  onChange={updateForm('branchName')}
+                  className={inputClass}
+                  placeholder="My Store — Main Branch"
+                />
+              </div>
+              <div className="sm:col-span-2">
+                <label className={labelClass}>Trading Address</label>
+                <input
+                  type="text"
+                  value={fiscalForm.branchAddress}
+                  onChange={updateForm('branchAddress')}
+                  className={inputClass}
+                  placeholder="123 Main Street, Harare, Zimbabwe"
+                />
+              </div>
+              <div>
+                <label className={labelClass}>Contact Number</label>
+                <input
+                  type="text"
+                  value={fiscalForm.branchContacts}
+                  onChange={updateForm('branchContacts')}
+                  className={inputClass}
+                  placeholder="+263 77 123 4567"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Actions */}
+          <div className="flex flex-wrap gap-3">
+            <button
+              onClick={handleSave}
+              className="rounded-xl bg-brand-600 px-6 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-brand-700"
+            >
+              Save Configuration
+            </button>
+            <button
+              onClick={handlePing}
+              disabled={pingLoading || !isSupabaseConfigured}
+              className="flex items-center gap-2 rounded-xl border border-slate-200 px-6 py-2.5 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+              title={!isSupabaseConfigured ? 'Supabase not configured' : undefined}
+            >
+              {pingLoading ? (
+                <Loader className="h-4 w-4 animate-spin" />
+              ) : (
+                <Wifi className="h-4 w-4" />
+              )}
+              Test Connection
+            </button>
+          </div>
+        </div>
+
+        {/* Status sidebar */}
+        <div className="space-y-4">
+          <div className="rounded-2xl border border-slate-200 bg-white p-6 dark:border-slate-800 dark:bg-slate-900">
+            <h3 className="mb-4 font-bold text-slate-900 dark:text-white">Device Status</h3>
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-slate-500">Enabled</span>
+                <span
+                  className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${
+                    fiscal.isEnabled
+                      ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+                      : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400'
+                  }`}
+                >
+                  {fiscal.isEnabled ? 'Yes' : 'No'}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-slate-500">Registered</span>
+                <span
+                  className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${
+                    fiscal.isRegistered
+                      ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+                      : 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'
+                  }`}
+                >
+                  {fiscal.isRegistered ? 'Registered' : 'Not registered'}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-slate-500">Fiscal Day</span>
+                <span
+                  className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${
+                    fiscal.fiscalDayStatus === 'FiscalDayOpened'
+                      ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+                      : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400'
+                  }`}
+                >
+                  {fiscal.fiscalDayStatus === 'FiscalDayOpened' ? 'Open' : 'Closed'}
+                </span>
+              </div>
+            </div>
+
+            <div className="mt-4 space-y-2 border-t border-slate-200 pt-4 dark:border-slate-700">
+              <div className="flex items-center gap-2 text-xs text-slate-500">
+                <Hash className="h-3.5 w-3.5" />
+                Fiscal Day No: <span className="font-medium text-slate-900 dark:text-white">{fiscal.fiscalDayNo}</span>
+              </div>
+              <div className="flex items-center gap-2 text-xs text-slate-500">
+                <Calendar className="h-3.5 w-3.5" />
+                Last Receipt: <span className="font-medium text-slate-900 dark:text-white">#{fiscal.lastReceiptGlobalNo}</span>
+              </div>
+              {fiscal.isRegistered && fiscal.certificateValidTill && (
+                <div className="flex items-center gap-2 text-xs text-slate-500">
+                  <CheckCircle className="h-3.5 w-3.5 text-green-500" />
+                  Cert valid till:{' '}
+                  <span className="font-medium text-slate-900 dark:text-white">
+                    {new Date(fiscal.certificateValidTill).toLocaleDateString()}
+                  </span>
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-slate-200 bg-white p-6 dark:border-slate-800 dark:bg-slate-900">
+            <h3 className="mb-3 font-bold text-slate-900 dark:text-white">QR Verification URL</h3>
+            <p className="mb-2 text-xs text-slate-500">Used on fiscal receipts</p>
+            <input
+              type="text"
+              value={fiscal.qrUrl}
+              onChange={(e) => fiscal.setConfig({ qrUrl: e.target.value })}
+              className={inputClass}
+            />
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}

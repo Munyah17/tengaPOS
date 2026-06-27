@@ -18,6 +18,7 @@ import Reports from '@/pages/Reports'
 import Staff from '@/pages/Staff'
 import Tasks from '@/pages/Tasks'
 import Branches from '@/pages/Branches'
+import Fiscalisation from '@/pages/Fiscalisation'
 import Settings from '@/pages/Settings'
 import AppLayout from '@/components/layout/AppLayout'
 
@@ -69,6 +70,7 @@ export default function App() {
             <Route path="staff" element={<Staff />} />
             <Route path="tasks" element={<Tasks />} />
             <Route path="branches" element={<Branches />} />
+            <Route path="fiscalisation" element={<Fiscalisation />} />
             <Route path="settings" element={<Settings />} />
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
