@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { motion } from 'framer-motion'
-import { ClipboardList, Eye, Bell, CheckCircle, Clock, Flame, Timer } from 'lucide-react'
+import { Eye, Bell, CheckCircle, Clock, Flame, Timer, Car, Store } from 'lucide-react'
 import ExportMenu from '@/components/common/ExportMenu'
 import { formatCurrency, formatDateTime } from '@/utils/formatters'
 import { useThemeStore } from '@/stores/themeStore'
@@ -17,11 +17,11 @@ const orders = [
 ]
 
 const restaurantOrders = [
-  { id: 'ORD-001', table: 'Table 4', items: ['Sadza & Beef Stew', 'Coke 330ml'], status: 'cooking', total: 18.50, time: '14:28', elapsed: 14 },
-  { id: 'ORD-002', table: 'Table 1', items: ['T-Bone Steak', 'Caesar Salad'], status: 'cooking', total: 47.00, time: '14:20', elapsed: 22 },
-  { id: 'ORD-003', table: 'Table 7', items: ['Fish & Chips', 'Mushroom Soup'], status: 'waiting', total: 22.00, time: '14:25', elapsed: 17 },
-  { id: 'ORD-004', table: 'Table 2', items: ['Sadza & Chicken x2', 'Fanta x2'], status: 'ready', total: 31.00, time: '14:17', elapsed: 25 },
-  { id: 'ORD-005', table: 'Table 5', items: ['Ice Cream Sundae'], status: 'received', total: 8.00, time: '14:41', elapsed: 1 },
+  { id: '#047', items: ['Zinger Burger x2', 'Large Fries', 'Coke 500ml'], status: 'cooking',  orderType: 'counter',       total: 18.50, time: '14:28', elapsed: 14 },
+  { id: '#048', items: ['Streetwise 2', 'Coleslaw'],                       status: 'cooking',  orderType: 'drive_through', total: 14.00, time: '14:20', elapsed: 22 },
+  { id: '#049', items: ['Grilled Chicken Wrap', 'Water 500ml'],            status: 'waiting',  orderType: 'counter',       total: 12.00, time: '14:25', elapsed: 17 },
+  { id: '#050', items: ['Family Bucket', 'Chips x3', 'Fanta x3'],         status: 'ready',    orderType: 'drive_through', total: 41.00, time: '14:17', elapsed: 25 },
+  { id: '#051', items: ['Double Smash Burger'],                            status: 'received', orderType: 'counter',       total: 8.50,  time: '14:41', elapsed: 1  },
 ]
 
 const ORDER_STATUS = {
@@ -61,10 +61,10 @@ function playBeep() {
 function RestaurantOrders() {
   const [ringed, setRinged] = useState({})
 
-  const ringKitchen = (orderId, table) => {
+  const ringKitchen = (orderId) => {
     playBeep()
     setRinged((r) => ({ ...r, [orderId]: true }))
-    toast.success(`Kitchen alerted for ${table}!`, { icon: '🔔', duration: 3000 })
+    toast.success(`Kitchen alerted for order ${orderId}!`, { icon: '🔔', duration: 3000 })
     setTimeout(() => setRinged((r) => ({ ...r, [orderId]: false })), 30000)
   }
 
@@ -88,12 +88,19 @@ function RestaurantOrders() {
             <div className="mb-3 flex items-start justify-between gap-2">
               <div>
                 <div className="flex items-center gap-2">
-                  <span className="text-base font-extrabold text-slate-900 dark:text-white">{order.table}</span>
+                  <span className="text-xl font-extrabold text-slate-900 dark:text-white">{order.id}</span>
+                  <span className={`flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${
+                    order.orderType === 'drive_through'
+                      ? 'bg-yellow-400 text-yellow-900'
+                      : 'bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-300'
+                  }`}>
+                    {order.orderType === 'drive_through' ? <Car className="h-3 w-3" /> : <Store className="h-3 w-3" />}
+                    {order.orderType === 'drive_through' ? 'Drive-Through' : 'Counter'}
+                  </span>
                   {isOverdue && (
                     <span className="rounded-full bg-red-500 px-2 py-0.5 text-[10px] font-bold uppercase text-white">overdue</span>
                   )}
                 </div>
-                <span className="text-xs font-mono text-slate-500">{order.id}</span>
               </div>
               <div className={`flex items-center gap-1 rounded-xl px-2.5 py-1 text-xs font-semibold ${st.bg} ${st.text}`}>
                 <span className={`h-1.5 w-1.5 rounded-full ${st.dot}`} />
@@ -120,7 +127,7 @@ function RestaurantOrders() {
               </div>
               {/* Ring Kitchen — optional, for when order is delayed */}
               <button
-                onClick={() => ringKitchen(order.id, order.table)}
+                onClick={() => ringKitchen(order.id)}
                 disabled={hasRinged}
                 className={`flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-bold transition-all ${
                   hasRinged

@@ -1,235 +1,171 @@
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { ChefHat, Clock, CheckCircle, Flame, Timer, Utensils } from 'lucide-react'
+import { Car, Store, ChefHat, Clock } from 'lucide-react'
 
-// Simulated live orders — in production this would come from Supabase realtime
-const INITIAL_ORDERS = [
-  {
-    id: 'ORD-001',
-    table: 'Table 4',
-    stages: [
-      { label: 'Order Received', status: 'done', at: Date.now() - 14 * 60000 },
-      { label: 'Accepted by Kitchen', status: 'done', at: Date.now() - 12 * 60000 },
-      { label: 'Cooking', status: 'active', at: Date.now() - 10 * 60000 },
-      { label: 'Ready to Serve', status: 'pending', at: null },
-    ],
-  },
-  {
-    id: 'ORD-002',
-    table: 'Table 1',
-    stages: [
-      { label: 'Order Received', status: 'done', at: Date.now() - 22 * 60000 },
-      { label: 'Accepted by Kitchen', status: 'done', at: Date.now() - 20 * 60000 },
-      { label: 'Cooking', status: 'done', at: Date.now() - 15 * 60000 },
-      { label: 'Ready to Serve', status: 'active', at: Date.now() - 2 * 60000 },
-    ],
-  },
-  {
-    id: 'ORD-003',
-    table: 'Table 7',
-    stages: [
-      { label: 'Order Received', status: 'done', at: Date.now() - 5 * 60000 },
-      { label: 'Accepted by Kitchen', status: 'done', at: Date.now() - 4 * 60000 },
-      { label: 'Cooking', status: 'pending', at: null },
-      { label: 'Ready to Serve', status: 'pending', at: null },
-    ],
-  },
-  {
-    id: 'ORD-005',
-    table: 'Table 5',
-    stages: [
-      { label: 'Order Received', status: 'done', at: Date.now() - 60000 },
-      { label: 'Accepted by Kitchen', status: 'pending', at: null },
-      { label: 'Cooking', status: 'pending', at: null },
-      { label: 'Ready to Serve', status: 'pending', at: null },
-    ],
-  },
+// Simulated live order board — in production: Supabase realtime subscription
+const SEED_ORDERS = [
+  { id: '#047', status: 'preparing', orderType: 'counter',       readySince: null },
+  { id: '#048', status: 'preparing', orderType: 'drive_through', readySince: null },
+  { id: '#049', status: 'preparing', orderType: 'counter',       readySince: null },
+  { id: '#050', status: 'ready',     orderType: 'drive_through', readySince: Date.now() - 90000 },
+  { id: '#051', status: 'ready',     orderType: 'counter',       readySince: Date.now() - 30000 },
+  { id: '#052', status: 'ready',     orderType: 'counter',       readySince: Date.now() - 180000 },
+  { id: '#053', status: 'preparing', orderType: 'drive_through', readySince: null },
 ]
 
-const STAGE_ICONS = [Clock, Timer, Flame, CheckCircle]
-
-function elapsed(ms) {
-  if (!ms) return null
-  const s = Math.floor((Date.now() - ms) / 1000)
+function waitLabel(ms) {
+  const s = Math.floor(ms / 1000)
   if (s < 60) return `${s}s`
-  return `${Math.floor(s / 60)}m`
+  return `${Math.floor(s / 60)}m ${s % 60}s`
 }
 
-function StageBar({ stages }) {
-  const activeIdx = stages.findIndex((s) => s.status === 'active')
-  const doneCount = stages.filter((s) => s.status === 'done').length
-  const progress = activeIdx >= 0 ? activeIdx : doneCount === stages.length ? stages.length : doneCount
-
-  return (
-    <div className="mt-4">
-      {/* Progress line */}
-      <div className="relative mb-3">
-        <div className="h-1.5 rounded-full bg-slate-200 dark:bg-slate-700">
-          <motion.div
-            className="h-1.5 rounded-full bg-gradient-to-r from-green-500 to-emerald-400"
-            initial={{ width: 0 }}
-            animate={{ width: `${(progress / (stages.length - 1)) * 100}%` }}
-            transition={{ duration: 0.6, ease: 'easeOut' }}
-          />
-        </div>
-      </div>
-
-      {/* Stage steps */}
-      <div className="grid grid-cols-4 gap-1">
-        {stages.map((stage, i) => {
-          const Icon = STAGE_ICONS[i]
-          const isDone = stage.status === 'done'
-          const isActive = stage.status === 'active'
-          const el = elapsed(stage.at)
-          return (
-            <div key={i} className="flex flex-col items-center gap-1 text-center">
-              <div className={`flex h-9 w-9 items-center justify-center rounded-full border-2 transition-all ${
-                isDone ? 'border-green-500 bg-green-500 text-white' :
-                isActive ? 'border-orange-500 bg-orange-500 text-white' :
-                'border-slate-300 bg-white text-slate-300 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-600'
-              }`}>
-                <Icon className="h-4 w-4" />
-              </div>
-              <span className={`text-[11px] font-semibold leading-tight ${
-                isDone ? 'text-green-600 dark:text-green-400' :
-                isActive ? 'text-orange-600 dark:text-orange-400' :
-                'text-slate-400'
-              }`}>
-                {stage.label}
-              </span>
-              {el && (
-                <span className={`text-[10px] font-mono ${isDone ? 'text-green-500' : isActive ? 'text-orange-500 font-bold' : 'text-slate-400'}`}>
-                  {el}
-                </span>
-              )}
-            </div>
-          )
-        })}
-      </div>
-    </div>
-  )
-}
-
-function OrderCard({ order }) {
-  const activeStage = order.stages.find((s) => s.status === 'active')
-  const isReady = order.stages[order.stages.length - 1].status === 'active' || order.stages[order.stages.length - 1].status === 'done'
-  const totalElapsed = elapsed(order.stages[0].at)
+function OrderTile({ order, now }) {
+  const isDT = order.orderType === 'drive_through'
+  const isReady = order.status === 'ready'
+  const waited = order.readySince ? now - order.readySince : null
 
   return (
     <motion.div
       layout
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      className={`rounded-2xl border-2 p-5 ${
+      initial={{ opacity: 0, scale: 0.8 }}
+      animate={{ opacity: 1, scale: 1 }}
+      exit={{ opacity: 0, scale: 0.7 }}
+      transition={{ type: 'spring', stiffness: 300, damping: 25 }}
+      className={`relative flex flex-col items-center justify-center rounded-2xl p-4 text-center select-none ${
         isReady
-          ? 'border-green-400 bg-green-50 dark:border-green-600 dark:bg-green-950/30'
-          : 'border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900'
+          ? isDT
+            ? 'bg-yellow-400 text-yellow-900'
+            : 'bg-green-500 text-white'
+          : 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200'
       }`}
     >
-      <div className="flex items-center justify-between">
-        <div>
-          <h3 className="text-xl font-extrabold text-slate-900 dark:text-white">{order.table}</h3>
-          <p className="text-xs font-mono text-slate-400">{order.id}</p>
-        </div>
-        <div className="text-right">
-          {isReady ? (
-            <span className="rounded-full bg-green-500 px-3 py-1 text-sm font-bold text-white">
-              Ready to Serve! 🍽️
-            </span>
-          ) : (
-            <span className="text-xs text-slate-500">Total wait: <span className="font-bold">{totalElapsed}</span></span>
-          )}
-        </div>
-      </div>
-
-      {activeStage && !isReady && (
-        <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
-          Currently: <span className="font-semibold text-orange-600 dark:text-orange-400">{activeStage.label}</span>
-          {elapsed(activeStage.at) && <span className="ml-1 text-xs text-slate-400">(for {elapsed(activeStage.at)})</span>}
-        </p>
+      {/* DT car icon top-right */}
+      {isDT && (
+        <Car className={`absolute right-2 top-2 h-4 w-4 opacity-60 ${isReady ? 'text-yellow-800' : 'text-slate-400'}`} />
       )}
-
-      <StageBar stages={order.stages} />
+      <span className={`font-extrabold leading-none ${isReady ? 'text-4xl' : 'text-3xl'}`}>
+        {order.id}
+      </span>
+      {isReady && waited && (
+        <span className={`mt-1 text-xs font-semibold opacity-80`}>
+          {waitLabel(waited)}
+        </span>
+      )}
     </motion.div>
   )
 }
 
 export default function Dining() {
-  const [orders, setOrders] = useState(INITIAL_ORDERS)
+  const [orders, setOrders] = useState(SEED_ORDERS)
   const [now, setNow] = useState(Date.now())
 
-  // Refresh clock every 30s for elapsed time accuracy
   useEffect(() => {
-    const t = setInterval(() => setNow(Date.now()), 30000)
+    const t = setInterval(() => setNow(Date.now()), 5000)
     return () => clearInterval(t)
   }, [])
 
-  const readyOrders = orders.filter((o) => o.stages[o.stages.length - 1].status === 'active')
-  const inProgressOrders = orders.filter((o) => o.stages[o.stages.length - 1].status !== 'active')
+  const preparing = orders.filter((o) => o.status === 'preparing')
+  const readyCounter = orders.filter((o) => o.status === 'ready' && o.orderType === 'counter')
+  const readyDT = orders.filter((o) => o.status === 'ready' && o.orderType === 'drive_through')
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-950">
+    <div className="flex min-h-screen flex-col bg-slate-950 text-white">
       {/* Header */}
-      <div className="border-b border-slate-200 bg-white px-6 py-4 dark:border-slate-800 dark:bg-slate-900">
-        <div className="mx-auto flex max-w-5xl items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="rounded-xl bg-green-100 p-2.5 dark:bg-green-900/40">
-              <Utensils className="h-6 w-6 text-green-600 dark:text-green-400" />
+      <div className="flex flex-shrink-0 items-center justify-between border-b border-white/10 bg-slate-900 px-6 py-4">
+        <div className="flex items-center gap-3">
+          <div className="rounded-xl bg-green-500/20 p-2">
+            <ChefHat className="h-6 w-6 text-green-400" />
+          </div>
+          <div>
+            <h1 className="text-lg font-extrabold">Order Status Board</h1>
+            <p className="text-xs text-slate-400">Your number will appear in <span className="font-semibold text-green-400">Ready</span> when your order is done</p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2 rounded-xl bg-green-500/10 px-3 py-1.5 text-xs font-semibold text-green-400">
+          <span className="h-2 w-2 animate-pulse rounded-full bg-green-400" />
+          Live
+        </div>
+      </div>
+
+      {/* Board */}
+      <div className="flex flex-1 flex-col gap-0 overflow-hidden md:flex-row">
+
+        {/* LEFT — Preparing */}
+        <div className="flex flex-1 flex-col border-b border-white/10 md:border-b-0 md:border-r">
+          <div className="flex items-center gap-3 bg-slate-800/60 px-6 py-4">
+            <Clock className="h-5 w-5 text-orange-400" />
+            <h2 className="text-xl font-extrabold tracking-wide text-white">PREPARING</h2>
+            <span className="ml-auto rounded-full bg-orange-500/20 px-3 py-1 text-sm font-bold text-orange-400">
+              {preparing.length}
+            </span>
+          </div>
+          <div className="flex-1 overflow-y-auto p-5">
+            {preparing.length === 0 ? (
+              <div className="flex h-32 items-center justify-center text-slate-600 text-sm">No orders preparing</div>
+            ) : (
+              <div className="grid grid-cols-3 gap-3 sm:grid-cols-4 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+                <AnimatePresence>
+                  {preparing.map((o) => <OrderTile key={o.id} order={o} now={now} />)}
+                </AnimatePresence>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* RIGHT — Ready */}
+        <div className="flex flex-1 flex-col">
+          {/* Counter collection */}
+          <div className="flex flex-1 flex-col border-b border-white/10">
+            <div className="flex items-center gap-3 bg-green-900/30 px-6 py-4">
+              <Store className="h-5 w-5 text-green-400" />
+              <h2 className="text-xl font-extrabold tracking-wide text-white">READY — COUNTER</h2>
+              <span className="ml-auto rounded-full bg-green-500/20 px-3 py-1 text-sm font-bold text-green-400">
+                {readyCounter.length}
+              </span>
             </div>
-            <div>
-              <h1 className="text-xl font-extrabold text-slate-900 dark:text-white">Order Status</h1>
-              <p className="text-xs text-slate-500">Live order tracker — refreshes automatically</p>
+            <div className="flex-1 overflow-y-auto p-5">
+              {readyCounter.length === 0 ? (
+                <div className="flex h-24 items-center justify-center text-slate-600 text-sm">No orders ready</div>
+              ) : (
+                <div className="grid grid-cols-3 gap-3 sm:grid-cols-4 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+                  <AnimatePresence>
+                    {readyCounter.map((o) => <OrderTile key={o.id} order={o} now={now} />)}
+                  </AnimatePresence>
+                </div>
+              )}
             </div>
           </div>
-          <div className="flex items-center gap-2 rounded-xl bg-green-50 px-3 py-1.5 text-xs font-semibold text-green-700 dark:bg-green-950/40 dark:text-green-400">
-            <span className="h-2 w-2 animate-pulse rounded-full bg-green-500" />
-            Live
+
+          {/* Drive-through collection */}
+          <div className="flex flex-1 flex-col">
+            <div className="flex items-center gap-3 bg-yellow-900/30 px-6 py-4">
+              <Car className="h-5 w-5 text-yellow-400" />
+              <h2 className="text-xl font-extrabold tracking-wide text-white">READY — DRIVE-THROUGH</h2>
+              <span className="ml-auto rounded-full bg-yellow-500/20 px-3 py-1 text-sm font-bold text-yellow-400">
+                {readyDT.length}
+              </span>
+            </div>
+            <div className="flex-1 overflow-y-auto p-5">
+              {readyDT.length === 0 ? (
+                <div className="flex h-24 items-center justify-center text-slate-600 text-sm">No drive-through orders ready</div>
+              ) : (
+                <div className="grid grid-cols-3 gap-3 sm:grid-cols-4 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+                  <AnimatePresence>
+                    {readyDT.map((o) => <OrderTile key={o.id} order={o} now={now} />)}
+                  </AnimatePresence>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>
 
-      <div className="mx-auto max-w-5xl p-4 sm:p-6">
-        {/* Ready orders callout */}
-        <AnimatePresence>
-          {readyOrders.length > 0 && (
-            <motion.div
-              initial={{ opacity: 0, y: -10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-              className="mb-6 rounded-2xl border-2 border-green-400 bg-green-50 p-4 dark:border-green-600 dark:bg-green-950/30"
-            >
-              <div className="flex items-center gap-3">
-                <CheckCircle className="h-6 w-6 flex-shrink-0 text-green-600 dark:text-green-400" />
-                <div>
-                  <p className="font-extrabold text-green-800 dark:text-green-300">
-                    {readyOrders.map((o) => o.table).join(', ')} — Your order is ready!
-                  </p>
-                  <p className="text-sm text-green-700 dark:text-green-400">Please notify your waiter or proceed to collect.</p>
-                </div>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-        {/* All orders */}
-        {orders.length === 0 ? (
-          <div className="flex h-64 flex-col items-center justify-center gap-3 text-slate-400">
-            <ChefHat className="h-12 w-12 opacity-20" />
-            <p className="text-sm">No active orders</p>
-          </div>
-        ) : (
-          <div className="grid gap-4 sm:grid-cols-2">
-            <AnimatePresence>
-              {orders.map((order) => (
-                <OrderCard key={order.id} order={order} />
-              ))}
-            </AnimatePresence>
-          </div>
-        )}
-
-        <p className="mt-8 text-center text-xs text-slate-400">
-          If your order has been waiting longer than expected, please notify your waiter or inform our till staff.
-        </p>
+      {/* Footer legend */}
+      <div className="flex flex-shrink-0 flex-wrap items-center justify-center gap-6 border-t border-white/10 bg-slate-900 px-6 py-3 text-xs text-slate-400">
+        <span className="flex items-center gap-2"><span className="h-3 w-3 rounded bg-slate-700" /> Preparing</span>
+        <span className="flex items-center gap-2"><span className="h-3 w-3 rounded bg-green-500" /> Counter ready</span>
+        <span className="flex items-center gap-2"><span className="h-3 w-3 rounded bg-yellow-400" /> Drive-through ready</span>
+        <span className="flex items-center gap-2"><Car className="h-3.5 w-3.5" /> = Drive-through order</span>
       </div>
     </div>
   )

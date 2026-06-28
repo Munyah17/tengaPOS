@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Search, Barcode, Plus, Minus, Trash2, ShoppingCart,
-  CreditCard, Banknote, Smartphone, Receipt, X,
+  CreditCard, Banknote, Smartphone, Receipt, X, Car, Store,
 } from 'lucide-react'
 import Button from '@/components/common/Button'
 import ZimraReceipt from '@/components/common/ZimraReceipt'
@@ -158,16 +158,43 @@ export default function POS() {
       {/* Cart Panel */}
       <div className="flex w-96 flex-col border-l border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-950">
         {/* Cart Header */}
-        <div className={`flex items-center gap-2 border-b border-slate-200 p-4 dark:border-slate-800`}>
-          <ShoppingCart className={`h-5 w-5 ${
-            isRestaurant ? 'text-restaurant-600' : 'text-brand-600'
-          }`} />
-          <h2 className="font-bold text-slate-900 dark:text-white">
-            {isRestaurant ? 'Order' : 'Cart'}
-          </h2>
-          <span className="ml-auto rounded-full bg-slate-100 px-2 py-0.5 text-xs font-bold text-slate-600 dark:bg-slate-800 dark:text-slate-400">
-            {cart.items.length} items
-          </span>
+        <div className="flex flex-col gap-0 border-b border-slate-200 dark:border-slate-800">
+          <div className="flex items-center gap-2 p-4 pb-2">
+            <ShoppingCart className={`h-5 w-5 ${isRestaurant ? 'text-restaurant-600' : 'text-brand-600'}`} />
+            <h2 className="font-bold text-slate-900 dark:text-white">
+              {isRestaurant ? 'Order' : 'Cart'}
+            </h2>
+            <span className="ml-auto rounded-full bg-slate-100 px-2 py-0.5 text-xs font-bold text-slate-600 dark:bg-slate-800 dark:text-slate-400">
+              {cart.items.length} items
+            </span>
+          </div>
+          {/* Drive-through / Counter toggle — restaurant only */}
+          {isRestaurant && (
+            <div className="flex gap-0 overflow-hidden rounded-xl mx-4 mb-3 border border-slate-200 dark:border-slate-700">
+              <button
+                onClick={() => cart.setOrderType('counter')}
+                className={`flex flex-1 items-center justify-center gap-1.5 py-2 text-xs font-bold transition-colors ${
+                  cart.orderType !== 'drive_through'
+                    ? 'bg-restaurant-600 text-white'
+                    : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
+                }`}
+              >
+                <Store className="h-3.5 w-3.5" />
+                Counter
+              </button>
+              <button
+                onClick={() => cart.setOrderType('drive_through')}
+                className={`flex flex-1 items-center justify-center gap-1.5 py-2 text-xs font-bold transition-colors ${
+                  cart.orderType === 'drive_through'
+                    ? 'bg-yellow-500 text-white'
+                    : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
+                }`}
+              >
+                <Car className="h-3.5 w-3.5" />
+                Drive-Through
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Cart Items */}

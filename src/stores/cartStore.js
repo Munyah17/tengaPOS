@@ -5,6 +5,7 @@ export const useCartStore = create((set, get) => ({
   paymentMethod: 'cash',
   discount: 0,
   customerId: null,
+  orderType: 'counter',
 
   addItem: (product) =>
     set((state) => {
@@ -37,6 +38,7 @@ export const useCartStore = create((set, get) => ({
     })),
 
   setPaymentMethod: (method) => set({ paymentMethod: method }),
+  setOrderType: (orderType) => set({ orderType }),
   setDiscount: (discount) => set({ discount }),
   setCustomerId: (customerId) => set({ customerId }),
 
@@ -62,5 +64,5 @@ export const useCartStore = create((set, get) => ({
     return get().getTotal() + get().getTax()
   },
 
-  clearCart: () => set({ items: [], discount: 0, customerId: null }),
+  clearCart: () => set({ items: [], discount: 0, customerId: null, orderType: 'counter' }),
 }))
