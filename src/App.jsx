@@ -22,6 +22,7 @@ import Fiscalisation from '@/pages/Fiscalisation'
 import Settings from '@/pages/Settings'
 import AppLayout from '@/components/layout/AppLayout'
 
+import Dining from '@/pages/Dining'
 import AdminLayout from '@/components/admin/AdminLayout'
 import AdminDashboard from '@/pages/admin/AdminDashboard'
 import AdminTenants from '@/pages/admin/AdminTenants'
@@ -69,6 +70,7 @@ export default function App() {
           <Route path="/" element={<Landing />} />
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
+          <Route path="/dining" element={<Dining />} />
 
           {/* Tenant app routes */}
           <Route

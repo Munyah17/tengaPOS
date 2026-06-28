@@ -1,7 +1,10 @@
+import { useState } from 'react'
 import { motion } from 'framer-motion'
-import { ClipboardList, Eye } from 'lucide-react'
+import { ClipboardList, Eye, Bell, CheckCircle, Clock, Flame, Timer } from 'lucide-react'
 import ExportMenu from '@/components/common/ExportMenu'
 import { formatCurrency, formatDateTime } from '@/utils/formatters'
+import { useThemeStore } from '@/stores/themeStore'
+import toast from 'react-hot-toast'
 
 const orders = [
   { id: 'TP-260524-0001', date: '2026-05-24T14:30:00', items: 3, total: 15.50, method: 'Cash', status: 'completed', customer: 'Walk-in' },
@@ -13,6 +16,21 @@ const orders = [
   { id: 'TP-260524-0007', date: '2026-05-24T13:25:00', items: 1, total: 5.99, method: 'Cash', status: 'completed', customer: 'Walk-in' },
 ]
 
+const restaurantOrders = [
+  { id: 'ORD-001', table: 'Table 4', items: ['Sadza & Beef Stew', 'Coke 330ml'], status: 'cooking', total: 18.50, time: '14:28', elapsed: 14 },
+  { id: 'ORD-002', table: 'Table 1', items: ['T-Bone Steak', 'Caesar Salad'], status: 'cooking', total: 47.00, time: '14:20', elapsed: 22 },
+  { id: 'ORD-003', table: 'Table 7', items: ['Fish & Chips', 'Mushroom Soup'], status: 'waiting', total: 22.00, time: '14:25', elapsed: 17 },
+  { id: 'ORD-004', table: 'Table 2', items: ['Sadza & Chicken x2', 'Fanta x2'], status: 'ready', total: 31.00, time: '14:17', elapsed: 25 },
+  { id: 'ORD-005', table: 'Table 5', items: ['Ice Cream Sundae'], status: 'received', total: 8.00, time: '14:41', elapsed: 1 },
+]
+
+const ORDER_STATUS = {
+  received: { label: 'Received', icon: Clock, bg: 'bg-blue-50 dark:bg-blue-950/40', text: 'text-blue-700 dark:text-blue-400', dot: 'bg-blue-500' },
+  waiting:  { label: 'Waiting',  icon: Timer, bg: 'bg-yellow-50 dark:bg-yellow-950/40', text: 'text-yellow-700 dark:text-yellow-400', dot: 'bg-yellow-500' },
+  cooking:  { label: 'Cooking',  icon: Flame, bg: 'bg-orange-50 dark:bg-orange-950/40', text: 'text-orange-700 dark:text-orange-400', dot: 'bg-orange-500' },
+  ready:    { label: 'Ready',    icon: CheckCircle, bg: 'bg-green-50 dark:bg-green-950/40', text: 'text-green-700 dark:text-green-400', dot: 'bg-green-500' },
+}
+
 const exportColumns = [
   { header: 'Order ID', key: 'id' },
   { header: 'Date', key: 'date' },
@@ -22,63 +40,166 @@ const exportColumns = [
   { header: 'Status', key: 'status' },
 ]
 
-export default function Orders() {
+function playBeep() {
+  try {
+    const Ctx = window.AudioContext || window.webkitAudioContext
+    if (!Ctx) return
+    const ctx = new Ctx()
+    const osc = ctx.createOscillator()
+    const gain = ctx.createGain()
+    osc.connect(gain)
+    gain.connect(ctx.destination)
+    osc.type = 'square'
+    osc.frequency.value = 880
+    gain.gain.setValueAtTime(0.2, ctx.currentTime)
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.3)
+    osc.start(ctx.currentTime)
+    osc.stop(ctx.currentTime + 0.3)
+  } catch {}
+}
+
+function RestaurantOrders() {
+  const [ringed, setRinged] = useState({})
+
+  const ringKitchen = (orderId, table) => {
+    playBeep()
+    setRinged((r) => ({ ...r, [orderId]: true }))
+    toast.success(`Kitchen alerted for ${table}!`, { icon: '🔔', duration: 3000 })
+    setTimeout(() => setRinged((r) => ({ ...r, [orderId]: false })), 30000)
+  }
+
   return (
-    <div className="p-6">
-      <div className="mb-6 flex items-center justify-between">
+    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+      {restaurantOrders.map((order, i) => {
+        const st = ORDER_STATUS[order.status] || ORDER_STATUS.received
+        const Icon = st.icon
+        const isOverdue = order.elapsed > 20
+        const hasRinged = ringed[order.id]
+
+        return (
+          <motion.div
+            key={order.id}
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: i * 0.05 }}
+            className={`rounded-2xl border p-4 ${st.bg} ${isOverdue ? 'border-red-300 dark:border-red-700' : 'border-transparent'}`}
+          >
+            {/* Card header */}
+            <div className="mb-3 flex items-start justify-between gap-2">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="text-base font-extrabold text-slate-900 dark:text-white">{order.table}</span>
+                  {isOverdue && (
+                    <span className="rounded-full bg-red-500 px-2 py-0.5 text-[10px] font-bold uppercase text-white">overdue</span>
+                  )}
+                </div>
+                <span className="text-xs font-mono text-slate-500">{order.id}</span>
+              </div>
+              <div className={`flex items-center gap-1 rounded-xl px-2.5 py-1 text-xs font-semibold ${st.bg} ${st.text}`}>
+                <span className={`h-1.5 w-1.5 rounded-full ${st.dot}`} />
+                {st.label}
+              </div>
+            </div>
+
+            {/* Items */}
+            <ul className="mb-3 space-y-1">
+              {order.items.map((item, j) => (
+                <li key={j} className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300">
+                  <span className="h-1 w-1 flex-shrink-0 rounded-full bg-slate-400" />
+                  {item}
+                </li>
+              ))}
+            </ul>
+
+            {/* Footer */}
+            <div className="flex items-center justify-between border-t border-black/5 pt-3 dark:border-white/10">
+              <div className="flex items-center gap-3 text-xs text-slate-500">
+                <span className="flex items-center gap-1"><Clock className="h-3 w-3" />{order.time}</span>
+                <span className={isOverdue ? 'font-bold text-red-600 dark:text-red-400' : ''}>{order.elapsed}m ago</span>
+                <span className="font-semibold text-slate-800 dark:text-slate-200">{formatCurrency(order.total)}</span>
+              </div>
+              {/* Ring Kitchen — optional, for when order is delayed */}
+              <button
+                onClick={() => ringKitchen(order.id, order.table)}
+                disabled={hasRinged}
+                className={`flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-bold transition-all ${
+                  hasRinged
+                    ? 'bg-green-100 text-green-600 dark:bg-green-900/30 dark:text-green-400'
+                    : 'bg-orange-500 text-white hover:bg-orange-600 active:scale-95'
+                }`}
+                title="Alert kitchen that this order is taking too long"
+              >
+                <Bell className="h-3.5 w-3.5" />
+                {hasRinged ? 'Alerted' : 'Ring Kitchen'}
+              </button>
+            </div>
+          </motion.div>
+        )
+      })}
+    </div>
+  )
+}
+
+export default function Orders() {
+  const { posMode } = useThemeStore()
+  const isRestaurant = posMode === 'restaurant'
+
+  return (
+    <div className="p-4 sm:p-6">
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-extrabold text-slate-900 dark:text-white">Orders</h1>
-          <p className="text-sm text-slate-500">View and manage all transactions</p>
+          <p className="text-sm text-slate-500">
+            {isRestaurant ? 'Active table orders' : 'View and manage all transactions'}
+          </p>
         </div>
-        <ExportMenu data={orders} columns={exportColumns} title="Orders" filename="tengapos_orders" />
+        {!isRestaurant && <ExportMenu data={orders} columns={exportColumns} title="Orders" filename="tengapos_orders" />}
       </div>
 
-      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
-        <table className="w-full">
-          <thead>
-            <tr className="border-b border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-900">
-              {['Order ID', 'Date', 'Customer', 'Items', 'Total', 'Payment', 'Status', ''].map((h) => (
-                <th key={h} className="px-4 py-3 text-left text-xs font-semibold uppercase text-slate-500">{h}</th>
+      {isRestaurant ? (
+        <RestaurantOrders />
+      ) : (
+        <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
+          <table className="w-full min-w-[640px]">
+            <thead>
+              <tr className="border-b border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-900">
+                {['Order ID', 'Date', 'Customer', 'Items', 'Total', 'Payment', 'Status', ''].map((h) => (
+                  <th key={h} className="px-4 py-3 text-left text-xs font-semibold uppercase text-slate-500">{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {orders.map((order) => (
+                <motion.tr
+                  key={order.id}
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  className="border-b border-slate-100 hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-800/50"
+                >
+                  <td className="px-4 py-3 text-sm font-mono font-medium text-slate-900 dark:text-white">{order.id}</td>
+                  <td className="px-4 py-3 text-sm text-slate-600 dark:text-slate-400">{formatDateTime(order.date)}</td>
+                  <td className="px-4 py-3 text-sm text-slate-600 dark:text-slate-400">{order.customer}</td>
+                  <td className="px-4 py-3 text-sm text-slate-600 dark:text-slate-400">{order.items}</td>
+                  <td className="px-4 py-3 text-sm font-semibold text-slate-900 dark:text-white">{formatCurrency(order.total)}</td>
+                  <td className="px-4 py-3">
+                    <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-700 dark:bg-slate-800 dark:text-slate-300">{order.method}</span>
+                  </td>
+                  <td className="px-4 py-3">
+                    <span className={`rounded-full px-2.5 py-0.5 text-xs font-bold ${order.status === 'completed' ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300' : 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300'}`}>
+                      {order.status}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3">
+                    <button className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800">
+                      <Eye className="h-4 w-4" />
+                    </button>
+                  </td>
+                </motion.tr>
               ))}
-            </tr>
-          </thead>
-          <tbody>
-            {orders.map((order) => (
-              <motion.tr
-                key={order.id}
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                className="border-b border-slate-100 hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-800/50"
-              >
-                <td className="px-4 py-3 text-sm font-mono font-medium text-slate-900 dark:text-white">{order.id}</td>
-                <td className="px-4 py-3 text-sm text-slate-600 dark:text-slate-400">{formatDateTime(order.date)}</td>
-                <td className="px-4 py-3 text-sm text-slate-600 dark:text-slate-400">{order.customer}</td>
-                <td className="px-4 py-3 text-sm text-slate-600 dark:text-slate-400">{order.items}</td>
-                <td className="px-4 py-3 text-sm font-semibold text-slate-900 dark:text-white">{formatCurrency(order.total)}</td>
-                <td className="px-4 py-3">
-                  <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-700 dark:bg-slate-800 dark:text-slate-300">
-                    {order.method}
-                  </span>
-                </td>
-                <td className="px-4 py-3">
-                  <span className={`rounded-full px-2.5 py-0.5 text-xs font-bold ${
-                    order.status === 'completed'
-                      ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300'
-                      : 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300'
-                  }`}>
-                    {order.status}
-                  </span>
-                </td>
-                <td className="px-4 py-3">
-                  <button className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800">
-                    <Eye className="h-4 w-4" />
-                  </button>
-                </td>
-              </motion.tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   )
 }
