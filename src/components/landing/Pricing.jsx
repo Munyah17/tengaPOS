@@ -25,7 +25,7 @@ const plans = [
   },
   {
     name: 'Standard Plan',
-    price: '$150',
+    price: '$200',
     period: 'once-off',
     description: '10″ Android tablet + portable Bluetooth thermal printer + full system access.',
     icon: Tablet,
@@ -46,7 +46,7 @@ const plans = [
   },
   {
     name: 'Pro Package',
-    price: '$200',
+    price: '$250',
     period: 'once-off',
     description: '12″ Android tablet + Bluetooth portable thermal printer + full system access.',
     icon: Monitor,
