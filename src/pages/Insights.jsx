@@ -45,12 +45,21 @@ const DEMO_RESTAURANT = [
 ]
 
 const TIMELINES = [
-  { key: 'today', label: 'Today' },
-  { key: 'week', label: 'This Week' },
-  { key: 'month', label: 'This Month' },
-  { key: '3months', label: 'Last 3 Months' },
-  { key: 'year', label: 'This Year' },
+  { key: 'today',    label: 'Today',           multiplier: 1 / 30 },
+  { key: 'week',     label: 'This Week',        multiplier: 7 / 30 },
+  { key: 'month',    label: 'This Month',       multiplier: 1 },
+  { key: '3months',  label: 'Last 3 Months',    multiplier: 3 },
+  { key: 'year',     label: 'This Year',        multiplier: 12 },
 ]
+
+// Trend figures per timeline (vs previous equivalent period)
+const TIMELINE_TRENDS = {
+  today:   { revenue: 4,  profit: 2,  units: 3 },
+  week:    { revenue: 8,  profit: 6,  units: 7 },
+  month:   { revenue: 12, profit: 8,  units: 5 },
+  '3months': { revenue: 18, profit: 14, units: 11 },
+  year:    { revenue: 23, profit: 19, units: 15 },
+}
 
 function Metric({ label, value, sub, color = 'brand', icon: Icon, trend }) {
   const colors = {
@@ -180,7 +189,7 @@ export default function Insights() {
   const { isDemo, profile, tenant } = useAuthStore()
   const { posMode } = useThemeStore()
   const isRestaurant = posMode === 'restaurant'
-  const products = isDemo ? (isRestaurant ? DEMO_RESTAURANT : DEMO_RETAIL) : []
+  const baseProducts = isDemo ? (isRestaurant ? DEMO_RESTAURANT : DEMO_RETAIL) : []
 
   const [timeline, setTimeline] = useState('month')
   const [location, setLocation] = useState('')
@@ -193,9 +202,21 @@ export default function Insights() {
   const [error, setError] = useState(null)
   const reportRef = useRef(null)
 
+  const tlMeta = TIMELINES.find((t) => t.key === timeline) || TIMELINES[2]
+  const m = tlMeta.multiplier
+  const trends = TIMELINE_TRENDS[timeline] || TIMELINE_TRENDS.month
+
+  // Scale demo data to match the selected period
+  const products = baseProducts.map((p) => ({
+    ...p,
+    sold:    Math.round(p.sold    * m),
+    revenue: +(p.revenue * m).toFixed(2),
+    cost:    +(p.cost    * m).toFixed(2),
+  }))
+
   const totalRevenue = products.reduce((s, p) => s + p.revenue, 0)
-  const totalProfit = products.reduce((s, p) => s + (p.revenue - p.cost), 0)
-  const totalUnits = products.reduce((s, p) => s + p.sold, 0)
+  const totalProfit  = products.reduce((s, p) => s + (p.revenue - p.cost), 0)
+  const totalUnits   = products.reduce((s, p) => s + p.sold, 0)
 
   const generateInsights = async () => {
     if (!apiKey.trim()) { toast.error('Enter your Groq API key below to use AI insights'); return }
@@ -204,7 +225,7 @@ export default function Insights() {
     setError(null)
     setResult(null)
     try {
-      const prompt = buildPrompt(products, TIMELINES.find(t => t.key === timeline)?.label, location, landingPrices, posMode)
+      const prompt = buildPrompt(products, tlMeta.label, location, landingPrices, posMode)
       const data = await callGroq(prompt, apiKey)
       setResult(data)
       toast.success('AI analysis complete!')
@@ -329,10 +350,10 @@ export default function Insights() {
 
       {/* KPI row */}
       <div className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Metric label="Total Revenue" value={`$${totalRevenue.toFixed(0)}`} icon={DollarSign} color="brand" trend={12} sub={TIMELINES.find(t => t.key === timeline)?.label} />
-        <Metric label="Gross Profit" value={`$${totalProfit.toFixed(0)}`} icon={TrendingUp} color="green" trend={8} sub={`${((totalProfit / totalRevenue) * 100).toFixed(1)}% margin`} />
-        <Metric label="Units Sold" value={totalUnits.toLocaleString()} icon={ShoppingCart} color="purple" trend={5} />
-        <Metric label="Products Active" value={products.length} icon={Package} color="amber" sub="All categories" />
+        <Metric label="Total Revenue" value={`$${totalRevenue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} icon={DollarSign} color="brand" trend={trends.revenue} sub={tlMeta.label} />
+        <Metric label="Gross Profit"  value={`$${totalProfit.toLocaleString(undefined,  { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} icon={TrendingUp}  color="green"  trend={trends.profit}  sub={`${totalRevenue > 0 ? ((totalProfit / totalRevenue) * 100).toFixed(1) : 0}% margin`} />
+        <Metric label="Units Sold"    value={totalUnits.toLocaleString()}            icon={ShoppingCart} color="purple" trend={trends.units} />
+        <Metric label="Products Active" value={baseProducts.length}                  icon={Package}      color="amber"  sub="All categories" />
       </div>
 
       <div className="grid gap-6 lg:grid-cols-[1fr_360px]">
