@@ -4,6 +4,7 @@ import { Plus, CheckCircle, Clock, AlertCircle, User } from 'lucide-react'
 import Button from '@/components/common/Button'
 import Modal from '@/components/common/Modal'
 import { useThemeStore } from '@/stores/themeStore'
+import { useAuthStore } from '@/stores/authStore'
 
 const initialTasks = [
   { id: 1, title: 'Restock beverages section', assignee: 'Tatenda M.', deadline: '2026-05-25', status: 'in_progress', priority: 'high' },
@@ -27,8 +28,9 @@ const statusIcons = {
 
 export default function Tasks() {
   const { posMode } = useThemeStore()
+  const { isDemo } = useAuthStore()
   const isRestaurant = posMode === 'restaurant'
-  const [tasks, setTasks] = useState(initialTasks)
+  const [tasks, setTasks] = useState(isDemo ? initialTasks : [])
   const [showAdd, setShowAdd] = useState(false)
   const [filter, setFilter] = useState('all')
   const [newTask, setNewTask] = useState({ title: '', assignee: '', deadline: '', priority: 'medium' })

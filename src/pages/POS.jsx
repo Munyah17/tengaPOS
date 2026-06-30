@@ -2,12 +2,13 @@ import { useState, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Search, Barcode, Plus, Minus, Trash2, ShoppingCart,
-  CreditCard, Banknote, Smartphone, Receipt, X, Car, Store,
+  CreditCard, Banknote, Smartphone, Receipt, X, Car, Store, Package as PackageIcon,
 } from 'lucide-react'
 import Button from '@/components/common/Button'
 import ZimraReceipt from '@/components/common/ZimraReceipt'
 import { useCartStore } from '@/stores/cartStore'
 import { useThemeStore } from '@/stores/themeStore'
+import { useAuthStore } from '@/stores/authStore'
 import { DEMO_PRODUCTS, DEMO_CATEGORIES, RESTAURANT_DEMO_PRODUCTS, PAYMENT_METHODS } from '@/utils/constants'
 import { formatCurrency, generateReceiptNumber } from '@/utils/formatters'
 import toast from 'react-hot-toast'
@@ -22,6 +23,7 @@ const restaurantCategories = [
 
 export default function POS() {
   const { posMode } = useThemeStore()
+  const { isDemo } = useAuthStore()
   const isRestaurant = posMode === 'restaurant'
   const cart = useCartStore()
   const [search, setSearch] = useState('')
@@ -29,7 +31,9 @@ export default function POS() {
   const [showReceipt, setShowReceipt] = useState(false)
   const [receiptData, setReceiptData] = useState(null)
 
-  const products = isRestaurant ? RESTAURANT_DEMO_PRODUCTS : DEMO_PRODUCTS
+  const products = isDemo
+    ? (isRestaurant ? RESTAURANT_DEMO_PRODUCTS : DEMO_PRODUCTS)
+    : []
   const categories = isRestaurant ? restaurantCategories : DEMO_CATEGORIES
 
   const filtered = useMemo(() => {
@@ -110,6 +114,13 @@ export default function POS() {
 
         {/* Product Grid */}
         <div className="flex-1 overflow-auto p-4">
+          {products.length === 0 && (
+            <div className="flex h-full flex-col items-center justify-center text-center">
+              <PackageIcon className="mb-3 h-14 w-14 text-slate-300 dark:text-slate-700" />
+              <p className="text-sm font-semibold text-slate-600 dark:text-slate-400">No products yet</p>
+              <p className="mt-1 text-xs text-slate-400">Go to Inventory to add your products, then they'll appear here</p>
+            </div>
+          )}
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
             {filtered.map((product) => (
               <motion.button

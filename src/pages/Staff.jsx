@@ -5,6 +5,7 @@ import Button from '@/components/common/Button'
 import Modal from '@/components/common/Modal'
 import ExportMenu from '@/components/common/ExportMenu'
 import { useThemeStore } from '@/stores/themeStore'
+import { useAuthStore } from '@/stores/authStore'
 
 const initialStaff = [
   { id: 1, name: 'Tatenda Moyo', email: 'tatenda@demo.com', role: 'shop_manager', branch: 'Main Branch', status: 'active' },
@@ -42,8 +43,9 @@ const exportColumns = [
 
 export default function Staff() {
   const { posMode } = useThemeStore()
+  const { isDemo } = useAuthStore()
   const isRestaurant = posMode === 'restaurant'
-  const [staff, setStaff] = useState(initialStaff)
+  const [staff, setStaff] = useState(isDemo ? initialStaff : [])
   const [showAdd, setShowAdd] = useState(false)
   const [newStaff, setNewStaff] = useState({ name: '', email: '', role: 'cashier', branch: 'Main Branch' })
 

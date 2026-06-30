@@ -11,15 +11,17 @@ import { DEMO_PRODUCTS } from '@/utils/constants'
 import { formatCurrency } from '@/utils/formatters'
 import { generateTemplate, parseCSV } from '@/utils/exportUtils'
 import { useThemeStore } from '@/stores/themeStore'
+import { useAuthStore } from '@/stores/authStore'
 import toast from 'react-hot-toast'
 
 export default function Inventory() {
   const { posMode } = useThemeStore()
+  const { isDemo } = useAuthStore()
   const isRestaurant = posMode === 'restaurant'
   const [search, setSearch] = useState('')
   const [showAdd, setShowAdd] = useState(false)
   const [showImport, setShowImport] = useState(false)
-  const [products, setProducts] = useState(DEMO_PRODUCTS)
+  const [products, setProducts] = useState(isDemo ? DEMO_PRODUCTS : [])
   const [newProduct, setNewProduct] = useState({
     name: '', sku: '', barcode: '', category: '', price: '', stock: '',
   })

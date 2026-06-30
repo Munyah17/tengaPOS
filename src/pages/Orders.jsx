@@ -4,9 +4,10 @@ import { Eye, Bell, CheckCircle, Clock, Flame, Timer, Car, Store } from 'lucide-
 import ExportMenu from '@/components/common/ExportMenu'
 import { formatCurrency, formatDateTime } from '@/utils/formatters'
 import { useThemeStore } from '@/stores/themeStore'
+import { useAuthStore } from '@/stores/authStore'
 import toast from 'react-hot-toast'
 
-const orders = [
+const DEMO_ORDERS = [
   { id: 'TP-260524-0001', date: '2026-05-24T14:30:00', items: 3, total: 15.50, method: 'Cash', status: 'completed', customer: 'Walk-in' },
   { id: 'TP-260524-0002', date: '2026-05-24T14:22:00', items: 7, total: 42.75, method: 'EcoCash', status: 'completed', customer: 'Walk-in' },
   { id: 'TP-260524-0003', date: '2026-05-24T14:15:00', items: 2, total: 8.20, method: 'Cash', status: 'completed', customer: 'Walk-in' },
@@ -16,7 +17,7 @@ const orders = [
   { id: 'TP-260524-0007', date: '2026-05-24T13:25:00', items: 1, total: 5.99, method: 'Cash', status: 'completed', customer: 'Walk-in' },
 ]
 
-const restaurantOrders = [
+const DEMO_RESTAURANT_ORDERS = [
   { id: '#047', items: ['Zinger Burger x2', 'Large Fries', 'Coke 500ml'], status: 'cooking',  orderType: 'counter',       total: 18.50, time: '14:28', elapsed: 14 },
   { id: '#048', items: ['Streetwise 2', 'Coleslaw'],                       status: 'cooking',  orderType: 'drive_through', total: 14.00, time: '14:20', elapsed: 22 },
   { id: '#049', items: ['Grilled Chicken Wrap', 'Water 500ml'],            status: 'waiting',  orderType: 'counter',       total: 12.00, time: '14:25', elapsed: 17 },
@@ -58,7 +59,7 @@ function playBeep() {
   } catch {}
 }
 
-function RestaurantOrders() {
+function RestaurantOrders({ orders }) {
   const [ringed, setRinged] = useState({})
 
   const ringKitchen = (orderId) => {
@@ -68,9 +69,19 @@ function RestaurantOrders() {
     setTimeout(() => setRinged((r) => ({ ...r, [orderId]: false })), 30000)
   }
 
+  if (orders.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-slate-200 py-20 dark:border-slate-700">
+        <Clock className="mb-3 h-10 w-10 text-slate-300 dark:text-slate-700" />
+        <p className="text-sm font-medium text-slate-500">No active orders</p>
+        <p className="mt-1 text-xs text-slate-400">Orders placed on the POS will appear here</p>
+      </div>
+    )
+  }
+
   return (
     <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-      {restaurantOrders.map((order, i) => {
+      {orders.map((order, i) => {
         const st = ORDER_STATUS[order.status] || ORDER_STATUS.received
         const Icon = st.icon
         const isOverdue = order.elapsed > 20
@@ -149,7 +160,10 @@ function RestaurantOrders() {
 
 export default function Orders() {
   const { posMode } = useThemeStore()
+  const { isDemo } = useAuthStore()
   const isRestaurant = posMode === 'restaurant'
+  const orders = isDemo ? DEMO_ORDERS : []
+  const restaurantOrders = isDemo ? DEMO_RESTAURANT_ORDERS : []
 
   return (
     <div className="p-4 sm:p-6">
@@ -157,14 +171,14 @@ export default function Orders() {
         <div>
           <h1 className="text-2xl font-extrabold text-slate-900 dark:text-white">Orders</h1>
           <p className="text-sm text-slate-500">
-            {isRestaurant ? 'Active table orders' : 'View and manage all transactions'}
+            {isRestaurant ? 'Active orders' : 'View and manage all transactions'}
           </p>
         </div>
         {!isRestaurant && <ExportMenu data={orders} columns={exportColumns} title="Orders" filename="tengapos_orders" />}
       </div>
 
       {isRestaurant ? (
-        <RestaurantOrders />
+        <RestaurantOrders orders={restaurantOrders} />
       ) : (
         <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
           <table className="w-full min-w-[640px]">
@@ -176,7 +190,13 @@ export default function Orders() {
               </tr>
             </thead>
             <tbody>
-              {orders.map((order) => (
+              {orders.length === 0 ? (
+                <tr>
+                  <td colSpan={8} className="py-16 text-center text-sm text-slate-400">
+                    No orders yet — complete a sale on the POS to see it here.
+                  </td>
+                </tr>
+              ) : orders.map((order) => (
                 <motion.tr
                   key={order.id}
                   initial={{ opacity: 0 }}

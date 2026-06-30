@@ -1,8 +1,9 @@
 import { motion } from 'framer-motion'
 import ExportMenu from '@/components/common/ExportMenu'
 import { formatCurrency, formatDateTime } from '@/utils/formatters'
+import { useAuthStore } from '@/stores/authStore'
 
-const transactions = [
+const DEMO_TRANSACTIONS = [
   { id: 'TP-260524-0001', date: '2026-05-24T14:30:00', cashier: 'Grace K.', items: 3, subtotal: 13.48, tax: 2.02, total: 15.50, method: 'Cash', branch: 'Main' },
   { id: 'TP-260524-0002', date: '2026-05-24T14:22:00', cashier: 'Tatenda M.', items: 7, subtotal: 37.17, tax: 5.58, total: 42.75, method: 'EcoCash', branch: 'Main' },
   { id: 'TP-260524-0003', date: '2026-05-24T14:15:00', cashier: 'Grace K.', items: 2, subtotal: 7.13, tax: 1.07, total: 8.20, method: 'Cash', branch: 'CBD' },
@@ -23,6 +24,9 @@ const exportColumns = [
 ]
 
 export default function Transactions() {
+  const { isDemo } = useAuthStore()
+  const transactions = isDemo ? DEMO_TRANSACTIONS : []
+
   return (
     <div className="p-6">
       <div className="mb-6 flex items-center justify-between">
@@ -44,7 +48,13 @@ export default function Transactions() {
               </tr>
             </thead>
             <tbody>
-              {transactions.map((t) => (
+              {transactions.length === 0 ? (
+                <tr>
+                  <td colSpan={9} className="py-16 text-center text-sm text-slate-400">
+                    No transactions yet — complete a sale on the POS to see it here.
+                  </td>
+                </tr>
+              ) : transactions.map((t) => (
                 <motion.tr
                   key={t.id}
                   initial={{ opacity: 0 }}
