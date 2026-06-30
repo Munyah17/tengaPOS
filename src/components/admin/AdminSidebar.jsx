@@ -2,10 +2,11 @@ import { NavLink, useNavigate } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import {
   LayoutDashboard, Building2, Users, LifeBuoy, BarChart3,
-  Settings, LogOut, Shield, X, ChevronLeft, ChevronRight,
+  Settings, LogOut, Shield, X, ChevronLeft, ChevronRight, Bell,
 } from 'lucide-react'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useAuthStore } from '@/stores/authStore'
+import { supabase } from '@/lib/supabase'
 import posLogo from '@/assets/pos-logo.png'
 import posIcon from '@/assets/pos-icon.png'
 
@@ -17,31 +18,43 @@ const ROLE_BADGE = {
 
 const NAV_BY_ROLE = {
   super_admin: [
-    { icon: LayoutDashboard, label: 'Dashboard', path: '/admin/dashboard' },
-    { icon: Building2, label: 'Tenants', path: '/admin/tenants' },
-    { icon: Users, label: 'Staff', path: '/admin/staff' },
-    { icon: LifeBuoy, label: 'Support', path: '/admin/support' },
-    { icon: BarChart3, label: 'Reports', path: '/admin/reports' },
-    { icon: Settings, label: 'Settings', path: '/admin/settings' },
+    { icon: LayoutDashboard, label: 'Dashboard',      path: '/admin/dashboard' },
+    { icon: Building2,       label: 'Tenants',        path: '/admin/tenants' },
+    { icon: Bell,            label: 'Notifications',  path: '/admin/notifications', badge: true },
+    { icon: Users,           label: 'Staff',          path: '/admin/staff' },
+    { icon: LifeBuoy,        label: 'Support',        path: '/admin/support' },
+    { icon: BarChart3,       label: 'Reports',        path: '/admin/reports' },
+    { icon: Settings,        label: 'Settings',       path: '/admin/settings' },
   ],
   admin: [
-    { icon: LayoutDashboard, label: 'Dashboard', path: '/admin/dashboard' },
-    { icon: Building2, label: 'Tenants', path: '/admin/tenants' },
-    { icon: Users, label: 'Staff', path: '/admin/staff' },
-    { icon: LifeBuoy, label: 'Support', path: '/admin/support' },
-    { icon: BarChart3, label: 'Reports', path: '/admin/reports' },
+    { icon: LayoutDashboard, label: 'Dashboard',      path: '/admin/dashboard' },
+    { icon: Building2,       label: 'Tenants',        path: '/admin/tenants' },
+    { icon: Bell,            label: 'Notifications',  path: '/admin/notifications', badge: true },
+    { icon: Users,           label: 'Staff',          path: '/admin/staff' },
+    { icon: LifeBuoy,        label: 'Support',        path: '/admin/support' },
+    { icon: BarChart3,       label: 'Reports',        path: '/admin/reports' },
   ],
   tech_support: [
-    { icon: LayoutDashboard, label: 'Dashboard', path: '/admin/dashboard' },
-    { icon: Building2, label: 'Clients', path: '/admin/tenants' },
-    { icon: LifeBuoy, label: 'Support', path: '/admin/support' },
+    { icon: LayoutDashboard, label: 'Dashboard',      path: '/admin/dashboard' },
+    { icon: Building2,       label: 'Clients',        path: '/admin/tenants' },
+    { icon: Bell,            label: 'Notifications',  path: '/admin/notifications', badge: true },
+    { icon: LifeBuoy,        label: 'Support',        path: '/admin/support' },
   ],
 }
 
 export default function AdminSidebar({ open = false, onClose }) {
   const [collapsed, setCollapsed] = useState(false)
+  const [unread, setUnread] = useState(0)
   const { clearAuth, role, profile } = useAuthStore()
   const navigate = useNavigate()
+
+  useEffect(() => {
+    supabase
+      .from('admin_notifications')
+      .select('id', { count: 'exact', head: true })
+      .eq('is_read', false)
+      .then(({ count }) => setUnread(count || 0))
+  }, [])
 
   const navItems = NAV_BY_ROLE[role] || NAV_BY_ROLE.tech_support
   const badge = ROLE_BADGE[role] || ROLE_BADGE.tech_support
@@ -168,7 +181,14 @@ export default function AdminSidebar({ open = false, onClose }) {
               >
                 {({ isActive }) => (
                   <>
-                    <item.icon className={`h-5 w-5 flex-shrink-0 ${isActive ? 'text-indigo-400' : 'text-slate-500 group-hover:text-slate-300'}`} />
+                    <div className="relative flex-shrink-0">
+                      <item.icon className={`h-5 w-5 ${isActive ? 'text-indigo-400' : 'text-slate-500 group-hover:text-slate-300'}`} />
+                      {item.badge && unread > 0 && (
+                        <span className="absolute -right-1.5 -top-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[9px] font-bold text-white">
+                          {unread > 9 ? '9+' : unread}
+                        </span>
+                      )}
+                    </div>
                     <AnimatePresence mode="wait">
                       {!collapsed && (
                         <motion.span

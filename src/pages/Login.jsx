@@ -13,7 +13,7 @@ export default function Login() {
   const [loading, setLoading] = useState(false)
   const [demoOpen, setDemoOpen] = useState(false)
   const navigate = useNavigate()
-  const { signIn, loginAsDemo } = useAuthStore()
+  const { signIn, loginAsDemo, tenantStatus } = useAuthStore()
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -22,7 +22,13 @@ export default function Login() {
     try {
       const userType = await signIn(email, password)
       toast.success('Welcome back!')
-      navigate(userType === 'app_owner' ? '/admin/dashboard' : '/app/dashboard')
+      if (userType === 'app_owner') {
+        navigate('/admin/dashboard')
+      } else {
+        const store = useAuthStore.getState()
+        const status = store.tenantStatus
+        navigate(status === 'pending' || status === 'suspended' ? '/pending' : '/app/dashboard')
+      }
     } catch (err) {
       toast.error(err.message || 'Sign in failed')
     } finally {

@@ -116,7 +116,7 @@ async function loadProfile(userId) {
     .eq('is_main', true)
     .maybeSingle()
 
-  return { ...data, branch, userType: 'tenant' }
+  return { ...data, branch, userType: 'tenant', tenantStatus: data.tenants?.status || 'pending' }
 }
 
 export const useAuthStore = create(
@@ -129,6 +129,7 @@ export const useAuthStore = create(
       role: null,
       branch: null,
       userType: null,
+      tenantStatus: null,
       isAuthenticated: false,
       isLoading: true,
       isDemo: false,
@@ -147,6 +148,7 @@ export const useAuthStore = create(
               role: profileData.role,
               branch: profileData.branch || null,
               userType: profileData.userType,
+              tenantStatus: profileData.tenantStatus || null,
               isAuthenticated: true,
               isLoading: false,
               isDemo: false,
@@ -173,6 +175,7 @@ export const useAuthStore = create(
           role: profileData.role,
           branch: profileData.branch || null,
           userType: profileData.userType,
+          tenantStatus: profileData.tenantStatus || null,
           isAuthenticated: true,
           isLoading: false,
           isDemo: false,
@@ -215,6 +218,7 @@ export const useAuthStore = create(
           role: null,
           branch: null,
           userType: null,
+          tenantStatus: null,
           isAuthenticated: false,
           isLoading: false,
           isDemo: false,
@@ -237,6 +241,7 @@ export const useAuthStore = create(
         userType: state.userType,
         isAuthenticated: state.isAuthenticated,
         isDemo: state.isDemo,
+        tenantStatus: state.tenantStatus,
       }),
     }
   )

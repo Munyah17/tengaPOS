@@ -23,6 +23,7 @@ import Settings from '@/pages/Settings'
 import AppLayout from '@/components/layout/AppLayout'
 
 import Dining from '@/pages/Dining'
+import PendingApproval from '@/pages/PendingApproval'
 import AdminLayout from '@/components/admin/AdminLayout'
 import AdminDashboard from '@/pages/admin/AdminDashboard'
 import AdminTenants from '@/pages/admin/AdminTenants'
@@ -30,6 +31,7 @@ import AdminStaff from '@/pages/admin/AdminStaff'
 import AdminSupport from '@/pages/admin/AdminSupport'
 import AdminReports from '@/pages/admin/AdminReports'
 import AdminSettings from '@/pages/admin/AdminSettings'
+import AdminNotifications from '@/pages/admin/AdminNotifications'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -41,9 +43,11 @@ const queryClient = new QueryClient({
 })
 
 function ProtectedRoute({ children }) {
-  const { isAuthenticated, userType } = useAuthStore()
+  const { isAuthenticated, userType, tenantStatus, isDemo } = useAuthStore()
   if (!isAuthenticated) return <Navigate to="/login" replace />
   if (userType === 'app_owner') return <Navigate to="/admin/dashboard" replace />
+  if (!isDemo && tenantStatus === 'pending') return <Navigate to="/pending" replace />
+  if (!isDemo && tenantStatus === 'suspended') return <Navigate to="/pending" replace />
   return children
 }
 
@@ -71,6 +75,7 @@ export default function App() {
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
           <Route path="/dining" element={<Dining />} />
+          <Route path="/pending" element={<PendingApproval />} />
 
           {/* Tenant app routes */}
           <Route
@@ -112,6 +117,7 @@ export default function App() {
             <Route path="support" element={<AdminSupport />} />
             <Route path="reports" element={<AdminReports />} />
             <Route path="settings" element={<AdminSettings />} />
+            <Route path="notifications" element={<AdminNotifications />} />
           </Route>
 
           <Route path="*" element={<Navigate to="/" replace />} />
