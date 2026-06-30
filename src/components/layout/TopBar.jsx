@@ -1,4 +1,4 @@
-import { Bell, Search, Wifi, WifiOff, ShieldAlert, Menu, User, Settings, LogOut, ChevronDown, CheckCheck, BellOff } from 'lucide-react'
+import { Bell, Search, Wifi, WifiOff, ShieldAlert, Menu, User, Settings, LogOut, ChevronDown, CheckCheck, BellOff, ShoppingBag, UtensilsCrossed } from 'lucide-react'
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import ThemeToggle from '@/components/common/ThemeToggle'
@@ -175,12 +175,42 @@ export default function TopBar({ onMenuClick }) {
           </button>
 
           {avatarOpen && (
-            <div className="absolute right-0 top-full z-50 mt-2 w-52 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl dark:border-slate-700 dark:bg-slate-900">
+            <div className="absolute right-0 top-full z-50 mt-2 w-56 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl dark:border-slate-700 dark:bg-slate-900">
               {/* Header */}
               <div className="border-b border-slate-100 px-4 py-3 dark:border-slate-800">
                 <p className="text-sm font-bold text-slate-900 dark:text-white">{displayName}</p>
                 <p className={`text-xs font-medium ${colors.text}`}>{roleLabel}</p>
               </div>
+
+              {/* Mode switcher — always visible, primary way to switch on mobile */}
+              <div className="border-b border-slate-100 px-3 py-2.5 dark:border-slate-800">
+                <p className="mb-1.5 px-1 text-[10px] font-bold uppercase tracking-widest text-slate-400">POS Mode</p>
+                <div className="grid grid-cols-2 gap-1">
+                  <button
+                    onClick={() => { setPosMode('retail'); setAvatarOpen(false) }}
+                    className={`flex items-center justify-center gap-1.5 rounded-lg px-2 py-2 text-xs font-semibold transition-colors ${
+                      posMode === 'retail'
+                        ? 'bg-brand-600 text-white'
+                        : 'text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800'
+                    }`}
+                  >
+                    <ShoppingBag className="h-3.5 w-3.5" />
+                    Retail
+                  </button>
+                  <button
+                    onClick={() => { setPosMode('restaurant'); setAvatarOpen(false) }}
+                    className={`flex items-center justify-center gap-1.5 rounded-lg px-2 py-2 text-xs font-semibold transition-colors ${
+                      posMode === 'restaurant'
+                        ? 'bg-green-600 text-white'
+                        : 'text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800'
+                    }`}
+                  >
+                    <UtensilsCrossed className="h-3.5 w-3.5" />
+                    Restaurant
+                  </button>
+                </div>
+              </div>
+
               {/* Links */}
               <div className="py-1">
                 <button

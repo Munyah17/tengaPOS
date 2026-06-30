@@ -11,6 +11,7 @@ export const useThemeStore = create(
         set((state) => {
           const next = state.mode === 'light' ? 'dark' : 'light'
           document.documentElement.classList.toggle('dark', next === 'dark')
+          document.documentElement.style.colorScheme = next
           return { mode: next }
         }),
 
@@ -18,7 +19,9 @@ export const useThemeStore = create(
 
       initTheme: () =>
         set((state) => {
-          document.documentElement.classList.toggle('dark', state.mode === 'dark')
+          const isDark = state.mode === 'dark'
+          document.documentElement.classList.toggle('dark', isDark)
+          document.documentElement.style.colorScheme = isDark ? 'dark' : 'light'
           return state
         }),
     }),

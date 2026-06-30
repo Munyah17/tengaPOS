@@ -61,8 +61,8 @@ export default function AdminNotifications() {
     <div className="p-6">
       <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-extrabold text-white">Notifications</h1>
-          <p className="mt-1 text-sm text-slate-400">
+          <h1 className="text-2xl font-extrabold text-slate-900 dark:text-white">Notifications</h1>
+          <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
             {unread > 0 ? `${unread} unread` : 'All caught up'}
           </p>
         </div>
@@ -70,7 +70,7 @@ export default function AdminNotifications() {
           <button
             onClick={checkRenewals}
             disabled={refreshing}
-            className="flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-slate-300 hover:bg-white/10 disabled:opacity-60"
+            className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white dark:border-white/10 dark:bg-white/5 px-4 py-2 text-sm font-semibold text-slate-300 hover:bg-white/10 disabled:opacity-60"
           >
             <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
             Check Renewals
@@ -105,8 +105,8 @@ export default function AdminNotifications() {
                 onClick={() => !n.is_read && markRead(n.id)}
                 className={`flex w-full items-start gap-4 rounded-2xl border p-4 text-left transition-all ${
                   n.is_read
-                    ? 'border-white/5 bg-white/2 opacity-60'
-                    : 'border-white/10 bg-white/5 hover:bg-white/8'
+                    ? 'border-slate-100 bg-slate-50 opacity-60 dark:border-white/5 dark:bg-white/2'
+                    : 'border-slate-200 bg-white dark:border-white/10 dark:bg-white/5 hover:bg-slate-50 dark:hover:bg-white/8'
                 }`}
               >
                 <div className={`mt-0.5 flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl ${meta.bg}`}>
@@ -114,7 +114,7 @@ export default function AdminNotifications() {
                 </div>
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
-                    <span className="text-sm font-semibold text-white">{n.title}</span>
+                    <span className="text-sm font-semibold text-slate-900 dark:text-white">{n.title}</span>
                     <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${meta.bg} ${meta.color}`}>
                       {meta.label}
                     </span>
@@ -122,12 +122,12 @@ export default function AdminNotifications() {
                       <span className="h-2 w-2 flex-shrink-0 rounded-full bg-indigo-400" />
                     )}
                   </div>
-                  <p className="mt-0.5 text-sm text-slate-400">{n.body}</p>
+                  <p className="mt-0.5 text-sm text-slate-600 dark:text-slate-400">{n.body}</p>
                   {n.tenants && (
-                    <p className="mt-1 font-mono text-xs text-slate-600">{n.tenants.slug}</p>
+                    <p className="mt-1 font-mono text-xs text-slate-500 dark:text-slate-600">{n.tenants.slug}</p>
                   )}
                 </div>
-                <div className="flex flex-shrink-0 items-center gap-1 text-xs text-slate-600">
+                <div className="flex flex-shrink-0 items-center gap-1 text-xs text-slate-500 dark:text-slate-600">
                   <Clock className="h-3 w-3" />
                   {timeAgo(n.created_at)}
                 </div>

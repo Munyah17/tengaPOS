@@ -16,7 +16,7 @@ export const PLANS = {
     label: 'BYOD Monthly',
     icon: Smartphone,
     color: 'text-slate-300',
-    bg: 'bg-slate-700/50',
+    bg: 'bg-slate-200 dark:bg-slate-700/50',
     border: 'border-slate-600',
     renewalMonths: 1,
     tier: 1,
@@ -148,7 +148,7 @@ function Toggle({ value, onChange, disabled }) {
     <button
       onClick={() => !disabled && onChange(!value)}
       className={`relative flex h-6 w-11 items-center rounded-full transition-colors ${
-        value ? 'bg-indigo-600' : 'bg-slate-700'
+        value ? 'bg-indigo-600' : 'bg-slate-200 dark:bg-slate-700'
       } ${disabled ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'}`}
     >
       <span className={`h-4 w-4 rounded-full bg-white shadow transition-transform ${
@@ -230,14 +230,14 @@ function TenantModal({ tenant, technicians, onClose, onSaved }) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4 backdrop-blur-sm">
-      <div className="flex w-full max-w-2xl flex-col rounded-2xl border border-white/10 bg-slate-900 shadow-2xl" style={{ maxHeight: '90vh' }}>
+      <div className="flex w-full max-w-2xl flex-col rounded-2xl border border-white/10 bg-white shadow-2xl dark:bg-slate-900" style={{ maxHeight: '90vh' }}>
         {/* Header */}
         <div className="flex flex-shrink-0 items-center gap-3 border-b border-white/10 p-5">
           <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-500/10 text-lg font-extrabold text-indigo-400">
             {tenant.name[0]}
           </div>
           <div className="min-w-0 flex-1">
-            <p className="font-bold text-white truncate">{tenant.name}</p>
+            <p className="font-bold text-slate-900 dark:text-white truncate">{tenant.name}</p>
             <p className="text-xs font-mono text-slate-500">{tenant.slug}</p>
           </div>
           <button onClick={onClose} className="flex-shrink-0 rounded-lg p-1.5 text-slate-500 hover:bg-white/10 hover:text-white">
@@ -283,7 +283,7 @@ function TenantModal({ tenant, technicians, onClose, onSaved }) {
                       key={key}
                       onClick={() => applyPlanDefaults(key)}
                       className={`flex items-start gap-3 rounded-xl border p-4 text-left transition-all ${
-                        active ? `${meta.border} ${meta.bg}` : 'border-white/10 hover:border-white/20 hover:bg-white/5'
+                        active ? `${meta.border} ${meta.bg}` : 'border-slate-200 hover:border-slate-300 dark:border-white/10 dark:hover:border-white/20 hover:bg-slate-50 dark:hover:bg-white/5'
                       }`}
                     >
                       <Icon className={`mt-0.5 h-5 w-5 flex-shrink-0 ${active ? meta.color : 'text-slate-600'}`} />
@@ -297,8 +297,8 @@ function TenantModal({ tenant, technicians, onClose, onSaved }) {
               </div>
 
               {/* Renewal period info */}
-              <div className="mt-4 rounded-xl border border-white/5 bg-white/5 px-4 py-3 text-sm text-slate-400">
-                Renewal cycle: <span className="font-semibold text-white">
+              <div className="mt-4 rounded-xl border border-slate-100 dark:border-white/5 bg-white/5 px-4 py-3 text-sm text-slate-400">
+                Renewal cycle: <span className="font-semibold text-slate-900 dark:text-white">
                   {PLANS[planType]?.renewalMonths === 1 ? 'Monthly' : `Every ${PLANS[planType]?.renewalMonths} months`}
                 </span>
               </div>
@@ -321,7 +321,7 @@ function TenantModal({ tenant, technicians, onClose, onSaved }) {
                 <div className="divide-y divide-white/5 rounded-xl border border-white/10">
                   {BOOL_FEATURES.map(({ key, label }) => (
                     <div key={key} className="flex items-center justify-between px-4 py-3">
-                      <span className="text-sm text-slate-300">{label}</span>
+                      <span className="text-sm text-slate-700 dark:text-slate-300">{label}</span>
                       <Toggle
                         value={!!features[key]}
                         onChange={(v) => setFeature(key, v)}
@@ -345,7 +345,7 @@ function TenantModal({ tenant, technicians, onClose, onSaved }) {
                         type="number"
                         value={features[key] ?? ''}
                         onChange={(e) => setFeature(key, Number(e.target.value))}
-                        className="mt-1 w-full rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-sm text-white focus:border-indigo-500 focus:outline-none"
+                        className="mt-1 w-full rounded-lg border border-slate-200 bg-white dark:border-white/10 dark:bg-white/5 px-3 py-1.5 text-sm text-white focus:border-indigo-500 focus:outline-none"
                       />
                       <p className="mt-1 text-[10px] text-slate-600">{hint}</p>
                     </div>
@@ -385,7 +385,7 @@ function TenantModal({ tenant, technicians, onClose, onSaved }) {
 
               <div className="flex items-center justify-between rounded-xl border border-white/10 px-4 py-3">
                 <div>
-                  <p className="text-sm font-semibold text-white">Enable White-Label</p>
+                  <p className="text-sm font-semibold text-slate-900 dark:text-white">Enable White-Label</p>
                   <p className="text-xs text-slate-500">Client sees their own brand, not tengaPOS</p>
                 </div>
                 <Toggle value={!!whitelabel.enabled} onChange={(v) => setWL('enabled', v)} />
@@ -407,7 +407,7 @@ function TenantModal({ tenant, technicians, onClose, onSaved }) {
                     value={whitelabel[key] || ''}
                     onChange={(e) => setWL(key, e.target.value)}
                     placeholder={placeholder}
-                    className="mt-1 w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder-slate-600 focus:border-indigo-500 focus:outline-none"
+                    className="mt-1 w-full rounded-xl border border-slate-200 bg-white dark:border-white/10 dark:bg-white/5 px-3 py-2 text-sm text-white placeholder-slate-400 dark:placeholder-slate-600 focus:border-indigo-500 focus:outline-none"
                   />
                 </div>
               ))}
@@ -433,7 +433,7 @@ function TenantModal({ tenant, technicians, onClose, onSaved }) {
               <div className="divide-y divide-white/5 rounded-xl border border-white/10">
                 {BACKUP_OPTIONS.map(({ key, label }) => (
                   <div key={key} className="flex items-center justify-between px-4 py-3">
-                    <span className="text-sm text-slate-300">{label}</span>
+                    <span className="text-sm text-slate-700 dark:text-slate-300">{label}</span>
                     <Toggle
                       value={!!backupConfig[key]}
                       onChange={(v) => setBackup(key, v)}
@@ -449,7 +449,7 @@ function TenantModal({ tenant, technicians, onClose, onSaved }) {
                   value={backupConfig.storage_path || ''}
                   onChange={(e) => setBackup('storage_path', e.target.value)}
                   placeholder="s3://bucket/tenant-slug or /local/path"
-                  className="mt-1 w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder-slate-600 focus:border-indigo-500 focus:outline-none"
+                  className="mt-1 w-full rounded-xl border border-slate-200 bg-white dark:border-white/10 dark:bg-white/5 px-3 py-2 text-sm text-white placeholder-slate-400 dark:placeholder-slate-600 focus:border-indigo-500 focus:outline-none"
                 />
               </div>
 
@@ -460,7 +460,7 @@ function TenantModal({ tenant, technicians, onClose, onSaved }) {
                   value={backupConfig.retention_days || ''}
                   onChange={(e) => setBackup('retention_days', Number(e.target.value))}
                   placeholder="e.g. 90"
-                  className="mt-1 w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder-slate-600 focus:border-indigo-500 focus:outline-none"
+                  className="mt-1 w-full rounded-xl border border-slate-200 bg-white dark:border-white/10 dark:bg-white/5 px-3 py-2 text-sm text-white placeholder-slate-400 dark:placeholder-slate-600 focus:border-indigo-500 focus:outline-none"
                 />
               </div>
             </div>
@@ -480,10 +480,10 @@ function TenantModal({ tenant, technicians, onClose, onSaved }) {
                 <button
                   onClick={() => setTechnicianId('')}
                   className={`mb-2 flex w-full items-center gap-3 rounded-xl border px-4 py-3 text-left transition-colors ${
-                    !technicianId ? 'border-indigo-500 bg-indigo-500/10' : 'border-white/10 hover:border-white/20'
+                    !technicianId ? 'border-indigo-500 bg-indigo-500/10' : 'border-slate-200 hover:border-slate-300 dark:border-white/10 dark:hover:border-white/20'
                   }`}
                 >
-                  <span className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-700 text-xs font-bold text-slate-400">—</span>
+                  <span className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-200 dark:bg-slate-700 text-xs font-bold text-slate-400">—</span>
                   <span className="text-sm text-slate-400">No dedicated technician</span>
                 </button>
 
@@ -498,14 +498,14 @@ function TenantModal({ tenant, technicians, onClose, onSaved }) {
                         className={`flex w-full items-center gap-3 rounded-xl border px-4 py-3 text-left transition-colors ${
                           technicianId === tech.id
                             ? 'border-indigo-500 bg-indigo-500/10'
-                            : 'border-white/10 hover:border-white/20 hover:bg-white/5'
+                            : 'border-slate-200 hover:border-slate-300 dark:border-white/10 dark:hover:border-white/20 hover:bg-slate-50 dark:hover:bg-white/5'
                         }`}
                       >
                         <span className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-indigo-500/10 text-sm font-bold text-indigo-400">
                           {tech.name?.[0] || '?'}
                         </span>
                         <div className="min-w-0 flex-1">
-                          <p className="truncate text-sm font-semibold text-white">{tech.name}</p>
+                          <p className="truncate text-sm font-semibold text-slate-900 dark:text-white">{tech.name}</p>
                           <p className="text-xs text-slate-500">{tech.email}</p>
                         </div>
                         {technicianId === tech.id && (
@@ -526,7 +526,7 @@ function TenantModal({ tenant, technicians, onClose, onSaved }) {
             <button
               onClick={() => save('active')}
               disabled={saving}
-              className="flex w-full items-center justify-center gap-2 rounded-xl bg-green-600 py-3 text-sm font-bold text-white hover:bg-green-700 disabled:opacity-60"
+              className="flex w-full items-center justify-center gap-2 rounded-xl bg-green-600 py-3 text-sm font-bold text-slate-900 dark:text-white hover:bg-green-700 disabled:opacity-60"
             >
               <CheckCircle className="h-4 w-4" />
               {saving ? 'Saving…' : `Approve & Activate — ${PLANS[planType]?.label}`}
@@ -535,7 +535,7 @@ function TenantModal({ tenant, technicians, onClose, onSaved }) {
             <button
               onClick={() => save(null)}
               disabled={saving}
-              className="flex w-full items-center justify-center gap-2 rounded-xl bg-indigo-600 py-3 text-sm font-bold text-white hover:bg-indigo-700 disabled:opacity-60"
+              className="flex w-full items-center justify-center gap-2 rounded-xl bg-indigo-600 py-3 text-sm font-bold text-slate-900 dark:text-white hover:bg-indigo-700 disabled:opacity-60"
             >
               <Save className="h-4 w-4" />
               {saving ? 'Saving…' : 'Save Changes'}
@@ -625,12 +625,12 @@ export default function AdminTenants() {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search tenants…"
-            className="w-full rounded-xl border border-white/10 bg-white/5 py-2 pl-10 pr-4 text-sm text-white placeholder-slate-500 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+            className="w-full rounded-xl border border-slate-200 bg-white dark:border-white/10 dark:bg-white/5 py-2 pl-10 pr-4 text-sm text-white placeholder-slate-500 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
           />
         </div>
       </div>
 
-      <div className="mb-4 flex gap-1 overflow-x-auto rounded-xl border border-white/10 bg-white/5 p-1">
+      <div className="mb-4 flex gap-1 overflow-x-auto rounded-xl border border-slate-200 bg-white dark:border-white/10 dark:bg-white/5 p-1">
         {tabs.map((t) => (
           <button
             key={t.id}
@@ -673,14 +673,14 @@ export default function AdminTenants() {
             return (
               <div
                 key={tenant.id}
-                className={`flex items-center gap-4 px-5 py-4 transition-colors hover:bg-white/5 ${i < filtered.length - 1 ? 'border-b border-white/5' : ''}`}
+                className={`flex items-center gap-4 px-5 py-4 transition-colors hover:bg-slate-50 dark:hover:bg-white/5 ${i < filtered.length - 1 ? 'border-b border-slate-100 dark:border-white/5' : ''}`}
               >
                 <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-indigo-500/10 text-lg font-extrabold text-indigo-400">
                   {tenant.name?.[0]}
                 </div>
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
-                    <span className="font-semibold text-white">{tenant.name}</span>
+                    <span className="font-semibold text-slate-900 dark:text-white">{tenant.name}</span>
                     <span className={`flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold ${status.bg} ${status.text}`}>
                       <StatusIcon className="h-3 w-3" />{status.label}
                     </span>

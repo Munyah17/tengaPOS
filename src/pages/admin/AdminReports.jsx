@@ -39,11 +39,11 @@ function KPICard({ icon: Icon, label, value, sub, color = 'indigo', delta }) {
     purple: 'bg-purple-500/10 text-purple-400',
   }
   return (
-    <div className="rounded-2xl border border-white/10 bg-white/5 p-5">
+    <div className="rounded-2xl border border-slate-200 bg-white dark:border-slate-200 dark:border-white/10 dark:bg-white/5 p-5">
       <div className="flex items-start justify-between">
         <div className="min-w-0 flex-1">
           <p className="text-sm text-slate-400">{label}</p>
-          <p className="mt-1 text-3xl font-extrabold text-white">{value ?? '—'}</p>
+          <p className="mt-1 text-3xl font-extrabold text-slate-900 dark:text-white">{value ?? '—'}</p>
           {sub && <p className="mt-1 text-xs text-slate-500">{sub}</p>}
           {delta != null && (
             <p className={`mt-1 text-xs font-semibold ${delta >= 0 ? 'text-green-400' : 'text-red-400'}`}>
@@ -64,10 +64,10 @@ function BarRow({ label, value, max, color = 'bg-indigo-500' }) {
   return (
     <div className="flex items-center gap-3">
       <span className="w-28 flex-shrink-0 truncate text-xs text-slate-400">{label}</span>
-      <div className="flex-1 overflow-hidden rounded-full bg-white/10 h-2">
+      <div className="flex-1 overflow-hidden rounded-full bg-slate-200 dark:bg-white/10 h-2">
         <div className={`h-2 rounded-full transition-all ${color}`} style={{ width: `${pct}%` }} />
       </div>
-      <span className="w-8 flex-shrink-0 text-right text-xs font-semibold text-white">{value}</span>
+      <span className="w-8 flex-shrink-0 text-right text-xs font-semibold text-slate-900 dark:text-white">{value}</span>
     </div>
   )
 }
@@ -193,12 +193,12 @@ export default function AdminReports() {
     <div className="p-6 space-y-8">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-extrabold text-white">Platform Analytics</h1>
+          <h1 className="text-2xl font-extrabold text-slate-900 dark:text-white">Platform Analytics</h1>
           <p className="mt-1 text-sm text-slate-400">Business intelligence — all tenants, all accounts</p>
         </div>
         <button
           onClick={load}
-          className="flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-slate-300 hover:bg-white/10"
+          className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white dark:border-slate-200 dark:border-white/10 dark:bg-white/5 px-4 py-2 text-sm font-semibold text-slate-300 hover:bg-white/10"
         >
           <RefreshCw className="h-4 w-4" />
           Refresh
@@ -229,8 +229,8 @@ export default function AdminReports() {
       {/* ── Plan distribution + Renewals pipeline ── */}
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         {/* Plan distribution */}
-        <div className="rounded-2xl border border-white/10 bg-white/5 p-5">
-          <h2 className="mb-4 text-base font-bold text-white">Plan Distribution</h2>
+        <div className="rounded-2xl border border-slate-200 bg-white dark:border-slate-200 dark:border-white/10 dark:bg-white/5 p-5">
+          <h2 className="mb-4 text-base font-bold text-slate-900 dark:text-white">Plan Distribution</h2>
           {Object.keys(data.planDist).length === 0 ? (
             <p className="text-sm text-slate-500">No active paid tenants yet</p>
           ) : (
@@ -249,7 +249,7 @@ export default function AdminReports() {
                   </div>
                 )
               }).filter(Boolean)}
-              <div className="mt-4 flex items-center justify-between rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm">
+              <div className="mt-4 flex items-center justify-between rounded-xl border border-slate-200 bg-white dark:border-slate-200 dark:border-white/10 dark:bg-white/5 px-4 py-2 text-sm">
                 <span className="text-slate-400">Total estimated MRR</span>
                 <span className="font-extrabold text-green-400">{fmt$(data.mrr)}</span>
               </div>
@@ -258,10 +258,10 @@ export default function AdminReports() {
         </div>
 
         {/* Upcoming renewals */}
-        <div className="rounded-2xl border border-white/10 bg-white/5 p-5">
-          <h2 className="mb-4 text-base font-bold text-white">Renewals Due (30 days)</h2>
+        <div className="rounded-2xl border border-slate-200 bg-white dark:border-slate-200 dark:border-white/10 dark:bg-white/5 p-5">
+          <h2 className="mb-4 text-base font-bold text-slate-900 dark:text-white">Renewals Due (30 days)</h2>
           {data.renewalsSoon.length === 0 ? (
-            <div className="flex h-24 items-center justify-center text-slate-600 text-sm">
+            <div className="flex h-24 items-center justify-center text-slate-500 dark:text-slate-600 text-sm">
               No renewals due in the next 30 days
             </div>
           ) : (
@@ -274,7 +274,7 @@ export default function AdminReports() {
                   <div key={t.id} className="flex items-center gap-3 rounded-xl border border-white/5 bg-white/5 px-3 py-2.5">
                     {PlanIcon && <PlanIcon className={`h-4 w-4 flex-shrink-0 ${plan.color}`} />}
                     <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-semibold text-white">{t.name}</p>
+                      <p className="truncate text-sm font-semibold text-slate-900 dark:text-white">{t.name}</p>
                       <p className="text-xs text-slate-500">{plan?.label}</p>
                     </div>
                     <span className={`flex-shrink-0 rounded-full px-2 py-0.5 text-xs font-bold ${
@@ -293,19 +293,19 @@ export default function AdminReports() {
       {/* ── Tenant analytics table ── */}
       <section>
         <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <h2 className="text-base font-bold text-white">All Tenant Accounts</h2>
+          <h2 className="text-base font-bold text-slate-900 dark:text-white">All Tenant Accounts</h2>
           <input
             value={tenantSearch}
             onChange={(e) => setTenantSearch(e.target.value)}
             placeholder="Search…"
-            className="rounded-xl border border-white/10 bg-white/5 px-3 py-1.5 text-sm text-white placeholder-slate-600 focus:border-indigo-500 focus:outline-none w-full sm:w-48"
+            className="rounded-xl border border-slate-200 bg-white dark:border-slate-200 dark:border-white/10 dark:bg-white/5 px-3 py-1.5 text-sm text-slate-900 dark:text-white placeholder-slate-600 focus:border-indigo-500 focus:outline-none w-full sm:w-48"
           />
         </div>
 
-        <div className="overflow-x-auto rounded-2xl border border-white/10">
+        <div className="overflow-x-auto rounded-2xl border border-slate-200 dark:border-white/10">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-white/10 text-left text-xs font-bold uppercase tracking-widest text-slate-500">
+              <tr className="border-b border-slate-200 dark:border-white/10 text-left text-xs font-bold uppercase tracking-widest text-slate-500">
                 {[
                   { col: 'name',              label: 'Tenant' },
                   { col: 'status',            label: 'Status' },
@@ -354,7 +354,7 @@ export default function AdminReports() {
                           {t.name?.[0]}
                         </span>
                         <div>
-                          <p className="font-semibold text-white">{t.name}</p>
+                          <p className="font-semibold text-slate-900 dark:text-white">{t.name}</p>
                           <p className="text-[10px] font-mono text-slate-600">{t.slug}</p>
                         </div>
                       </div>
@@ -411,7 +411,7 @@ export default function AdminReports() {
 
       {/* ── Revenue breakdown ── */}
       <section>
-        <h2 className="mb-3 text-base font-bold text-white">Revenue Breakdown by Plan</h2>
+        <h2 className="mb-3 text-base font-bold text-slate-900 dark:text-white">Revenue Breakdown by Plan</h2>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
           {Object.entries(PLANS).map(([key, meta]) => {
             const count = data.planDist[key] || 0
@@ -424,7 +424,7 @@ export default function AdminReports() {
                   <span className={`text-xs font-bold ${meta.color}`}>{count} active</span>
                 </div>
                 <p className={`text-sm font-bold ${meta.color}`}>{meta.label}</p>
-                <p className="mt-1 text-xl font-extrabold text-white">{fmt$(monthlyRev)}</p>
+                <p className="mt-1 text-xl font-extrabold text-slate-900 dark:text-white">{fmt$(monthlyRev)}</p>
                 <p className="mt-0.5 text-[10px] text-slate-500">{fmt$(PLAN_MRR[key])}/tenant/mo</p>
               </div>
             )

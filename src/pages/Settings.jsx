@@ -88,9 +88,29 @@ export default function Settings() {
         <p className="text-sm text-slate-500">Manage your store configuration</p>
       </div>
 
+      {/* Mobile: horizontal scrolling tab strip */}
+      <div className="mb-4 -mx-6 flex overflow-x-auto px-6 pb-2 md:hidden">
+        <div className="flex gap-1.5">
+          {sections.map((section) => (
+            <button
+              key={section.id}
+              onClick={() => setActiveSection(section.id)}
+              className={`flex flex-shrink-0 items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-semibold transition-colors ${
+                activeSection === section.id
+                  ? 'bg-brand-600 text-white'
+                  : 'border border-slate-200 text-slate-600 hover:border-slate-300 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-800'
+              }`}
+            >
+              <section.icon className="h-3.5 w-3.5 flex-shrink-0" />
+              {section.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
       <div className="flex gap-6">
-        {/* Sidebar */}
-        <div className="w-56 flex-shrink-0">
+        {/* Sidebar — desktop only */}
+        <div className="hidden w-56 flex-shrink-0 md:block">
           <div className="space-y-1">
             {sections.map((section) => (
               <button

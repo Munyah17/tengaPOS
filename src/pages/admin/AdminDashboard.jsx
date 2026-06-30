@@ -27,11 +27,11 @@ function StatCard({ icon: Icon, label, value, sub, color = 'indigo', to }) {
     red:    'bg-red-500/10 text-red-400',
   }
   const card = (
-    <div className={`rounded-2xl border border-white/10 bg-white/5 p-5 ${to ? 'hover:bg-white/8 transition-colors cursor-pointer' : ''}`}>
+    <div className={`rounded-2xl border border-slate-200 bg-white dark:border-white/10 dark:bg-white/5 p-5 ${to ? 'hover:bg-white/8 transition-colors cursor-pointer' : ''}`}>
       <div className="flex items-start justify-between">
         <div>
           <p className="text-sm font-medium text-slate-400">{label}</p>
-          <p className="mt-1 text-3xl font-extrabold text-white">{value ?? '—'}</p>
+          <p className="mt-1 text-3xl font-extrabold text-slate-900 dark:text-white">{value ?? '—'}</p>
           {sub && <p className="mt-1 text-xs text-slate-500">{sub}</p>}
         </div>
         <div className={`flex h-10 w-10 items-center justify-center rounded-xl ${colors[color]}`}>
@@ -83,8 +83,8 @@ export default function AdminDashboard() {
   return (
     <div className="p-6">
       <div className="mb-6">
-        <h1 className="text-2xl font-extrabold text-white">Platform Overview</h1>
-        <p className="mt-1 text-sm text-slate-400">Real-time view of all tenants and system health</p>
+        <h1 className="text-2xl font-extrabold text-slate-900 dark:text-white">Platform Overview</h1>
+        <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">Real-time view of all tenants and system health</p>
       </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -96,11 +96,11 @@ export default function AdminDashboard() {
 
       <div className="mt-8 grid grid-cols-1 gap-4 md:grid-cols-2">
         {/* Recent notifications */}
-        <div className="rounded-2xl border border-white/10 bg-white/5 p-5">
+        <div className="rounded-2xl border border-slate-200 bg-white dark:border-white/10 dark:bg-white/5 p-5">
           <div className="mb-4 flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Bell className="h-4 w-4 text-indigo-400" />
-              <h2 className="text-base font-bold text-white">Notifications</h2>
+              <h2 className="text-base font-bold text-slate-900 dark:text-white">Notifications</h2>
               {unread > 0 && (
                 <span className="rounded-full bg-indigo-500/20 px-2 py-0.5 text-xs font-bold text-indigo-400">{unread} new</span>
               )}
@@ -121,10 +121,10 @@ export default function AdminDashboard() {
                   <div key={n.id} className={`flex items-start gap-3 rounded-xl p-3 ${n.is_read ? 'opacity-50' : 'bg-white/5'}`}>
                     <Icon className={`mt-0.5 h-4 w-4 flex-shrink-0 ${meta.color}`} />
                     <div className="min-w-0 flex-1">
-                      <p className="text-sm font-medium text-white leading-tight">{n.title}</p>
+                      <p className="text-sm font-medium text-slate-900 dark:text-white leading-tight">{n.title}</p>
                       {n.tenants && <p className="text-xs text-slate-500">{n.tenants.name}</p>}
                     </div>
-                    <span className="flex-shrink-0 text-xs text-slate-600">{timeAgo(n.created_at)}</span>
+                    <span className="flex-shrink-0 text-xs text-slate-500 dark:text-slate-600">{timeAgo(n.created_at)}</span>
                   </div>
                 )
               })}
@@ -133,8 +133,8 @@ export default function AdminDashboard() {
         </div>
 
         {/* Role summary */}
-        <div className="rounded-2xl border border-white/10 bg-white/5 p-5">
-          <h2 className="mb-4 text-base font-bold text-white">Role Summary</h2>
+        <div className="rounded-2xl border border-slate-200 bg-white dark:border-white/10 dark:bg-white/5 p-5">
+          <h2 className="mb-4 text-base font-bold text-slate-900 dark:text-white">Role Summary</h2>
           <div className="space-y-3">
             {[
               { label: 'Super Admin', desc: 'Full platform access, system config', color: 'bg-red-500/20 text-red-400' },
@@ -143,7 +143,7 @@ export default function AdminDashboard() {
             ].map((r) => (
               <div key={r.label} className="flex items-start gap-3">
                 <span className={`mt-0.5 rounded-full px-2 py-0.5 text-xs font-semibold ${r.color}`}>{r.label}</span>
-                <span className="text-sm text-slate-400">{r.desc}</span>
+                <span className="text-sm text-slate-600 dark:text-slate-400">{r.desc}</span>
               </div>
             ))}
           </div>
@@ -153,11 +153,11 @@ export default function AdminDashboard() {
             <div className="space-y-2">
               <div className="flex items-start gap-3">
                 <span className="mt-0.5 rounded-full bg-slate-700/50 px-2 py-0.5 text-xs font-semibold text-slate-300">BYOD Monthly</span>
-                <span className="text-sm text-slate-400">Own device, monthly renewal</span>
+                <span className="text-sm text-slate-600 dark:text-slate-400">Own device, monthly renewal</span>
               </div>
               <div className="flex items-start gap-3">
                 <span className="mt-0.5 rounded-full bg-indigo-500/20 px-2 py-0.5 text-xs font-semibold text-indigo-300">Combo 6-Month</span>
-                <span className="text-sm text-slate-400">Hardware bundle, 6-month renewal</span>
+                <span className="text-sm text-slate-600 dark:text-slate-400">Hardware bundle, 6-month renewal</span>
               </div>
             </div>
           </div>

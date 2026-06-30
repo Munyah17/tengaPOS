@@ -77,6 +77,7 @@ export default function AdminSidebar({ open = false, onClose }) {
             exit={{ opacity: 0 }}
             transition={{ duration: 0.2 }}
             className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm lg:hidden"
+
             onClick={onClose}
           />
         )}
@@ -88,13 +89,13 @@ export default function AdminSidebar({ open = false, onClose }) {
           'lg:static lg:h-screen lg:z-auto',
           collapsed ? 'w-[72px]' : 'w-64',
           'flex flex-col flex-shrink-0',
-          'border-r border-slate-200 bg-slate-950 dark:border-slate-800',
+          'border-r border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-950',
           'transition-all duration-300 ease-in-out',
           open ? 'translate-x-0' : '-translate-x-full lg:translate-x-0',
         ].join(' ')}
       >
         {/* Header */}
-        <div className="flex h-14 flex-shrink-0 items-center justify-between border-b border-white/10 px-3">
+        <div className="flex h-14 flex-shrink-0 items-center justify-between border-b border-slate-200 px-3 dark:border-white/10">
           <AnimatePresence mode="wait">
             {!collapsed && (
               <motion.div
@@ -113,20 +114,20 @@ export default function AdminSidebar({ open = false, onClose }) {
 
           <button
             onClick={onClose}
-            className="ml-auto rounded-lg p-1.5 text-slate-400 hover:bg-white/10 lg:hidden"
+            className="ml-auto rounded-lg p-1.5 text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-white/10 lg:hidden"
           >
             <X className="h-4 w-4" />
           </button>
           <button
             onClick={() => setCollapsed(!collapsed)}
-            className="ml-auto hidden rounded-lg p-1.5 text-slate-400 hover:bg-white/10 lg:block"
+            className="ml-auto hidden rounded-lg p-1.5 text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-white/10 lg:block"
           >
             {collapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
           </button>
         </div>
 
         {/* Profile */}
-        <div className="flex-shrink-0 border-b border-white/10 p-3">
+        <div className="flex-shrink-0 border-b border-slate-200 p-3 dark:border-white/10">
           <div className={`flex ${collapsed ? 'justify-center' : 'items-center gap-3'}`}>
             <div
               className={`flex flex-shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-indigo-500 to-purple-700 font-bold text-white ${
@@ -144,7 +145,7 @@ export default function AdminSidebar({ open = false, onClose }) {
                   exit={{ opacity: 0, width: 0 }}
                   className="overflow-hidden"
                 >
-                  <div className="truncate text-sm font-semibold text-white">{displayName}</div>
+                  <div className="truncate text-sm font-semibold text-slate-900 dark:text-white">{displayName}</div>
                   <span className={`mt-0.5 inline-block rounded-full px-2 py-0.5 text-xs font-semibold ${badge.bg} ${badge.text}`}>
                     {badge.label}
                   </span>
@@ -156,7 +157,7 @@ export default function AdminSidebar({ open = false, onClose }) {
 
         {/* Platform label */}
         {!collapsed && (
-          <div className="flex items-center gap-2 border-b border-white/10 px-4 py-2">
+          <div className="flex items-center gap-2 border-b border-slate-200 px-4 py-2 dark:border-white/10">
             <Shield className="h-3.5 w-3.5 text-indigo-400" />
             <span className="text-xs font-semibold uppercase tracking-widest text-slate-500">Platform Control</span>
           </div>
@@ -173,8 +174,8 @@ export default function AdminSidebar({ open = false, onClose }) {
                 className={({ isActive }) =>
                   `group flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all ${
                     isActive
-                      ? 'bg-indigo-600/20 text-indigo-400'
-                      : 'text-slate-400 hover:bg-white/5 hover:text-white'
+                      ? 'bg-indigo-100 text-indigo-600 dark:bg-indigo-600/20 dark:text-indigo-400'
+                      : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-white/5 dark:hover:text-white'
                   }`
                 }
                 title={collapsed ? item.label : undefined}
@@ -182,7 +183,7 @@ export default function AdminSidebar({ open = false, onClose }) {
                 {({ isActive }) => (
                   <>
                     <div className="relative flex-shrink-0">
-                      <item.icon className={`h-5 w-5 ${isActive ? 'text-indigo-400' : 'text-slate-500 group-hover:text-slate-300'}`} />
+                      <item.icon className={`h-5 w-5 ${isActive ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-500 group-hover:text-slate-700 dark:group-hover:text-slate-300'}`} />
                       {item.badge && unread > 0 && (
                         <span className="absolute -right-1.5 -top-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[9px] font-bold text-white">
                           {unread > 9 ? '9+' : unread}
@@ -210,10 +211,10 @@ export default function AdminSidebar({ open = false, onClose }) {
         </nav>
 
         {/* Sign out */}
-        <div className="flex-shrink-0 border-t border-white/10 p-3">
+        <div className="flex-shrink-0 border-t border-slate-200 p-3 dark:border-white/10">
           <button
             onClick={handleSignOut}
-            className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-slate-400 transition-colors hover:bg-red-950/50 hover:text-red-400"
+            className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-slate-600 transition-colors hover:bg-red-50 hover:text-red-600 dark:text-slate-400 dark:hover:bg-red-950/50 dark:hover:text-red-400"
             title={collapsed ? 'Sign Out' : undefined}
           >
             <LogOut className="h-5 w-5 flex-shrink-0" />
