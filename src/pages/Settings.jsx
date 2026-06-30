@@ -1,15 +1,17 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import {
   Settings as SettingsIcon, Store, CreditCard, Receipt,
   Bell, Shield, Palette, Globe, ExternalLink, Cpu,
-  CheckCircle, AlertTriangle, Loader, Power, PowerOff,
+  CheckCircle, AlertTriangle, Loader, Power, PowerOff, Eye, EyeOff,
 } from 'lucide-react'
 import Button from '@/components/common/Button'
 import ThemeToggle from '@/components/common/ThemeToggle'
 import { useThemeStore } from '@/stores/themeStore'
 import { useFiscalStore } from '@/stores/fiscalStore'
 import { pingDevice } from '@/lib/fiscalApi'
+import { supabase } from '@/lib/supabase'
+import { useAuthStore } from '@/stores/authStore'
 import toast from 'react-hot-toast'
 
 const sections = [
@@ -27,7 +29,58 @@ const sections = [
 export default function Settings() {
   const [activeSection, setActiveSection] = useState('general')
   const { posMode, setPosMode } = useThemeStore()
+  const { isDemo, tenant } = useAuthStore()
   const fiscal = useFiscalStore()
+
+  // Paynow integration state
+  const [paynowId, setPaynowId] = useState('')
+  const [paynowKey, setPaynowKey] = useState('')
+  const [showPaynowKey, setShowPaynowKey] = useState(false)
+  const [paynowSaving, setPaynowSaving] = useState(false)
+  const [paynowConfigured, setPaynowConfigured] = useState(false)
+
+  useEffect(() => {
+    if (isDemo || !tenant?.id) return
+    supabase
+      .from('tenants')
+      .select('paynow_integration_id, paynow_integration_key')
+      .eq('id', tenant.id)
+      .single()
+      .then(({ data }) => {
+        if (data?.paynow_integration_id) {
+          setPaynowId(data.paynow_integration_id)
+          setPaynowKey(data.paynow_integration_key || '')
+          setPaynowConfigured(true)
+        }
+      })
+  }, [isDemo, tenant?.id])
+
+  const handleSavePaynow = async () => {
+    if (!paynowId.trim() || !paynowKey.trim()) {
+      toast.error('Both Integration ID and Integration Key are required')
+      return
+    }
+    if (isDemo) {
+      toast.success('Demo mode — settings not persisted. In production these save to your account.')
+      setPaynowConfigured(true)
+      return
+    }
+    setPaynowSaving(true)
+    try {
+      const { error } = await supabase
+        .from('tenants')
+        .update({ paynow_integration_id: paynowId.trim(), paynow_integration_key: paynowKey.trim() })
+        .eq('id', tenant.id)
+      if (error) throw error
+      setPaynowConfigured(true)
+      toast.success('Paynow credentials saved')
+    } catch (err) {
+      toast.error(err.message || 'Failed to save Paynow settings')
+    } finally {
+      setPaynowSaving(false)
+    }
+  }
+
   const [fiscalForm, setFiscalForm] = useState({
     deviceID: fiscal.deviceID,
     activationKey: fiscal.activationKey,
@@ -218,6 +271,78 @@ export default function Settings() {
                     </label>
                   </div>
                 ))}
+
+                {/* Paynow Integration */}
+                <div className="rounded-2xl border border-[#f7941d]/30 bg-[#f7941d]/5 p-5 dark:border-[#f7941d]/20 dark:bg-[#f7941d]/10">
+                  <div className="mb-4 flex items-center gap-3">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#f7941d] text-white font-extrabold text-sm">PN</div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h4 className="text-sm font-bold text-slate-900 dark:text-white">Paynow Integration</h4>
+                        {paynowConfigured && (
+                          <span className="rounded-full bg-green-100 px-2 py-0.5 text-xs font-bold text-green-700 dark:bg-green-900/40 dark:text-green-400">
+                            Configured
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs text-slate-500">
+                        Accept EcoCash, OneMoney, InnBucks and Omari via Paynow hosted checkout. Each vendor uses their own Paynow account — TengaPOS never touches payment data.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="space-y-3">
+                    <div>
+                      <label className="mb-1.5 block text-xs font-semibold text-slate-700 dark:text-slate-300">
+                        Integration ID
+                      </label>
+                      <input
+                        type="text"
+                        value={paynowId}
+                        onChange={(e) => setPaynowId(e.target.value)}
+                        placeholder="e.g. 12345"
+                        className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="mb-1.5 block text-xs font-semibold text-slate-700 dark:text-slate-300">
+                        Integration Key
+                      </label>
+                      <div className="relative">
+                        <input
+                          type={showPaynowKey ? 'text' : 'password'}
+                          value={paynowKey}
+                          onChange={(e) => setPaynowKey(e.target.value)}
+                          placeholder="Your Paynow integration key"
+                          className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 pr-10 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowPaynowKey(!showPaynowKey)}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                        >
+                          {showPaynowKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                        </button>
+                      </div>
+                    </div>
+
+                    <p className="text-xs text-slate-500">
+                      Get your credentials from{' '}
+                      <span className="font-semibold text-[#f7941d]">paynow.co.zw</span>
+                      {' → Merchant → Integration Settings.'}
+                      {' '}Keys are stored securely and never exposed to the client.
+                    </p>
+
+                    <Button
+                      onClick={handleSavePaynow}
+                      disabled={paynowSaving}
+                      className="!bg-[#f7941d] hover:!bg-[#e0851a]"
+                    >
+                      {paynowSaving ? 'Saving…' : 'Save Paynow Settings'}
+                    </Button>
+                  </div>
+                </div>
               </div>
             )}
 

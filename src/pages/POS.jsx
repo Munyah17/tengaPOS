@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import {
   Search, Barcode, Plus, Minus, Trash2, ShoppingCart,
   CreditCard, Banknote, Smartphone, Receipt, X, Car, Store, Package as PackageIcon,
+  RefreshCw, ExternalLink,
 } from 'lucide-react'
 import Button from '@/components/common/Button'
 import ZimraReceipt from '@/components/common/ZimraReceipt'
@@ -11,6 +12,7 @@ import { useThemeStore } from '@/stores/themeStore'
 import { useAuthStore } from '@/stores/authStore'
 import { DEMO_PRODUCTS, DEMO_CATEGORIES, RESTAURANT_DEMO_PRODUCTS, PAYMENT_METHODS } from '@/utils/constants'
 import { formatCurrency, generateReceiptNumber } from '@/utils/formatters'
+import { initiatePaynowCheckout } from '@/lib/paynow'
 import toast from 'react-hot-toast'
 
 const restaurantCategories = [
@@ -23,13 +25,14 @@ const restaurantCategories = [
 
 export default function POS() {
   const { posMode } = useThemeStore()
-  const { isDemo } = useAuthStore()
+  const { isDemo, tenant } = useAuthStore()
   const isRestaurant = posMode === 'restaurant'
   const cart = useCartStore()
   const [search, setSearch] = useState('')
   const [category, setCategory] = useState('all')
   const [showReceipt, setShowReceipt] = useState(false)
   const [receiptData, setReceiptData] = useState(null)
+  const [paynowLoading, setPaynowLoading] = useState(false)
 
   const products = isDemo
     ? (isRestaurant ? RESTAURANT_DEMO_PRODUCTS : DEMO_PRODUCTS)
@@ -66,6 +69,30 @@ export default function POS() {
     setShowReceipt(true)
     cart.clearCart()
     toast.success('Transaction completed!')
+  }
+
+  const handlePaynowCheckout = async () => {
+    if (cart.items.length === 0) { toast.error('Cart is empty'); return }
+    if (isDemo) {
+      toast.error('Paynow is not available in demo mode. Configure your integration keys in Settings → Payments.')
+      return
+    }
+    if (!tenant?.id) { toast.error('Not authenticated'); return }
+
+    setPaynowLoading(true)
+    try {
+      const { browserUrl } = await initiatePaynowCheckout({
+        tenantId: tenant.id,
+        amount:   cart.getGrandTotal(),
+        items:    cart.items,
+      })
+      // Clear cart before leaving the POS — the return page handles success/failure
+      cart.clearCart()
+      window.location.href = browserUrl
+    } catch (err) {
+      toast.error(err.message || 'Failed to initiate Paynow checkout')
+      setPaynowLoading(false)
+    }
   }
 
   const accent = isRestaurant ? 'restaurant' : 'brand'
@@ -331,6 +358,21 @@ export default function POS() {
             <Receipt className="h-4 w-4" />
             {isRestaurant ? 'Place Order' : 'Complete Sale'}
           </Button>
+
+          {/* Paynow hosted checkout — redirects to Paynow, returns to /payment/return */}
+          <button
+            onClick={handlePaynowCheckout}
+            disabled={cart.items.length === 0 || paynowLoading}
+            className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl border-2 border-[#f7941d] bg-white py-3.5 text-sm font-bold text-[#f7941d] transition-colors hover:bg-[#f7941d] hover:text-white disabled:cursor-not-allowed disabled:opacity-50 dark:bg-slate-900 dark:hover:bg-[#f7941d] dark:hover:text-white"
+          >
+            {paynowLoading
+              ? <RefreshCw className="h-4 w-4 animate-spin" />
+              : <ExternalLink className="h-4 w-4" />}
+            {paynowLoading ? 'Opening Paynow…' : 'Pay with Paynow'}
+          </button>
+          <p className="mt-1.5 text-center text-[10px] text-slate-400">
+            EcoCash · OneMoney · InnBucks · Omari and more
+          </p>
         </div>
       </div>
 
