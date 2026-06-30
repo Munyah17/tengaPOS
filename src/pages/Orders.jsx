@@ -5,6 +5,7 @@ import ExportMenu from '@/components/common/ExportMenu'
 import { formatCurrency, formatDateTime } from '@/utils/formatters'
 import { useThemeStore } from '@/stores/themeStore'
 import { useAuthStore } from '@/stores/authStore'
+import { useOrderStore } from '@/stores/orderStore'
 import toast from 'react-hot-toast'
 
 const DEMO_ORDERS = [
@@ -161,9 +162,22 @@ function RestaurantOrders({ orders }) {
 export default function Orders() {
   const { posMode } = useThemeStore()
   const { isDemo } = useAuthStore()
+  const { orders: liveOrders, seedDemo } = useOrderStore()
   const isRestaurant = posMode === 'restaurant'
   const orders = isDemo ? DEMO_ORDERS : []
-  const restaurantOrders = isDemo ? DEMO_RESTAURANT_ORDERS : []
+
+  // Seed demo orders for the shared store on first render in restaurant mode
+  if (isDemo && isRestaurant && liveOrders.length === 0) seedDemo()
+
+  const restaurantOrders = liveOrders.map((o) => ({
+    id: `#${o.number}`,
+    items: o.items.map((i) => `${i.name}${i.qty > 1 ? ` x${i.qty}` : ''}`),
+    status: o.status,
+    orderType: o.type,
+    total: o.items.reduce((s, i) => s + i.price * i.qty, 0),
+    time: new Date(o.startedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+    elapsed: Math.floor((Date.now() - o.startedAt) / 60000),
+  }))
 
   return (
     <div className="p-4 sm:p-6">

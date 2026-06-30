@@ -78,15 +78,15 @@ export const ROLE_LABELS = {
 }
 
 export const NAV_PERMISSIONS = {
-  super_admin: ['dashboard', 'pos', 'inventory', 'orders', 'kitchen', 'transactions', 'reports', 'staff', 'tasks', 'branches', 'fiscalisation', 'settings'],
-  admin: ['dashboard', 'pos', 'inventory', 'orders', 'transactions', 'reports', 'staff', 'tasks', 'branches', 'fiscalisation', 'settings'],
+  super_admin: ['dashboard', 'pos', 'inventory', 'orders', 'kitchen', 'transactions', 'reports', 'insights', 'staff', 'tasks', 'branches', 'fiscalisation', 'settings'],
+  admin: ['dashboard', 'pos', 'inventory', 'orders', 'transactions', 'reports', 'insights', 'staff', 'tasks', 'branches', 'fiscalisation', 'settings'],
   associate: ['dashboard', 'reports', 'branches'],
-  vendor: ['dashboard', 'pos', 'inventory', 'orders', 'kitchen', 'transactions', 'reports', 'staff', 'tasks', 'branches', 'fiscalisation', 'settings'],
-  shop_manager: ['dashboard', 'pos', 'inventory', 'orders', 'kitchen', 'transactions', 'reports', 'staff', 'tasks', 'branches', 'fiscalisation', 'settings'],
+  vendor: ['dashboard', 'pos', 'inventory', 'orders', 'kitchen', 'transactions', 'reports', 'insights', 'staff', 'tasks', 'branches', 'fiscalisation', 'settings'],
+  shop_manager: ['dashboard', 'pos', 'inventory', 'orders', 'kitchen', 'transactions', 'reports', 'insights', 'staff', 'tasks', 'branches', 'fiscalisation', 'settings'],
   supervisor: ['dashboard', 'pos', 'inventory', 'orders', 'transactions', 'reports', 'tasks'],
   cashier: ['pos', 'orders', 'tasks'],
-  shop_assistant: ['pos'],
-  tech_support: ['dashboard', 'pos', 'inventory', 'orders', 'kitchen', 'transactions', 'reports', 'staff', 'tasks', 'branches', 'fiscalisation', 'settings'],
+  shop_assistant: ['pos', 'tasks'],
+  tech_support: ['dashboard', 'reports', 'insights', 'orders', 'transactions'],
 }
 
 async function loadProfile(userId) {
@@ -201,6 +201,8 @@ export const useAuthStore = create(
           tenant: { id: 'demo-tenant', name: persona.tenant },
           role: persona.role,
           branch: { id: 'demo-branch', name: 'Main Branch' },
+          userType: 'tenant',
+          tenantStatus: 'active',
           isAuthenticated: true,
           isLoading: false,
           isDemo: true,

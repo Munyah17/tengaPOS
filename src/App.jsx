@@ -20,6 +20,7 @@ import Tasks from '@/pages/Tasks'
 import Branches from '@/pages/Branches'
 import Fiscalisation from '@/pages/Fiscalisation'
 import Settings from '@/pages/Settings'
+import Insights from '@/pages/Insights'
 import AppLayout from '@/components/layout/AppLayout'
 
 import Dining from '@/pages/Dining'
@@ -94,6 +95,7 @@ export default function App() {
             <Route path="kitchen" element={<Kitchen />} />
             <Route path="transactions" element={<Transactions />} />
             <Route path="reports" element={<Reports />} />
+            <Route path="insights" element={<Insights />} />
             <Route path="staff" element={<Staff />} />
             <Route path="tasks" element={<Tasks />} />
             <Route path="branches" element={<Branches />} />

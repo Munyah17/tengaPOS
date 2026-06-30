@@ -3,7 +3,7 @@ import { AnimatePresence, motion } from 'framer-motion'
 import {
   LayoutDashboard, ShoppingCart, Package, ClipboardList, BarChart3,
   Settings, Users, ChefHat, ListTodo, LogOut, ChevronLeft, ChevronRight,
-  Store, Receipt, Cpu, X,
+  Store, Receipt, Cpu, X, Sparkles,
 } from 'lucide-react'
 import { useState } from 'react'
 import { useThemeStore } from '@/stores/themeStore'
@@ -18,6 +18,7 @@ const ALL_NAV_ITEMS = [
   { key: 'kitchen', icon: ChefHat, label: 'Kitchen', path: '/app/kitchen', restaurantOnly: true },
   { key: 'transactions', icon: Receipt, label: 'Transactions', path: '/app/transactions' },
   { key: 'reports', icon: BarChart3, label: 'Reports', path: '/app/reports' },
+  { key: 'insights', icon: Sparkles, label: 'AI Insights', path: '/app/insights' },
   { key: 'staff', icon: Users, label: 'Staff Management', path: '/app/staff' },
   { key: 'tasks', icon: ListTodo, label: 'Tasks', path: '/app/tasks' },
   { key: 'branches', icon: Store, label: 'Branches', path: '/app/branches' },
