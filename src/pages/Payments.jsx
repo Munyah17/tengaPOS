@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   CreditCard, RefreshCw, CheckCircle, XCircle, Clock, AlertTriangle,
-  ExternalLink, Info, ChevronDown, ChevronUp,
+  Info, ChevronDown, ChevronUp,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { useAuthStore } from '@/stores/authStore'
@@ -239,20 +239,14 @@ export default function Payments() {
         </button>
       </div>
 
-      {/* Webhook info banner */}
+      {/* Info banner */}
       <div className="mb-6 flex items-start gap-3 rounded-xl border border-blue-200 bg-blue-50 p-4 dark:border-blue-800 dark:bg-blue-950/30">
         <Info className="mt-0.5 h-5 w-5 flex-shrink-0 text-blue-600 dark:text-blue-400" />
         <div className="text-sm text-blue-800 dark:text-blue-300">
-          <p className="font-semibold">Payments waiting for Paynow webhook confirmation</p>
+          <p className="font-semibold">Manual payment confirmation</p>
           <p className="mt-1">
-            Payments stay <strong>Pending</strong> until Paynow sends a webhook to your callback URL. If a webhook doesn't arrive (common when testing), approve or decline manually below.
+            Payments from your Paynow integration appear here. If a payment is not automatically confirmed, review it below and approve or decline manually. Ensure your Paynow integration keys are saved in <strong>Settings → Payment Gateway</strong>.
           </p>
-          <p className="mt-2 font-medium">
-            Your Paynow result URL (paste this in your Paynow merchant portal under <em>Result URL</em>):
-          </p>
-          <code className="mt-1 block break-all rounded bg-blue-100 px-2 py-1 font-mono text-xs dark:bg-blue-900/50">
-            https://ajxephsnqdepupxkvlji.supabase.co/functions/v1/paynow-callback
-          </code>
         </div>
       </div>
 

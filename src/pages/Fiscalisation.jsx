@@ -99,7 +99,7 @@ export default function Fiscalisation() {
       return
     }
     if (!isSupabaseConfigured) {
-      toast.error('Supabase not configured — Edge Functions unavailable')
+      toast.error('Service not available — contact support')
       return
     }
     setPingLoading(true)
@@ -108,11 +108,10 @@ export default function Fiscalisation() {
       toast.success('ZIMRA FDMS is reachable — device connected!')
     } catch (err) {
       const msg = err?.message || ''
-      if (msg.includes('FunctionNotFound') || msg.includes('404')) {
-        toast.error('Edge Function not deployed yet — deploy zimra-ping to Supabase first')
-      } else {
-        toast.error(`Connection failed: ${msg || 'Unknown error'}`)
-      }
+      toast.error(msg.includes('FunctionNotFound') || msg.includes('404')
+        ? 'ZIMRA service unavailable — contact support'
+        : `Connection failed: ${msg || 'Unknown error'}`
+      )
     } finally {
       setPingLoading(false)
     }
@@ -187,33 +186,6 @@ export default function Fiscalisation() {
         )}
       </div>
 
-      {/* Status banners */}
-      {!isSupabaseConfigured && (
-        <div className="mb-6 flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 p-4 dark:border-red-800 dark:bg-red-950/40">
-          <AlertTriangle className="mt-0.5 h-5 w-5 flex-shrink-0 text-red-600 dark:text-red-400" />
-          <div className="text-sm text-red-800 dark:text-red-300">
-            <p className="font-semibold">Supabase not configured</p>
-            <p className="mt-1">
-              Set <code className="rounded bg-red-100 px-1 dark:bg-red-900">VITE_SUPABASE_URL</code> and{' '}
-              <code className="rounded bg-red-100 px-1 dark:bg-red-900">VITE_SUPABASE_ANON_KEY</code> in your{' '}
-              <code>.env</code> file. ZIMRA API calls require Supabase Edge Functions.
-            </p>
-          </div>
-        </div>
-      )}
-
-      {isSupabaseConfigured && (
-        <div className="mb-6 flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 dark:border-amber-800 dark:bg-amber-950/40">
-          <AlertTriangle className="mt-0.5 h-5 w-5 flex-shrink-0 text-amber-600 dark:text-amber-400" />
-          <div className="text-sm text-amber-800 dark:text-amber-300">
-            <p className="font-semibold">Edge Functions not yet deployed</p>
-            <p className="mt-1">
-              Deploy <code className="rounded bg-amber-100 px-1 dark:bg-amber-900">zimra-ping</code>,{' '}
-              <code className="rounded bg-amber-100 px-1 dark:bg-amber-900">zimra-register-device</code>, and related functions to Supabase before using the ZIMRA integration.
-            </p>
-          </div>
-        </div>
-      )}
 
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="space-y-6 lg:col-span-2">
