@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Search, Barcode, Plus, Minus, Trash2, ShoppingCart,
@@ -13,6 +13,7 @@ import { useAuthStore } from '@/stores/authStore'
 import { DEMO_PRODUCTS, DEMO_CATEGORIES, RESTAURANT_DEMO_PRODUCTS, PAYMENT_METHODS } from '@/utils/constants'
 import { formatCurrency, generateReceiptNumber } from '@/utils/formatters'
 import { initiatePaynowCheckout } from '@/lib/paynow'
+import { fetchProducts, saveCheckout } from '@/lib/db'
 import toast from 'react-hot-toast'
 
 const restaurantCategories = [
@@ -25,7 +26,7 @@ const restaurantCategories = [
 
 export default function POS() {
   const { posMode } = useThemeStore()
-  const { isDemo, tenant } = useAuthStore()
+  const { isDemo, tenant, user, branch } = useAuthStore()
   const isRestaurant = posMode === 'restaurant'
   const cart = useCartStore()
   const [search, setSearch] = useState('')
@@ -34,11 +35,22 @@ export default function POS() {
   const [receiptData, setReceiptData] = useState(null)
   const [paynowLoading, setPaynowLoading] = useState(false)
   const [showMobileCart, setShowMobileCart] = useState(false)
+  const [liveProducts, setLiveProducts] = useState([])
+  const [productsLoading, setProductsLoading] = useState(false)
+
+  useEffect(() => {
+    if (isDemo || !tenant?.id) return
+    setProductsLoading(true)
+    fetchProducts(tenant.id)
+      .then(setLiveProducts)
+      .catch(() => toast.error('Failed to load products'))
+      .finally(() => setProductsLoading(false))
+  }, [isDemo, tenant?.id])
 
   const products = isDemo
     ? (isRestaurant ? RESTAURANT_DEMO_PRODUCTS : DEMO_PRODUCTS)
-    : []
-  const categories = isRestaurant ? restaurantCategories : DEMO_CATEGORIES
+    : liveProducts
+  const categories = isRestaurant ? restaurantCategories : (isDemo ? DEMO_CATEGORIES : [{ id: 'all', name: 'All' }])
 
   const filtered = useMemo(() => {
     return products.filter((p) => {
@@ -51,26 +63,54 @@ export default function POS() {
     })
   }, [products, search, category])
 
-  const handleCheckout = () => {
+  const handleCheckout = async () => {
     if (cart.items.length === 0) {
       toast.error('Cart is empty')
       return
     }
+    const subtotal = cart.getSubtotal()
+    const tax = cart.getTax()
+    const total = cart.getGrandTotal()
+
+    let receiptNumber = generateReceiptNumber()
+
+    if (!isDemo && tenant?.id) {
+      try {
+        const result = await saveCheckout({
+          tenantId: tenant.id,
+          branchId: branch?.id || null,
+          userId: user?.id || null,
+          cartItems: cart.items,
+          paymentMethod: cart.paymentMethod,
+          subtotal,
+          tax,
+          total,
+          posMode,
+          orderType: isRestaurant ? (cart.orderType || 'counter') : 'sale',
+        })
+        receiptNumber = result.receiptNo
+        // Refresh product list after sale to reflect updated stock
+        fetchProducts(tenant.id).then(setLiveProducts).catch(() => {})
+      } catch (err) {
+        toast.error('Sale saved locally only — sync error: ' + (err.message || 'unknown'))
+      }
+    }
+
     const receipt = {
-      receiptNumber: generateReceiptNumber(),
+      receiptNumber,
       items: cart.items,
-      subtotal: cart.getSubtotal(),
-      tax: cart.getTax(),
-      total: cart.getGrandTotal(),
+      subtotal,
+      tax,
+      total,
       paymentMethod: cart.paymentMethod,
       date: new Date().toISOString(),
-      cashier: 'Demo Cashier',
+      cashier: isDemo ? 'Demo Cashier' : (useAuthStore.getState().profile?.name || 'Cashier'),
     }
     setReceiptData(receipt)
     setShowReceipt(true)
     setShowMobileCart(false)
     cart.clearCart()
-    toast.success('Transaction completed!')
+    toast.success(isRestaurant ? 'Order sent to kitchen!' : 'Transaction completed!')
   }
 
   const handlePaynowCheckout = async () => {

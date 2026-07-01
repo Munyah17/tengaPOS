@@ -1,7 +1,10 @@
 import { motion } from 'framer-motion'
+import { useState, useEffect } from 'react'
+import { RefreshCw } from 'lucide-react'
 import ExportMenu from '@/components/common/ExportMenu'
 import { formatCurrency, formatDateTime } from '@/utils/formatters'
 import { useAuthStore } from '@/stores/authStore'
+import { fetchTransactions } from '@/lib/db'
 
 const DEMO_TRANSACTIONS = [
   { id: 'TP-260524-0001', date: '2026-05-24T14:30:00', cashier: 'Grace K.', items: 3, subtotal: 13.48, tax: 2.02, total: 15.50, method: 'Cash', branch: 'Main' },
@@ -24,8 +27,32 @@ const exportColumns = [
 ]
 
 export default function Transactions() {
-  const { isDemo } = useAuthStore()
-  const transactions = isDemo ? DEMO_TRANSACTIONS : []
+  const { isDemo, tenant } = useAuthStore()
+  const [liveTransactions, setLiveTransactions] = useState([])
+  const [loading, setLoading] = useState(false)
+
+  const load = () => {
+    if (isDemo || !tenant?.id) return
+    setLoading(true)
+    fetchTransactions(tenant.id)
+      .then(rows => setLiveTransactions(rows.map(t => ({
+        id: t.reference || t.id,
+        date: t.created_at,
+        cashier: t.users?.name || '—',
+        items: t.orders?.order_items?.reduce((s, i) => s + i.qty, 0) ?? '—',
+        subtotal: t.orders?.subtotal ?? t.amount,
+        tax: t.orders?.tax_amount ?? 0,
+        total: parseFloat(t.amount),
+        method: t.method,
+        branch: t.branches?.name || '—',
+      }))))
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }
+
+  useEffect(() => { load() }, [isDemo, tenant?.id])
+
+  const transactions = isDemo ? DEMO_TRANSACTIONS : liveTransactions
 
   return (
     <div className="p-6">
@@ -34,7 +61,14 @@ export default function Transactions() {
           <h1 className="text-2xl font-extrabold text-slate-900 dark:text-white">Transactions</h1>
           <p className="text-sm text-slate-500">Detailed transaction history</p>
         </div>
-        <ExportMenu data={transactions} columns={exportColumns} title="Transactions" filename="tengapos_transactions" />
+        <div className="flex gap-2">
+          {!isDemo && (
+            <button onClick={load} className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
+              <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+            </button>
+          )}
+          <ExportMenu data={transactions} columns={exportColumns} title="Transactions" filename="tengapos_transactions" />
+        </div>
       </div>
 
       <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">

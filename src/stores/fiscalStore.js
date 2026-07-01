@@ -23,7 +23,7 @@ export const useFiscalStore = create((set, get) => ({
   qrUrl:                'https://www.zimra.co.zw/verify',
 
   // Runtime state (volatile, per-session)
-  fiscalDayStatus:        'FiscalDayClosed',
+  fiscalDayStatus:        'closed',
   fiscalDayNo:            0,
   lastReceiptGlobalNo:    0,
   lastReceiptHash:        '',
@@ -47,7 +47,7 @@ export const useFiscalStore = create((set, get) => ({
     isRegistered:         row.is_registered         ?? false,
     certificateValidTill: row.certificate_valid_till ?? null,
     qrUrl:                row.qr_url               || 'https://www.zimra.co.zw/verify',
-    fiscalDayStatus:      row.fiscal_day_status     || 'FiscalDayClosed',
+    fiscalDayStatus:      row.fiscal_day_status     || 'closed',
     fiscalDayNo:          row.fiscal_day_no         ?? 0,
     lastReceiptGlobalNo:  row.last_receipt_global_no ?? 0,
     lastReceiptHash:      row.last_receipt_hash     || '',
@@ -68,7 +68,7 @@ export const useFiscalStore = create((set, get) => ({
     deviceModelName: 'tengaPOS-v2', deviceModelVersionNo: '2.0.0',
     tin: '', vatNumber: '', branchName: '', branchAddress: '', branchContacts: '',
     isEnabled: false, isRegistered: false, certificateValidTill: null,
-    fiscalDayStatus: 'FiscalDayClosed', fiscalDayNo: 0,
+    fiscalDayStatus: 'closed', fiscalDayNo: 0,
     lastReceiptGlobalNo: 0, lastReceiptHash: '', dbLoaded: false,
   }),
 }))

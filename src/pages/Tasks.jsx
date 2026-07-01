@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Plus, CheckCircle, Clock, AlertCircle, User, Paperclip, X,
@@ -8,6 +8,7 @@ import {
 import Modal from '@/components/common/Modal'
 import { useThemeStore } from '@/stores/themeStore'
 import { useAuthStore } from '@/stores/authStore'
+import { fetchTasks, insertTask, updateTaskStatus, deleteTask as dbDeleteTask, fetchStaff } from '@/lib/db'
 import toast from 'react-hot-toast'
 
 const CAN_ASSIGN = ['vendor', 'shop_manager']
@@ -72,16 +73,17 @@ function fileIcon(type) {
   return File
 }
 
-function StaffPicker({ value, onChange }) {
+function StaffPicker({ value, onChange, staffList }) {
   const [search, setSearch] = useState('')
   const [open, setOpen] = useState(false)
   const ref = useRef(null)
 
-  const filtered = DEMO_STAFF.filter((s) =>
+  const list = staffList && staffList.length > 0 ? staffList : DEMO_STAFF
+  const filtered = list.filter((s) =>
     s.name.toLowerCase().includes(search.toLowerCase()) ||
     s.role.toLowerCase().includes(search.toLowerCase())
   )
-  const selected = DEMO_STAFF.find((s) => s.id === value)
+  const selected = list.find((s) => s.id === value)
 
   return (
     <div ref={ref} className="relative">
@@ -194,13 +196,32 @@ function ProofUploader({ proofs, onAdd }) {
   )
 }
 
+function dbRowToTask(row) {
+  return {
+    id: row.id,
+    title: row.title,
+    description: row.description || '',
+    assigneeId: row.assigned_to || '',
+    assigneeName: row['users!tasks_assigned_to_fkey']?.name || row.users?.name || 'Unknown',
+    assignedById: row.created_by || '',
+    assignedByName: row['users!tasks_created_by_fkey']?.name || 'Manager',
+    deadline: row.due_date || '',
+    status: row.status || 'pending',
+    priority: row.priority || 'medium',
+    proofs: [],
+    acceptedAt: null,
+    notes: '',
+  }
+}
+
 export default function Tasks() {
   const { posMode } = useThemeStore()
-  const { isDemo, role, profile } = useAuthStore()
+  const { isDemo, role, profile, tenant, user } = useAuthStore()
   const isRestaurant = posMode === 'restaurant'
   const canAssign = CAN_ASSIGN.includes(role)
 
   const [tasks, setTasks] = useState(isDemo ? INITIAL_TASKS : [])
+  const [staffList, setStaffList] = useState([])
   const [filter, setFilter] = useState('all')
   const [showNew, setShowNew] = useState(false)
   const [updateTask, setUpdateTask] = useState(null)
@@ -208,7 +229,13 @@ export default function Tasks() {
   const [updateNote, setUpdateNote] = useState('')
   const [updateProofs, setUpdateProofs] = useState([])
 
-  const myId = `demo-${role}`
+  useEffect(() => {
+    if (isDemo || !tenant?.id) return
+    fetchTasks(tenant.id).then(rows => setTasks(rows.map(dbRowToTask))).catch(() => {})
+    fetchStaff(tenant.id).then(rows => setStaffList(rows.map(r => ({ id: r.id, name: r.name, role: r.role })))).catch(() => {})
+  }, [isDemo, tenant?.id])
+
+  const myId = isDemo ? `demo-${role}` : (user?.id || '')
 
   const filteredTasks = tasks.filter((t) => {
     const passFilter = filter === 'all' ? true : t.status === filter
@@ -216,10 +243,10 @@ export default function Tasks() {
     return passFilter && t.assigneeId === myId
   })
 
-  const handleCreate = (e) => {
+  const handleCreate = async (e) => {
     e.preventDefault()
     if (!newTask.assigneeId) { toast.error('Select a staff member'); return }
-    setTasks((prev) => [...prev, {
+    const optimistic = {
       id: Date.now(),
       title: newTask.title,
       description: newTask.description,
@@ -233,15 +260,32 @@ export default function Tasks() {
       proofs: [],
       acceptedAt: null,
       notes: '',
-    }])
+    }
+    setTasks(prev => [...prev, optimistic])
     setNewTask({ title: '', description: '', assigneeId: '', assigneeName: '', deadline: '', priority: 'medium' })
     setShowNew(false)
     toast.success('Task assigned!')
+
+    if (!isDemo && tenant?.id) {
+      try {
+        const created = await insertTask(tenant.id, myId, {
+          assignedTo: newTask.assigneeId,
+          title: newTask.title,
+          description: newTask.description,
+          priority: newTask.priority,
+          dueDate: newTask.deadline || null,
+        })
+        setTasks(prev => prev.map(t => t.id === optimistic.id ? dbRowToTask(created) : t))
+      } catch (err) {
+        toast.error('Saved locally — sync error: ' + (err.message || ''))
+      }
+    }
   }
 
-  const accept = (id) => {
-    setTasks((prev) => prev.map((t) => t.id === id ? { ...t, status: 'in_progress', acceptedAt: new Date().toISOString() } : t))
+  const accept = async (id) => {
+    setTasks(prev => prev.map(t => t.id === id ? { ...t, status: 'in_progress', acceptedAt: new Date().toISOString() } : t))
     toast.success('Task accepted — get to it!')
+    if (!isDemo) await updateTaskStatus(id, 'in_progress').catch(() => {})
   }
 
   const openUpdate = (task) => {
@@ -250,24 +294,28 @@ export default function Tasks() {
     setUpdateProofs(task.proofs || [])
   }
 
-  const submitUpdate = () => {
-    setTasks((prev) => prev.map((t) =>
+  const submitUpdate = async () => {
+    const nextStatus = updateNote || updateProofs.length > 0 ? 'in_progress' : updateTask.status
+    setTasks(prev => prev.map(t =>
       t.id === updateTask.id
-        ? { ...t, notes: updateNote, proofs: updateProofs, status: updateNote || updateProofs.length > 0 ? 'in_progress' : t.status }
+        ? { ...t, notes: updateNote, proofs: updateProofs, status: nextStatus }
         : t
     ))
     setUpdateTask(null)
     toast.success('Task updated')
+    if (!isDemo) await updateTaskStatus(updateTask.id, nextStatus).catch(() => {})
   }
 
-  const markComplete = (id) => {
-    setTasks((prev) => prev.map((t) => t.id === id ? { ...t, status: 'completed' } : t))
+  const markComplete = async (id) => {
+    setTasks(prev => prev.map(t => t.id === id ? { ...t, status: 'completed' } : t))
     toast.success('Task completed!')
+    if (!isDemo) await updateTaskStatus(id, 'completed').catch(() => {})
   }
 
-  const deleteTask = (id) => {
-    setTasks((prev) => prev.filter((t) => t.id !== id))
+  const deleteTask = async (id) => {
+    setTasks(prev => prev.filter(t => t.id !== id))
     toast.success('Task removed')
+    if (!isDemo) await dbDeleteTask(id).catch(() => {})
   }
 
   const accent = isRestaurant ? 'bg-green-600 hover:bg-green-700' : 'bg-brand-600 hover:bg-brand-700'
@@ -437,6 +485,7 @@ export default function Tasks() {
           <div>
             <label className="mb-1.5 block text-sm font-semibold text-slate-700 dark:text-slate-300">Assign To *</label>
             <StaffPicker
+              staffList={staffList}
               value={newTask.assigneeId}
               onChange={(id, name) => setNewTask({ ...newTask, assigneeId: id, assigneeName: name })}
             />

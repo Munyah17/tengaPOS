@@ -1,13 +1,14 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Store, MapPin, Users, DollarSign, Plus, Edit3, Trash2,
   TrendingUp, Package, CheckCircle, X, BarChart3, Phone,
-  ArrowLeft, Eye,
+  ArrowLeft, Eye, RefreshCw,
 } from 'lucide-react'
 import { formatCurrency } from '@/utils/formatters'
 import { useAuthStore } from '@/stores/authStore'
 import Modal from '@/components/common/Modal'
+import { fetchBranches, insertBranch, updateBranch, deleteBranch } from '@/lib/db'
 import toast from 'react-hot-toast'
 
 const CAN_MANAGE = ['vendor']
@@ -155,14 +156,30 @@ function BranchDetail({ branch, onBack }) {
 }
 
 export default function Branches() {
-  const { isDemo, role } = useAuthStore()
+  const { isDemo, role, tenant } = useAuthStore()
   const canManage = CAN_MANAGE.includes(role)
 
   const [branches, setBranches] = useState(isDemo ? INITIAL_BRANCHES : [])
+  const [loading, setLoading] = useState(false)
+  const [saving, setSaving] = useState(false)
   const [viewing, setViewing] = useState(null)
   const [editing, setEditing] = useState(null)
   const [showNew, setShowNew] = useState(false)
   const [form, setForm] = useState(BLANK)
+
+  const loadBranches = () => {
+    if (isDemo || !tenant?.id) return
+    setLoading(true)
+    fetchBranches(tenant.id)
+      .then(data => setBranches(data.map(b => ({
+        ...b, isMain: b.is_main, status: b.is_active ? 'active' : 'inactive',
+        location: b.address || '', manager: '', staff: 0, revenue: 0, expenses: 0, orders: 0, topProducts: [], inventory: [],
+      }))))
+      .catch(() => toast.error('Failed to load branches'))
+      .finally(() => setLoading(false))
+  }
+
+  useEffect(() => { loadBranches() }, [isDemo, tenant?.id])
 
   if (viewing) {
     return (
@@ -172,39 +189,52 @@ export default function Branches() {
     )
   }
 
-  const handleSave = (e) => {
+  const handleSave = async (e) => {
     e.preventDefault()
-    if (editing) {
-      setBranches((prev) => prev.map((b) => b.id === editing.id ? { ...b, ...form } : b))
-      toast.success('Branch updated')
-      setEditing(null)
-    } else {
-      setBranches((prev) => [...prev, {
-        ...form,
-        id: Date.now(),
-        staff: 0, revenue: 0, expenses: 0, orders: 0,
-        isMain: false, topProducts: [], inventory: [],
-      }])
-      toast.success('Branch added')
-      setShowNew(false)
+    if (isDemo) {
+      if (editing) {
+        setBranches(prev => prev.map(b => b.id === editing.id ? { ...b, ...form } : b))
+        toast.success('Branch updated'); setEditing(null)
+      } else {
+        setBranches(prev => [...prev, { ...form, id: Date.now(), staff: 0, revenue: 0, expenses: 0, orders: 0, isMain: false, topProducts: [], inventory: [] }])
+        toast.success('Branch added'); setShowNew(false)
+      }
+      setForm(BLANK); return
     }
-    setForm(BLANK)
+    setSaving(true)
+    try {
+      if (editing) {
+        const updated = await updateBranch(editing.id, { name: form.name, address: form.address, phone: form.phone, isActive: form.status === 'active' })
+        setBranches(prev => prev.map(b => b.id === editing.id ? { ...b, ...updated, isMain: updated.is_main, status: updated.is_active ? 'active' : 'inactive' } : b))
+        toast.success('Branch updated'); setEditing(null)
+      } else {
+        const created = await insertBranch(tenant.id, { name: form.name, address: form.address, phone: form.phone })
+        setBranches(prev => [...prev, { ...created, isMain: false, status: 'active', location: created.address || '', manager: '', staff: 0, revenue: 0, expenses: 0, orders: 0, topProducts: [], inventory: [] }])
+        toast.success('Branch added'); setShowNew(false)
+      }
+      setForm(BLANK)
+    } catch (err) {
+      toast.error(err.message || 'Failed to save branch')
+    } finally {
+      setSaving(false)
+    }
   }
 
-  const handleDelete = (id) => {
-    const b = branches.find((x) => x.id === id)
-    if (b?.isMain) { toast.error('Cannot delete main branch'); return }
-    setBranches((prev) => prev.filter((x) => x.id !== id))
+  const handleDelete = async (id) => {
+    const b = branches.find(x => x.id === id)
+    if (b?.isMain || b?.is_main) { toast.error('Cannot delete main branch'); return }
+    setBranches(prev => prev.filter(x => x.id !== id))
     toast.success('Branch removed')
+    if (!isDemo) await deleteBranch(id).catch(() => {})
   }
 
   const openEdit = (branch) => {
-    setForm({ name: branch.name, location: branch.location, address: branch.address || '', phone: branch.phone || '', manager: branch.manager || '', status: branch.status })
+    setForm({ name: branch.name, location: branch.location || branch.address || '', address: branch.address || '', phone: branch.phone || '', manager: branch.manager || '', status: branch.status || 'active' })
     setEditing(branch)
   }
 
-  const totalRevenue = branches.reduce((s, b) => s + b.revenue, 0)
-  const totalStaff = branches.reduce((s, b) => s + b.staff, 0)
+  const totalRevenue = branches.reduce((s, b) => s + (b.revenue || 0), 0)
+  const totalStaff = branches.reduce((s, b) => s + (b.staff || 0), 0)
 
   return (
     <div className="p-4 sm:p-6">

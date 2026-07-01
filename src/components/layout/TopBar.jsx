@@ -1,9 +1,10 @@
-import { Bell, Search, Wifi, WifiOff, ShieldAlert, Menu, User, Settings, LogOut, ChevronDown, CheckCheck, BellOff, ShoppingBag, UtensilsCrossed } from 'lucide-react'
+import { Bell, Search, Wifi, WifiOff, ShieldAlert, Menu, User, Settings, LogOut, ChevronDown, CheckCheck, BellOff, ShoppingBag, UtensilsCrossed, AlertTriangle } from 'lucide-react'
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import ThemeToggle from '@/components/common/ThemeToggle'
 import { useThemeStore } from '@/stores/themeStore'
 import { useAuthStore, ROLE_COLORS, ROLE_LABELS } from '@/stores/authStore'
+import { useFiscalStore } from '@/stores/fiscalStore'
 
 const SAMPLE_NOTIFICATIONS = [
   { id: 1, text: 'Table 4 order ready to serve', time: '2m ago', unread: true },
@@ -23,11 +24,13 @@ function useClickOutside(ref, handler) {
 export default function TopBar({ onMenuClick }) {
   const { posMode, setPosMode } = useThemeStore()
   const { profile, role, clearAuth } = useAuthStore()
+  const { fiscalDayStatus, isEnabled: fiscalEnabled } = useFiscalStore()
   const navigate = useNavigate()
   const [isOnline, setIsOnline] = useState(navigator.onLine)
   const [bellOpen, setBellOpen] = useState(false)
   const [avatarOpen, setAvatarOpen] = useState(false)
   const [notifications, setNotifications] = useState(SAMPLE_NOTIFICATIONS)
+  const [showFiscalWarning, setShowFiscalWarning] = useState(false)
   const bellRef = useRef(null)
   const avatarRef = useRef(null)
 
@@ -54,11 +57,23 @@ export default function TopBar({ onMenuClick }) {
 
   const handleSignOut = async () => {
     setAvatarOpen(false)
+    // Warn if fiscal day is open
+    if (fiscalEnabled && fiscalDayStatus === 'open') {
+      setShowFiscalWarning(true)
+      return
+    }
+    await clearAuth()
+    navigate('/')
+  }
+
+  const confirmSignOut = async () => {
+    setShowFiscalWarning(false)
     await clearAuth()
     navigate('/')
   }
 
   return (
+    <>
     <header className="relative flex h-14 flex-shrink-0 items-center justify-between border-b border-slate-200 bg-white px-4 dark:border-slate-800 dark:bg-slate-950">
       {/* Hamburger — mobile only */}
       <button
@@ -242,5 +257,40 @@ export default function TopBar({ onMenuClick }) {
         </div>
       </div>
     </header>
+
+    {/* Fiscal day open warning modal */}
+    {showFiscalWarning && (
+      <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/50 p-4">
+        <div className="w-full max-w-sm rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl dark:border-slate-700 dark:bg-slate-900">
+          <div className="mb-4 flex items-center gap-3">
+            <div className="rounded-xl bg-amber-100 p-2 dark:bg-amber-900/40">
+              <AlertTriangle className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+            </div>
+            <div>
+              <h3 className="font-bold text-slate-900 dark:text-white">Fiscal Day Still Open</h3>
+              <p className="text-xs text-slate-500">Close the fiscal day before signing out</p>
+            </div>
+          </div>
+          <p className="mb-6 text-sm text-slate-600 dark:text-slate-400">
+            Your ZIMRA fiscal day is still open. You should close it before signing out to ensure your fiscal records are complete. You can close it in <strong>Fiscalisation</strong>.
+          </p>
+          <div className="flex gap-2">
+            <button
+              onClick={() => { setShowFiscalWarning(false); navigate('/app/fiscalisation') }}
+              className="flex-1 rounded-xl bg-brand-600 py-2.5 text-sm font-bold text-white hover:bg-brand-700"
+            >
+              Go to Fiscalisation
+            </button>
+            <button
+              onClick={confirmSignOut}
+              className="flex-1 rounded-xl border border-slate-200 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+            >
+              Sign Out Anyway
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
+    </>
   )
 }

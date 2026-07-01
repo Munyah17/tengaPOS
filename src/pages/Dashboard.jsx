@@ -1,4 +1,5 @@
 import { motion } from 'framer-motion'
+import { useState, useEffect } from 'react'
 import {
   DollarSign, ShoppingCart, Package, Users, TrendingUp,
   TrendingDown, AlertTriangle, ArrowUpRight, ArrowDownRight,
@@ -9,6 +10,8 @@ import {
 } from 'recharts'
 import { useThemeStore } from '@/stores/themeStore'
 import { useAuthStore } from '@/stores/authStore'
+import { fetchDashboardMetrics } from '@/lib/db'
+import { formatCurrency } from '@/utils/formatters'
 
 const DEMO_REVENUE = [
   { name: 'Mon', revenue: 2400, orders: 24 },
@@ -76,16 +79,35 @@ const colorMap = {
 
 export default function Dashboard() {
   const { posMode } = useThemeStore()
-  const { isDemo, profile } = useAuthStore()
+  const { isDemo, profile, tenant } = useAuthStore()
   const isRestaurant = posMode === 'restaurant'
   const accentColor = isRestaurant ? '#22c55e' : '#3b82f6'
+  const [metrics, setMetrics] = useState(null)
 
-  const statCards = isDemo ? DEMO_STAT_CARDS : EMPTY_STAT_CARDS
-  const revenueData = isDemo ? DEMO_REVENUE : []
+  useEffect(() => {
+    if (isDemo || !tenant?.id) return
+    fetchDashboardMetrics(tenant.id).then(setMetrics).catch(() => {})
+  }, [isDemo, tenant?.id])
+
+  const liveCards = metrics ? [
+    { label: "Today's Revenue", value: formatCurrency(metrics.todayRevenue), change: null, up: null, icon: DollarSign, color: 'brand' },
+    { label: "Today's Orders", value: String(metrics.todayOrders), change: null, up: null, icon: ShoppingCart, color: 'green' },
+    { label: 'Total Products', value: String(metrics.totalProducts), change: null, up: null, icon: Package, color: 'purple' },
+    { label: 'Active Staff', value: String(metrics.activeStaff), change: null, up: null, icon: Users, color: 'orange' },
+  ] : EMPTY_STAT_CARDS
+
+  const statCards = isDemo ? DEMO_STAT_CARDS : liveCards
+  const revenueData = isDemo ? DEMO_REVENUE : (metrics?.weekData || [])
   const categoryData = isDemo ? DEMO_CATEGORIES : []
   const topProducts = isDemo ? DEMO_TOP_PRODUCTS : []
-  const recentTransactions = isDemo ? DEMO_RECENT_TX : []
-  const lowStockItems = isDemo ? DEMO_LOW_STOCK : []
+  const recentTransactions = isDemo ? DEMO_RECENT_TX : (metrics?.recentTransactions?.map(t => ({
+    id: t.reference || t.id,
+    time: new Date(t.created_at).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
+    amount: parseFloat(t.amount),
+    items: t.orders?.order_items?.reduce((s, i) => s + i.qty, 0) || 0,
+    method: t.method,
+  })) || [])
+  const lowStockItems = isDemo ? DEMO_LOW_STOCK : (metrics?.lowStockItems?.map(p => ({ name: p.name, stock: p.stock_qty, threshold: p.low_stock_threshold || 10 })) || [])
 
   return (
     <div className="p-6">
