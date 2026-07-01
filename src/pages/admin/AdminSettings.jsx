@@ -1,6 +1,11 @@
-import { Settings, Shield, Globe, Bell } from 'lucide-react'
+import { Settings, Shield, Globe, Bell, Lock } from 'lucide-react'
+import { useAuthStore } from '@/stores/authStore'
+import { Navigate } from 'react-router-dom'
 
 export default function AdminSettings() {
+  const { role } = useAuthStore()
+  if (role !== 'super_admin') return <Navigate to="/admin/dashboard" replace />
+
   return (
     <div className="p-6">
       <div className="mb-6">
