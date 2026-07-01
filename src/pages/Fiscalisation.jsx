@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import {
   Cpu, CheckCircle, AlertTriangle, Loader, Power, PowerOff,
   Calendar, Hash, Wifi, ToggleLeft, ToggleRight, Sun, Moon,
@@ -31,6 +31,30 @@ export default function Fiscalisation() {
   })
   const [pingLoading, setPingLoading] = useState(false)
   const [dayLoading, setDayLoading] = useState(false)
+
+  useEffect(() => {
+    if (isDemo || !tenant?.id) return
+    supabase.from('tenant_fiscal_configs')
+      .select('*')
+      .eq('tenant_id', tenant.id)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (!data) return
+        fiscal.loadFromDB(data)
+        setFiscalForm({
+          deviceID:             data.device_id             || '',
+          activationKey:        data.activation_key        || '',
+          deviceSerialNo:       data.device_serial_no      || '',
+          deviceModelName:      data.device_model_name     || '',
+          deviceModelVersionNo: data.device_model_version_no || '',
+          tin:                  data.tin                   || '',
+          vatNumber:            data.vat_number            || '',
+          branchName:           data.branch_name           || '',
+          branchAddress:        data.branch_address        || '',
+          branchContacts:       data.branch_contacts       || '',
+        })
+      })
+  }, [tenant?.id, isDemo])
 
   const handleOpenDay = async () => {
     if (isDemo) { toast('Demo mode — fiscal day toggle is simulated'); fiscal.setFiscalDayStatus('open'); return }
@@ -360,12 +384,12 @@ export default function Fiscalisation() {
                 <span className="text-sm text-slate-500">Fiscal Day</span>
                 <span
                   className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${
-                    fiscal.fiscalDayStatus === 'FiscalDayOpened'
+                    fiscal.fiscalDayStatus === 'open'
                       ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
                       : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400'
                   }`}
                 >
-                  {fiscal.fiscalDayStatus === 'FiscalDayOpened' ? 'Open' : 'Closed'}
+                  {fiscal.fiscalDayStatus === 'open' ? 'Open' : 'Closed'}
                 </span>
               </div>
             </div>
