@@ -33,6 +33,7 @@ export default function POS() {
   const [showReceipt, setShowReceipt] = useState(false)
   const [receiptData, setReceiptData] = useState(null)
   const [paynowLoading, setPaynowLoading] = useState(false)
+  const [showMobileCart, setShowMobileCart] = useState(false)
 
   const products = isDemo
     ? (isRestaurant ? RESTAURANT_DEMO_PRODUCTS : DEMO_PRODUCTS)
@@ -67,6 +68,7 @@ export default function POS() {
     }
     setReceiptData(receipt)
     setShowReceipt(true)
+    setShowMobileCart(false)
     cart.clearCart()
     toast.success('Transaction completed!')
   }
@@ -98,8 +100,8 @@ export default function POS() {
   const accent = isRestaurant ? 'restaurant' : 'brand'
 
   return (
-    <div className="flex h-[calc(100vh-4rem)]">
-      {/* Product Area */}
+    <div className="relative flex h-[calc(100vh-4rem)] flex-col md:flex-row">
+      {/* Product Area — full screen on mobile, flex-1 on desktop */}
       <div className="flex flex-1 flex-col overflow-hidden">
         {/* Search + Filters */}
         <div className="border-b border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-950">
@@ -193,8 +195,33 @@ export default function POS() {
         </div>
       </div>
 
-      {/* Cart Panel */}
-      <div className="flex w-96 flex-col border-l border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-950">
+      {/* Mobile floating cart button — hidden on desktop */}
+      <button
+        onClick={() => setShowMobileCart(true)}
+        className={`fixed bottom-6 right-6 z-40 flex items-center gap-2.5 rounded-full px-5 py-3.5 text-sm font-bold text-white shadow-2xl transition-transform active:scale-95 md:hidden ${
+          isRestaurant ? 'bg-restaurant-600' : 'bg-brand-600'
+        }`}
+      >
+        <ShoppingCart className="h-5 w-5" />
+        {cart.items.length > 0
+          ? <span>{cart.items.length} item{cart.items.length !== 1 ? 's' : ''} · {formatCurrency(cart.getGrandTotal())}</span>
+          : <span>{isRestaurant ? 'Order' : 'Cart'}</span>}
+        {cart.items.length > 0 && (
+          <span className="flex h-5 w-5 items-center justify-center rounded-full bg-white/25 text-xs font-extrabold">
+            {cart.items.length}
+          </span>
+        )}
+      </button>
+
+      {/* Cart Panel — full-screen overlay on mobile, fixed sidebar on desktop */}
+      <div className={`
+        flex flex-col bg-white dark:bg-slate-950
+        border-slate-200 dark:border-slate-800
+        md:w-96 md:flex-shrink-0 md:border-l
+        ${showMobileCart
+          ? 'fixed inset-0 z-50 md:relative md:inset-auto md:z-auto'
+          : 'hidden md:flex'}
+      `}>
         {/* Cart Header */}
         <div className="flex flex-col gap-0 border-b border-slate-200 dark:border-slate-800">
           <div className="flex items-center gap-2 p-4 pb-2">
@@ -205,6 +232,13 @@ export default function POS() {
             <span className="ml-auto rounded-full bg-slate-100 px-2 py-0.5 text-xs font-bold text-slate-600 dark:bg-slate-800 dark:text-slate-400">
               {cart.items.length} items
             </span>
+            {/* Close button — mobile only */}
+            <button
+              onClick={() => setShowMobileCart(false)}
+              className="ml-2 rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 md:hidden"
+            >
+              <X className="h-5 w-5" />
+            </button>
           </div>
           {/* Drive-through / Counter toggle — restaurant only */}
           {isRestaurant && (

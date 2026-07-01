@@ -47,16 +47,18 @@ const queryClient = new QueryClient({
 function ProtectedRoute({ children }) {
   const { isAuthenticated, userType, tenantStatus, isDemo } = useAuthStore()
   if (!isAuthenticated) return <Navigate to="/login" replace />
-  if (userType === 'app_owner') return <Navigate to="/admin/dashboard" replace />
+  // Demo users are NEVER redirected to /admin — they stay in the tenant app always
+  if (!isDemo && userType === 'app_owner') return <Navigate to="/admin/dashboard" replace />
   if (!isDemo && tenantStatus === 'pending') return <Navigate to="/pending" replace />
   if (!isDemo && tenantStatus === 'suspended') return <Navigate to="/pending" replace />
   return children
 }
 
 function AdminRoute({ children }) {
-  const { isAuthenticated, userType } = useAuthStore()
+  const { isAuthenticated, userType, isDemo } = useAuthStore()
   if (!isAuthenticated) return <Navigate to="/login" replace />
-  if (userType !== 'app_owner') return <Navigate to="/app/dashboard" replace />
+  // Demo users cannot access the admin panel under any circumstances
+  if (isDemo || userType !== 'app_owner') return <Navigate to="/app/dashboard" replace />
   return children
 }
 

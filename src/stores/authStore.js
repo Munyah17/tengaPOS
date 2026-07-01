@@ -136,6 +136,16 @@ export const useAuthStore = create(
 
       initAuth: async () => {
         set({ isLoading: true })
+
+        // Demo sessions are fully isolated from real Supabase auth.
+        // If the persisted state says we're in demo mode, honour it and skip
+        // the real session check entirely — a saved browser session must never
+        // hijack a demo user and redirect them to /admin.
+        if (get().isDemo) {
+          set({ isLoading: false })
+          return
+        }
+
         try {
           const { data: { session } } = await supabase.auth.getSession()
           if (session?.user) {
@@ -154,8 +164,7 @@ export const useAuthStore = create(
               isDemo: false,
             })
           } else {
-            const { isDemo, isAuthenticated } = get()
-            set({ isLoading: false, isAuthenticated: isDemo ? isAuthenticated : false })
+            set({ isLoading: false, isAuthenticated: false })
           }
         } catch {
           set({ isLoading: false, isAuthenticated: false })
@@ -193,7 +202,10 @@ export const useAuthStore = create(
         return data
       },
 
-      loginAsDemo: (persona) =>
+      loginAsDemo: async (persona) => {
+        // Sign out any real Supabase session first — demo must be fully isolated.
+        // Without this, a saved browser session survives page reload and overwrites demo state.
+        await supabase.auth.signOut()
         set({
           user: { id: `demo-${persona.role}`, email: persona.email },
           session: { access_token: 'demo-token' },
@@ -206,7 +218,8 @@ export const useAuthStore = create(
           isAuthenticated: true,
           isLoading: false,
           isDemo: true,
-        }),
+        })
+      },
 
       clearAuth: async () => {
         if (!get().isDemo) {
