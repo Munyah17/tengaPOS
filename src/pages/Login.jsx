@@ -1,9 +1,10 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Eye, EyeOff, LogIn, ChevronDown, ChevronUp, ArrowRight, ArrowLeft } from 'lucide-react'
+import { Eye, EyeOff, LogIn, ChevronDown, ChevronUp, ArrowRight, ArrowLeft, Mail } from 'lucide-react'
 import posIcon from '@/assets/pos-icon.png'
 import { useAuthStore, DEMO_PERSONAS, ROLE_COLORS, ROLE_LABELS } from '@/stores/authStore'
+import { supabase } from '@/lib/supabase'
 import toast from 'react-hot-toast'
 
 export default function Login() {
@@ -12,8 +13,29 @@ export default function Login() {
   const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
   const [demoOpen, setDemoOpen] = useState(false)
+  const [resetMode, setResetMode] = useState(false)
+  const [resetEmail, setResetEmail] = useState('')
+  const [resetSent, setResetSent] = useState(false)
+  const [resetLoading, setResetLoading] = useState(false)
   const navigate = useNavigate()
   const { signIn, loginAsDemo, tenantStatus } = useAuthStore()
+
+  const handleResetPassword = async (e) => {
+    e.preventDefault()
+    if (!resetEmail.trim()) { toast.error('Enter your email address'); return }
+    setResetLoading(true)
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(resetEmail.trim(), {
+        redirectTo: `${window.location.origin}/login`,
+      })
+      if (error) throw error
+      setResetSent(true)
+    } catch (err) {
+      toast.error(err.message || 'Failed to send reset email')
+    } finally {
+      setResetLoading(false)
+    }
+  }
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -66,9 +88,47 @@ export default function Login() {
           {/* Logo */}
           <div className="mb-8 text-center">
             <img src={posIcon} alt="tengaPOS" className="mx-auto mb-4 h-14 w-auto" />
-            <h1 className="text-2xl font-extrabold text-white">Welcome back</h1>
-            <p className="mt-1 text-sm text-slate-400">Sign in to your tengaPOS account</p>
+            <h1 className="text-2xl font-extrabold text-white">{resetMode ? 'Reset Password' : 'Welcome back'}</h1>
+            <p className="mt-1 text-sm text-slate-400">{resetMode ? 'Enter your email to receive a reset link' : 'Sign in to your tengaPOS account'}</p>
           </div>
+
+          {/* Password Reset Form */}
+          {resetMode ? (
+            resetSent ? (
+              <div className="rounded-xl border border-green-500/30 bg-green-500/10 p-5 text-center">
+                <Mail className="mx-auto mb-3 h-8 w-8 text-green-400" />
+                <p className="font-semibold text-white">Check your inbox</p>
+                <p className="mt-1 text-sm text-slate-400">A password reset link was sent to <strong className="text-white">{resetEmail}</strong></p>
+                <button onClick={() => { setResetMode(false); setResetSent(false) }} className="mt-4 text-sm text-brand-400 hover:text-brand-300">
+                  Back to sign in
+                </button>
+              </div>
+            ) : (
+              <form onSubmit={handleResetPassword} className="space-y-4">
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium text-slate-300">Email address</label>
+                  <input
+                    type="email"
+                    value={resetEmail}
+                    onChange={e => setResetEmail(e.target.value)}
+                    className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white placeholder-slate-500 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+                    placeholder="you@example.com"
+                    autoFocus
+                  />
+                </div>
+                <button
+                  type="submit"
+                  disabled={resetLoading}
+                  className="flex w-full items-center justify-center gap-2 rounded-xl bg-brand-600 py-3 text-sm font-semibold text-white transition-colors hover:bg-brand-700 disabled:opacity-60"
+                >
+                  {resetLoading ? 'Sending…' : 'Send Reset Link'}
+                </button>
+                <button type="button" onClick={() => setResetMode(false)} className="w-full text-center text-sm text-slate-400 hover:text-white">
+                  Back to sign in
+                </button>
+              </form>
+            )
+          ) : (
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
@@ -107,9 +167,9 @@ export default function Login() {
                 <input type="checkbox" className="rounded border-slate-600" />
                 Remember me
               </label>
-              <a href="#" className="text-sm text-brand-400 hover:text-brand-300">
+              <button type="button" onClick={() => { setResetMode(true); setResetEmail(email) }} className="text-sm text-brand-400 hover:text-brand-300">
                 Forgot password?
-              </a>
+              </button>
             </div>
 
             <button
@@ -121,6 +181,7 @@ export default function Login() {
               {loading ? 'Signing in...' : 'Sign In'}
             </button>
           </form>
+          )} {/* end !resetMode */}
 
           {/* Demo role selector */}
           <div className="mt-4">

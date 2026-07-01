@@ -382,6 +382,87 @@ export async function deleteBranch(id) {
   if (error) throw error
 }
 
+// ─── Reports metrics ──────────────────────────────────────────────────────────
+
+export async function fetchReportMetrics(tenantId) {
+  const now = new Date()
+  const mtdStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString()
+  const sixMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 5, 1).toISOString()
+
+  const [mtdTx, monthlyTx, branchTx, productsSoldRes] = await Promise.all([
+    // MTD summary
+    supabase
+      .from('transactions')
+      .select('amount')
+      .eq('tenant_id', tenantId)
+      .eq('status', 'completed')
+      .gte('created_at', mtdStart),
+
+    // Last 6 months, grouped by month (fetch raw, group client-side)
+    supabase
+      .from('transactions')
+      .select('amount, created_at')
+      .eq('tenant_id', tenantId)
+      .eq('status', 'completed')
+      .gte('created_at', sixMonthsAgo),
+
+    // Branch breakdown this month
+    supabase
+      .from('transactions')
+      .select('amount, branches(name)')
+      .eq('tenant_id', tenantId)
+      .eq('status', 'completed')
+      .gte('created_at', mtdStart),
+
+    // Products sold MTD via order_items
+    supabase
+      .from('order_items')
+      .select('qty, orders!inner(tenant_id, created_at)')
+      .eq('orders.tenant_id', tenantId)
+      .gte('orders.created_at', mtdStart),
+  ])
+
+  const mtd = mtdTx.data ?? []
+  const allTx = monthlyTx.data ?? []
+  const branchRows = branchTx.data ?? []
+  const itemRows = productsSoldRes.data ?? []
+
+  const mtdRevenue = mtd.reduce((s, t) => s + parseFloat(t.amount), 0)
+  const mtdOrders = mtd.length
+  const avgOrderValue = mtdOrders > 0 ? mtdRevenue / mtdOrders : 0
+  const productsSold = itemRows.reduce((s, r) => s + (r.qty || 0), 0)
+
+  // Group by calendar month label
+  const monthMap = {}
+  for (let i = 5; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
+    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+    const label = d.toLocaleDateString('en-US', { month: 'short' })
+    monthMap[key] = { month: label, revenue: 0, orders: 0 }
+  }
+  for (const t of allTx) {
+    const d = new Date(t.created_at)
+    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+    if (monthMap[key]) {
+      monthMap[key].revenue += parseFloat(t.amount)
+      monthMap[key].orders += 1
+    }
+  }
+  const monthlyData = Object.values(monthMap)
+
+  // Branch breakdown
+  const bMap = {}
+  for (const r of branchRows) {
+    const name = r.branches?.name || 'Unassigned'
+    if (!bMap[name]) bMap[name] = { branch: name, revenue: 0, orders: 0 }
+    bMap[name].revenue += parseFloat(r.amount)
+    bMap[name].orders += 1
+  }
+  const branchData = Object.values(bMap)
+
+  return { mtdRevenue, mtdOrders, avgOrderValue, productsSold, monthlyData, branchData }
+}
+
 // ─── Dashboard metrics ────────────────────────────────────────────────────────
 
 export async function fetchDashboardMetrics(tenantId) {

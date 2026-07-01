@@ -255,8 +255,9 @@ export const useAuthStore = create(
         branch: state.branch,
         userType: state.userType,
         isAuthenticated: state.isAuthenticated,
-        isDemo: state.isDemo,
         tenantStatus: state.tenantStatus,
+        // isDemo intentionally NOT persisted — demo sessions never survive a page reload
+        // This prevents a crashed demo tab from bleeding into a real tenant login
       }),
     }
   )
