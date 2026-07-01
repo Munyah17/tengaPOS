@@ -3,6 +3,7 @@
  *
  * Architecture: All ZIMRA API calls go through Supabase Edge Functions.
  * The device certificate (mTLS) is stored server-side only — never exposed to the browser.
+ * Each call passes tenant_id so the edge function loads the right vendor credentials from DB.
  * Edge Function URL pattern: /functions/v1/zimra-{action}
  */
 
@@ -14,75 +15,38 @@ async function callEdgeFunction(name, body) {
   return data
 }
 
-/**
- * Verify taxpayer information before device registration.
- * ZIMRA endpoint: POST /verifyTaxpayerInformation
- */
-export async function verifyTaxpayer({ tin, vatNumber }) {
-  return callEdgeFunction('zimra-verify-taxpayer', { tin, vatNumber })
+export async function verifyTaxpayer({ tenantId, tin, vatNumber }) {
+  return callEdgeFunction('zimra-verify-taxpayer', { tenant_id: tenantId, tin, vatNumber })
 }
 
-/**
- * Register a new fiscal device with ZIMRA.
- * ZIMRA endpoint: POST /registerDevice
- */
-export async function registerDevice({ deviceID, activationKey, tin }) {
-  return callEdgeFunction('zimra-register-device', { deviceID, activationKey, tin })
+export async function registerDevice({ tenantId, deviceID, activationKey, tin }) {
+  return callEdgeFunction('zimra-register-device', { tenant_id: tenantId, deviceID, activationKey, tin })
 }
 
-/**
- * Issue/renew the device certificate.
- * ZIMRA endpoint: POST /issueCertificate
- */
-export async function issueCertificate({ deviceID }) {
-  return callEdgeFunction('zimra-issue-certificate', { deviceID })
+export async function issueCertificate({ tenantId, deviceID }) {
+  return callEdgeFunction('zimra-issue-certificate', { tenant_id: tenantId, deviceID })
 }
 
-/**
- * Get device configuration (qrUrl, tax rates, etc) from ZIMRA.
- * ZIMRA endpoint: GET /getConfig
- */
-export async function getDeviceConfig({ deviceID }) {
-  return callEdgeFunction('zimra-get-config', { deviceID })
+export async function getDeviceConfig({ tenantId, deviceID }) {
+  return callEdgeFunction('zimra-get-config', { tenant_id: tenantId, deviceID })
 }
 
-/**
- * Get current device status from ZIMRA.
- * ZIMRA endpoint: GET /getStatus
- */
-export async function getDeviceStatus({ deviceID }) {
-  return callEdgeFunction('zimra-get-status', { deviceID })
+export async function getDeviceStatus({ tenantId, deviceID }) {
+  return callEdgeFunction('zimra-get-status', { tenant_id: tenantId, deviceID })
 }
 
-/**
- * Ping the ZIMRA FDMS to check connectivity.
- * ZIMRA endpoint: GET /ping
- */
-export async function pingDevice({ deviceID }) {
-  return callEdgeFunction('zimra-ping', { deviceID })
+export async function pingDevice({ tenantId, deviceID }) {
+  return callEdgeFunction('zimra-ping', { tenant_id: tenantId, deviceID })
 }
 
-/**
- * Open a fiscal day on the device.
- * ZIMRA endpoint: POST /openDay
- */
-export async function openFiscalDay({ deviceID, fiscalDayNo }) {
-  return callEdgeFunction('zimra-open-day', { deviceID, fiscalDayNo })
+export async function openFiscalDay({ tenantId, deviceID, fiscalDayNo }) {
+  return callEdgeFunction('zimra-open-day', { tenant_id: tenantId, deviceID, fiscalDayNo })
 }
 
-/**
- * Submit a fiscalised receipt to ZIMRA.
- * ZIMRA endpoint: POST /submitReceipt
- * The Edge Function handles receipt signing and QR code generation.
- */
-export async function submitReceipt({ deviceID, receipt }) {
-  return callEdgeFunction('zimra-submit-receipt', { deviceID, receipt })
+export async function submitReceipt({ tenantId, deviceID, receipt }) {
+  return callEdgeFunction('zimra-submit-receipt', { tenant_id: tenantId, deviceID, receipt })
 }
 
-/**
- * Initiate fiscal day close.
- * ZIMRA endpoint: POST /closeDay
- */
-export async function closeFiscalDay({ deviceID, fiscalDayNo, counters }) {
-  return callEdgeFunction('zimra-close-day', { deviceID, fiscalDayNo, counters })
+export async function closeFiscalDay({ tenantId, deviceID, fiscalDayNo, counters }) {
+  return callEdgeFunction('zimra-close-day', { tenant_id: tenantId, deviceID, fiscalDayNo, counters })
 }

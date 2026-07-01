@@ -82,22 +82,101 @@ export default function Settings() {
   }
 
   const [fiscalForm, setFiscalForm] = useState({
-    deviceID: fiscal.deviceID,
-    activationKey: fiscal.activationKey,
-    deviceSerialNo: fiscal.deviceSerialNo,
-    deviceModelName: fiscal.deviceModelName,
-    deviceModelVersionNo: fiscal.deviceModelVersionNo,
-    tin: fiscal.tin,
-    vatNumber: fiscal.vatNumber,
-    branchName: fiscal.branchName,
-    branchAddress: fiscal.branchAddress,
-    branchContacts: fiscal.branchContacts,
+    deviceID: '',
+    activationKey: '',
+    deviceSerialNo: '',
+    deviceModelName: 'tengaPOS-v2',
+    deviceModelVersionNo: '2.0.0',
+    tin: '',
+    vatNumber: '',
+    branchName: '',
+    branchAddress: '',
+    branchContacts: '',
+    isEnabled: false,
   })
+  const [fiscalLoading, setFiscalLoading] = useState(false)
+  const [fiscalSaving, setFiscalSaving] = useState(false)
   const [pingLoading, setPingLoading] = useState(false)
 
-  const handleFiscalSave = () => {
-    fiscal.setConfig(fiscalForm)
-    toast.success('ZIMRA settings saved')
+  // Load fiscal config from DB on mount (multi-tenant: each vendor has their own row)
+  useEffect(() => {
+    if (isDemo || !tenant?.id) return
+    setFiscalLoading(true)
+    supabase
+      .from('tenant_fiscal_configs')
+      .select('*')
+      .eq('tenant_id', tenant.id)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (data) {
+          const row = {
+            deviceID: data.device_id || '',
+            activationKey: data.activation_key || '',
+            deviceSerialNo: data.device_serial_no || '',
+            deviceModelName: data.device_model_name || 'tengaPOS-v2',
+            deviceModelVersionNo: data.device_model_version_no || '2.0.0',
+            tin: data.tin || '',
+            vatNumber: data.vat_number || '',
+            branchName: data.branch_name || '',
+            branchAddress: data.branch_address || '',
+            branchContacts: data.branch_contacts || '',
+            isEnabled: data.is_enabled ?? false,
+          }
+          setFiscalForm(row)
+          fiscal.loadFromDB(data)
+        }
+      })
+      .finally(() => setFiscalLoading(false))
+  }, [isDemo, tenant?.id])
+
+  const handleFiscalSave = async () => {
+    if (isDemo) {
+      fiscal.setConfig({ ...fiscalForm })
+      toast.success('Demo mode — fiscal settings applied to session only')
+      return
+    }
+    if (!tenant?.id) return
+    setFiscalSaving(true)
+    try {
+      const upsertData = {
+        tenant_id:              tenant.id,
+        device_id:              fiscalForm.deviceID.trim(),
+        activation_key:         fiscalForm.activationKey.trim(),
+        device_serial_no:       fiscalForm.deviceSerialNo.trim(),
+        device_model_name:      fiscalForm.deviceModelName.trim(),
+        device_model_version_no: fiscalForm.deviceModelVersionNo.trim(),
+        tin:                    fiscalForm.tin.trim(),
+        vat_number:             fiscalForm.vatNumber.trim(),
+        branch_name:            fiscalForm.branchName.trim(),
+        branch_address:         fiscalForm.branchAddress.trim(),
+        branch_contacts:        fiscalForm.branchContacts.trim(),
+        is_enabled:             fiscalForm.isEnabled,
+        updated_at:             new Date().toISOString(),
+      }
+      const { error } = await supabase
+        .from('tenant_fiscal_configs')
+        .upsert(upsertData, { onConflict: 'tenant_id' })
+      if (error) throw error
+      // Sync runtime store
+      fiscal.setConfig({
+        deviceID:             fiscalForm.deviceID,
+        activationKey:        fiscalForm.activationKey,
+        deviceSerialNo:       fiscalForm.deviceSerialNo,
+        deviceModelName:      fiscalForm.deviceModelName,
+        deviceModelVersionNo: fiscalForm.deviceModelVersionNo,
+        tin:                  fiscalForm.tin,
+        vatNumber:            fiscalForm.vatNumber,
+        branchName:           fiscalForm.branchName,
+        branchAddress:        fiscalForm.branchAddress,
+        branchContacts:       fiscalForm.branchContacts,
+        isEnabled:            fiscalForm.isEnabled,
+      })
+      toast.success('ZIMRA settings saved')
+    } catch (err) {
+      toast.error(err.message || 'Failed to save ZIMRA settings')
+    } finally {
+      setFiscalSaving(false)
+    }
   }
 
   const isSupabaseConfigured = !!(
@@ -106,11 +185,11 @@ export default function Settings() {
   )
 
   const handlePingDevice = async () => {
-    if (!fiscal.isEnabled) {
+    if (!fiscalForm.isEnabled) {
       toast.error('Enable fiscalisation first')
       return
     }
-    if (!fiscal.deviceID) {
+    if (!fiscalForm.deviceID) {
       toast.error('Enter and save a Device ID first')
       return
     }
@@ -120,7 +199,7 @@ export default function Settings() {
     }
     setPingLoading(true)
     try {
-      await pingDevice({ deviceID: fiscal.deviceID })
+      await pingDevice({ tenantId: tenant?.id, deviceID: fiscalForm.deviceID })
       toast.success('Device reachable — connection OK')
     } catch (err) {
       const msg = err?.message || ''
@@ -403,8 +482,8 @@ export default function Settings() {
                   <label className="relative inline-flex cursor-pointer items-center">
                     <input
                       type="checkbox"
-                      checked={fiscal.isEnabled}
-                      onChange={(e) => fiscal.setEnabled(e.target.checked)}
+                      checked={fiscalForm.isEnabled}
+                      onChange={(e) => setFiscalForm(f => ({ ...f, isEnabled: e.target.checked }))}
                       className="peer sr-only"
                     />
                     <div className="peer h-5 w-9 rounded-full bg-slate-300 after:absolute after:left-[2px] after:top-[2px] after:h-4 after:w-4 after:rounded-full after:bg-white after:transition-all peer-checked:bg-brand-600 peer-checked:after:translate-x-full dark:bg-slate-600" />
@@ -552,8 +631,16 @@ export default function Settings() {
                   </div>
                 </div>
 
+                {fiscalLoading && (
+                  <div className="flex items-center gap-2 rounded-xl bg-slate-50 p-3 text-sm text-slate-500 dark:bg-slate-800">
+                    <Loader className="h-4 w-4 animate-spin" /> Loading your ZIMRA configuration…
+                  </div>
+                )}
+
                 <div className="flex gap-3 border-t border-slate-200 pt-4 dark:border-slate-700">
-                  <Button onClick={handleFiscalSave}>Save Configuration</Button>
+                  <Button onClick={handleFiscalSave} disabled={fiscalSaving}>
+                    {fiscalSaving ? 'Saving…' : 'Save Configuration'}
+                  </Button>
                   <button
                     onClick={handlePingDevice}
                     disabled={pingLoading || !isSupabaseConfigured}
