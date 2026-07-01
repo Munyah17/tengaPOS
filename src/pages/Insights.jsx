@@ -1,13 +1,14 @@
 import { useState, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
-  Sparkles, TrendingUp, TrendingDown, Package, DollarSign, AlertCircle,
-  Download, RefreshCw, MapPin, Calendar, ChevronDown, ChevronUp,
-  FileText, Table, Printer, Lightbulb, Target, ShoppingCart, BarChart3,
-  Star, ArrowUp, ArrowDown, Minus, Eye, EyeOff,
+  Sparkles, TrendingUp, Package, DollarSign, AlertCircle,
+  RefreshCw, MapPin, ChevronDown, ChevronUp,
+  FileText, Table, Printer, Lightbulb, Target, ShoppingCart,
+  Star, ArrowUp, ArrowDown, Minus,
 } from 'lucide-react'
 import { useAuthStore } from '@/stores/authStore'
 import { useThemeStore } from '@/stores/themeStore'
+import { supabase } from '@/lib/supabase'
 import toast from 'react-hot-toast'
 import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
@@ -86,32 +87,13 @@ function Metric({ label, value, sub, color = 'brand', icon: Icon, trend }) {
   )
 }
 
-async function callGroq(prompt, apiKey) {
-  const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-    method: 'POST',
-    headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      model: 'llama-3.3-70b-versatile',
-      temperature: 0.7,
-      max_tokens: 2048,
-      messages: [
-        {
-          role: 'system',
-          content: 'You are a sharp business intelligence advisor for African SMEs. Respond ONLY with valid JSON matching the requested schema. No extra text.',
-        },
-        { role: 'user', content: prompt },
-      ],
-    }),
+async function callGroqEdge(prompt) {
+  const { data, error } = await supabase.functions.invoke('groq-insights', {
+    body: { prompt },
   })
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}))
-    throw new Error(err?.error?.message || `Groq API error ${res.status}`)
-  }
-  const data = await res.json()
-  const text = data.choices[0]?.message?.content || ''
-  const match = text.match(/\{[\s\S]*\}/)
-  if (!match) throw new Error('AI returned unexpected format')
-  return JSON.parse(match[0])
+  if (error) throw new Error(error.message || 'Edge function error')
+  if (data?.error) throw new Error(data.error)
+  return data
 }
 
 function buildPrompt(products, timeline, location, landingPrices, posMode) {
@@ -195,8 +177,6 @@ export default function Insights() {
   const [location, setLocation] = useState('')
   const [landingPrices, setLandingPrices] = useState({})
   const [showPricing, setShowPricing] = useState(false)
-  const [apiKey, setApiKey] = useState(import.meta.env.VITE_GROQ_API_KEY || '')
-  const [showKey, setShowKey] = useState(false)
   const [loading, setLoading] = useState(false)
   const [result, setResult] = useState(null)
   const [error, setError] = useState(null)
@@ -219,14 +199,13 @@ export default function Insights() {
   const totalUnits   = products.reduce((s, p) => s + p.sold, 0)
 
   const generateInsights = async () => {
-    if (!apiKey.trim()) { toast.error('Enter your Groq API key below to use AI insights'); return }
     if (products.length === 0) { toast.error('No product data available'); return }
     setLoading(true)
     setError(null)
     setResult(null)
     try {
       const prompt = buildPrompt(products, tlMeta.label, location, landingPrices, posMode)
-      const data = await callGroq(prompt, apiKey)
+      const data = await callGroqEdge(prompt)
       setResult(data)
       toast.success('AI analysis complete!')
     } catch (e) {
@@ -461,29 +440,11 @@ export default function Insights() {
             </div>
           </div>
 
-          {/* API Key input */}
-          <div className="mt-4 rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-900/50">
-            <div className="mb-2 flex items-center gap-2">
-              <Sparkles className="h-4 w-4 text-brand-500" />
-              <span className="text-sm font-bold text-slate-700 dark:text-white">Groq API Key</span>
-              <span className="rounded-full bg-green-100 px-2 py-0.5 text-[10px] font-bold uppercase text-green-700 dark:bg-green-900/40 dark:text-green-400">Free</span>
-            </div>
-            <p className="mb-3 text-xs text-slate-500">Get a free key at <strong>console.groq.com</strong> (no credit card needed). Uses LLaMA 3.3 70B — open source.</p>
-            <div className="flex items-center gap-2">
-              <div className="flex flex-1 items-center rounded-xl border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-800">
-                <input
-                  type={showKey ? 'text' : 'password'}
-                  value={apiKey}
-                  onChange={(e) => setApiKey(e.target.value)}
-                  placeholder="gsk_..."
-                  className="flex-1 bg-transparent px-3 py-2 text-sm font-mono text-slate-700 placeholder-slate-400 focus:outline-none dark:text-white"
-                />
-                <button onClick={() => setShowKey(v => !v)} className="px-2 text-slate-400">
-                  {showKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                </button>
-              </div>
-              <p className="text-xs text-slate-400">Or set <code className="text-brand-500">VITE_GROQ_API_KEY</code> in .env</p>
-            </div>
+          <div className="mt-4 flex items-center gap-2 rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-3 dark:border-slate-700 dark:bg-slate-900/50">
+            <Sparkles className="h-4 w-4 flex-shrink-0 text-brand-500" />
+            <p className="text-xs text-slate-500">
+              Powered by <strong className="text-slate-700 dark:text-slate-300">LLaMA 3.3 70B</strong> via Groq — free, open-source model. Managed by the platform.
+            </p>
           </div>
         </div>
 
