@@ -3,7 +3,7 @@ import { AnimatePresence, motion } from 'framer-motion'
 import {
   LayoutDashboard, ShoppingCart, Package, ClipboardList, BarChart3,
   Settings, Users, ChefHat, ListTodo, LogOut, ChevronLeft, ChevronRight,
-  Store, Receipt, Cpu, X, Sparkles,
+  Store, Receipt, Cpu, X, Sparkles, CreditCard,
 } from 'lucide-react'
 import { useState } from 'react'
 import { useThemeStore } from '@/stores/themeStore'
@@ -23,6 +23,7 @@ const ALL_NAV_ITEMS = [
   { key: 'tasks', icon: ListTodo, label: 'Tasks', path: '/app/tasks' },
   { key: 'branches', icon: Store, label: 'Branches', path: '/app/branches' },
   { key: 'fiscalisation', icon: Cpu, label: 'Fiscalisation', path: '/app/fiscalisation' },
+  { key: 'payments', icon: CreditCard, label: 'Payments', path: '/app/payments' },
   { key: 'settings', icon: Settings, label: 'Settings', path: '/app/settings' },
 ]
 

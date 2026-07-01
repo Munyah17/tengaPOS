@@ -141,6 +141,68 @@ export async function saveCheckout({ tenantId, branchId, userId, cartItems, paym
   return { order, receiptNo }
 }
 
+// ─── Payment Sessions (Paynow) ────────────────────────────────────────────────
+
+export async function fetchPaymentSessions(tenantId) {
+  const { data, error } = await supabase
+    .from('payment_sessions')
+    .select('*, users(name)')
+    .eq('tenant_id', tenantId)
+    .order('created_at', { ascending: false })
+    .limit(200)
+  if (error) throw error
+  return data
+}
+
+export async function approvePaymentSession(sessionId, userId, note = '') {
+  const { data: session, error: fetchErr } = await supabase
+    .from('payment_sessions')
+    .select('*')
+    .eq('id', sessionId)
+    .single()
+  if (fetchErr) throw fetchErr
+
+  const { error: updateErr } = await supabase
+    .from('payment_sessions')
+    .update({
+      status: 'paid',
+      manually_confirmed: true,
+      confirmed_by: userId || null,
+      admin_note: note || null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', sessionId)
+  if (updateErr) throw updateErr
+
+  // Create a transaction record so it shows in Transactions page
+  const receiptNo = session.reference
+  const { error: txErr } = await supabase
+    .from('transactions')
+    .insert({
+      tenant_id: session.tenant_id,
+      type: 'sale',
+      method: 'paynow',
+      amount: session.amount,
+      reference: receiptNo,
+      status: 'completed',
+    })
+  if (txErr) throw txErr
+}
+
+export async function declinePaymentSession(sessionId, userId, note = '') {
+  const { error } = await supabase
+    .from('payment_sessions')
+    .update({
+      status: 'cancelled',
+      manually_confirmed: true,
+      confirmed_by: userId || null,
+      admin_note: note || null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', sessionId)
+  if (error) throw error
+}
+
 // ─── Orders ──────────────────────────────────────────────────────────────────
 
 export async function fetchOrders(tenantId, filters = {}) {
