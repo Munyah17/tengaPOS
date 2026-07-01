@@ -18,13 +18,15 @@ export default function Register() {
     if (form.password.length < 8) { toast.error('Password must be at least 8 characters'); return }
     setLoading(true)
     try {
-      const data = await signUp(form.email, form.password, form.name, form.businessName)
+      const data = await signUp(form.email, form.password, form.name, form.businessName, form.businessType)
       if (data.user && !data.session) {
-        toast.success('Check your email to confirm your account, then sign in.')
+        // Email confirmation required — tenant records are created, pending admin approval
+        toast.success('Registration submitted! Check your email to confirm, then sign in.')
         navigate('/login')
       } else {
-        toast.success('Account created! Welcome to tengaPOS.')
-        navigate('/app/dashboard')
+        // Immediate session — auth state already set in signUp(), tenant is pending approval
+        toast.success('Account created! Your application is under review.')
+        navigate('/pending')
       }
     } catch (err) {
       toast.error(err.message || 'Registration failed')

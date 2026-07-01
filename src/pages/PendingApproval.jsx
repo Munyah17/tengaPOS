@@ -1,16 +1,29 @@
+import { useState } from 'react'
 import { motion } from 'framer-motion'
-import { Clock, LogOut, PhoneCall } from 'lucide-react'
+import { Clock, LogOut, PhoneCall, RefreshCw } from 'lucide-react'
 import posIcon from '@/assets/pos-icon.png'
 import { useAuthStore } from '@/stores/authStore'
 import { useNavigate } from 'react-router-dom'
 
 export default function PendingApproval() {
-  const { clearAuth, profile, tenant } = useAuthStore()
+  const { clearAuth, initAuth, profile, tenant } = useAuthStore()
   const navigate = useNavigate()
+  const [checking, setChecking] = useState(false)
 
   const handleSignOut = async () => {
     await clearAuth()
     navigate('/')
+  }
+
+  const handleCheckStatus = async () => {
+    setChecking(true)
+    await initAuth()
+    const { tenantStatus } = useAuthStore.getState()
+    if (tenantStatus === 'active') {
+      navigate('/app/dashboard')
+    } else {
+      setChecking(false)
+    }
   }
 
   return (
@@ -45,6 +58,15 @@ export default function PendingApproval() {
               <li>• This usually takes less than 24 hours</li>
             </ul>
           </div>
+
+          <button
+            onClick={handleCheckStatus}
+            disabled={checking}
+            className="mb-3 flex w-full items-center justify-center gap-2 rounded-xl border border-brand-500/40 bg-brand-500/10 py-3 text-sm font-semibold text-brand-400 transition-colors hover:bg-brand-500/20 disabled:opacity-60"
+          >
+            <RefreshCw className={`h-4 w-4 ${checking ? 'animate-spin' : ''}`} />
+            {checking ? 'Checking…' : 'Check approval status'}
+          </button>
 
           <a
             href="https://wa.me/263773909307"

@@ -192,13 +192,38 @@ export const useAuthStore = create(
         return profileData.userType
       },
 
-      signUp: async (email, password, name, businessName) => {
+      signUp: async (email, password, name, businessName, businessType) => {
         const { data, error } = await supabase.auth.signUp({
           email,
           password,
-          options: { data: { name, business_name: businessName } },
+          options: { data: { name, business_name: businessName, business_type: businessType || 'retail' } },
         })
         if (error) throw error
+
+        // If email confirmation is disabled Supabase returns a session immediately.
+        // Load the profile (the DB trigger will have already created tenant/user/branch)
+        // and set full auth state so ProtectedRoute doesn't bounce the user.
+        if (data.session && data.user) {
+          try {
+            const profileData = await loadProfile(data.user.id)
+            set({
+              user: data.user,
+              session: data.session,
+              profile: profileData,
+              tenant: profileData.tenants || null,
+              role: profileData.role,
+              branch: profileData.branch || null,
+              userType: profileData.userType,
+              tenantStatus: profileData.tenantStatus || 'pending',
+              isAuthenticated: true,
+              isLoading: false,
+              isDemo: false,
+            })
+          } catch {
+            // Profile may not be ready yet in edge cases; user can sign in normally
+          }
+        }
+
         return data
       },
 
