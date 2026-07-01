@@ -36,8 +36,8 @@ export default function Login() {
     }
   }
 
-  const handleDemoLogin = (persona) => {
-    loginAsDemo(persona)
+  const handleDemoLogin = async (persona) => {
+    await loginAsDemo(persona)
     toast.success(`Signed in as ${persona.name}`)
     navigate('/app/dashboard')
   }

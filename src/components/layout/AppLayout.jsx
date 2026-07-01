@@ -15,9 +15,9 @@ export default function AppLayout() {
   return (
     <div className="flex h-screen max-h-screen overflow-hidden bg-slate-50 dark:bg-slate-950" style={{ height: '100dvh' }}>
       <Sidebar open={mobileSidebarOpen} onClose={() => setMobileSidebarOpen(false)} />
-      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
         <TopBar onMenuClick={() => setMobileSidebarOpen(true)} />
-        <main className="flex-1 overflow-y-auto overflow-x-hidden overscroll-contain">
+        <main className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain">
           <Outlet />
         </main>
       </div>
