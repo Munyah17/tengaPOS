@@ -23,6 +23,7 @@ import Settings from '@/pages/Settings'
 import Insights from '@/pages/Insights'
 import PaymentReturn from '@/pages/PaymentReturn'
 import Payments from '@/pages/Payments'
+import HR from '@/pages/HR'
 import AppLayout from '@/components/layout/AppLayout'
 
 import Dining from '@/pages/Dining'
@@ -106,6 +107,7 @@ export default function App() {
             <Route path="branches" element={<Branches />} />
             <Route path="fiscalisation" element={<Fiscalisation />} />
             <Route path="payments" element={<Payments />} />
+            <Route path="hr" element={<HR />} />
             <Route path="settings" element={<Settings />} />
           </Route>
 

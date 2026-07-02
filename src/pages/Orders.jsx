@@ -1,11 +1,12 @@
-import { useState } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { motion } from 'framer-motion'
-import { Eye, Bell, CheckCircle, Clock, Flame, Timer, Car, Store } from 'lucide-react'
+import { Eye, Bell, CheckCircle, Clock, Flame, Timer, Car, Store, X } from 'lucide-react'
 import ExportMenu from '@/components/common/ExportMenu'
 import { formatCurrency, formatDateTime } from '@/utils/formatters'
 import { useThemeStore } from '@/stores/themeStore'
 import { useAuthStore } from '@/stores/authStore'
 import { useOrderStore } from '@/stores/orderStore'
+import { fetchOrders } from '@/lib/db'
 import toast from 'react-hot-toast'
 
 const DEMO_ORDERS = [
@@ -161,10 +162,27 @@ function RestaurantOrders({ orders }) {
 
 export default function Orders() {
   const { posMode } = useThemeStore()
-  const { isDemo } = useAuthStore()
+  const { isDemo, tenant } = useAuthStore()
   const { orders: liveOrders, seedDemo } = useOrderStore()
   const isRestaurant = posMode === 'restaurant'
-  const orders = isDemo ? DEMO_ORDERS : []
+  const [dbOrders, setDbOrders] = useState([])
+  const [dateFrom, setDateFrom] = useState('')
+  const [dateTo, setDateTo] = useState('')
+
+  useEffect(() => {
+    if (isDemo || !tenant?.id) return
+    fetchOrders(tenant.id)
+      .then(rows => setDbOrders(rows.map(o => ({
+        id: o.order_no || o.id,
+        date: o.created_at,
+        customer: 'Walk-in',
+        items: o.order_items?.reduce((s, i) => s + i.qty, 0) ?? 0,
+        total: parseFloat(o.total),
+        method: o.payment_method || '—',
+        status: o.status,
+      }))))
+      .catch(() => {})
+  }, [isDemo, tenant?.id])
 
   // Seed demo orders for the shared store on first render in restaurant mode
   if (isDemo && isRestaurant && liveOrders.length === 0) seedDemo()
@@ -179,17 +197,53 @@ export default function Orders() {
     elapsed: Math.floor((Date.now() - o.startedAt) / 60000),
   }))
 
+  const allOrders = isDemo ? DEMO_ORDERS : dbOrders
+
+  const orders = useMemo(() => {
+    if (!dateFrom && !dateTo) return allOrders
+    return allOrders.filter(o => {
+      const d = new Date(o.date)
+      if (dateFrom && d < new Date(dateFrom)) return false
+      if (dateTo && d > new Date(dateTo + 'T23:59:59')) return false
+      return true
+    })
+  }, [allOrders, dateFrom, dateTo])
+
+  const dateFiltered = dateFrom || dateTo
+
   return (
     <div className="p-4 sm:p-6">
-      <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-extrabold text-slate-900 dark:text-white">Orders</h1>
           <p className="text-sm text-slate-500">
-            {isRestaurant ? 'Active orders' : 'View and manage all transactions'}
+            {isRestaurant ? 'Active orders' : 'View and manage all orders'}
           </p>
         </div>
-        {!isRestaurant && <ExportMenu data={orders} columns={exportColumns} title="Orders" filename="tengapos_orders" />}
+        {!isRestaurant && (
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-800">
+              <span className="text-xs text-slate-500 whitespace-nowrap">From</span>
+              <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)}
+                className="bg-transparent text-sm text-slate-900 focus:outline-none dark:text-white" />
+              <span className="text-xs text-slate-400">—</span>
+              <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)}
+                className="bg-transparent text-sm text-slate-900 focus:outline-none dark:text-white" />
+              {dateFiltered && (
+                <button onClick={() => { setDateFrom(''); setDateTo('') }} className="ml-1 text-slate-400 hover:text-red-500">
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              )}
+            </div>
+            <ExportMenu data={orders} columns={exportColumns} title={`Orders${dateFiltered ? ` (${dateFrom || '…'} to ${dateTo || '…'})` : ''}`} filename="tengapos_orders" />
+          </div>
+        )}
       </div>
+      {!isRestaurant && dateFiltered && (
+        <p className="mb-4 text-xs text-slate-500">
+          Showing {orders.length} of {allOrders.length} orders for selected date range
+        </p>
+      )}
 
       {isRestaurant ? (
         <RestaurantOrders orders={restaurantOrders} />

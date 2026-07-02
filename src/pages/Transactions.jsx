@@ -1,6 +1,6 @@
 import { motion } from 'framer-motion'
-import { useState, useEffect } from 'react'
-import { RefreshCw } from 'lucide-react'
+import { useState, useEffect, useMemo } from 'react'
+import { RefreshCw, X } from 'lucide-react'
 import ExportMenu from '@/components/common/ExportMenu'
 import { formatCurrency, formatDateTime } from '@/utils/formatters'
 import { useAuthStore } from '@/stores/authStore'
@@ -30,6 +30,8 @@ export default function Transactions() {
   const { isDemo, tenant } = useAuthStore()
   const [liveTransactions, setLiveTransactions] = useState([])
   const [loading, setLoading] = useState(false)
+  const [dateFrom, setDateFrom] = useState('')
+  const [dateTo, setDateTo] = useState('')
 
   const load = () => {
     if (isDemo || !tenant?.id) return
@@ -52,24 +54,54 @@ export default function Transactions() {
 
   useEffect(() => { load() }, [isDemo, tenant?.id])
 
-  const transactions = isDemo ? DEMO_TRANSACTIONS : liveTransactions
+  const allTransactions = isDemo ? DEMO_TRANSACTIONS : liveTransactions
+
+  const transactions = useMemo(() => {
+    if (!dateFrom && !dateTo) return allTransactions
+    return allTransactions.filter(t => {
+      const d = new Date(t.date)
+      if (dateFrom && d < new Date(dateFrom)) return false
+      if (dateTo && d > new Date(dateTo + 'T23:59:59')) return false
+      return true
+    })
+  }, [allTransactions, dateFrom, dateTo])
+
+  const dateFiltered = dateFrom || dateTo
 
   return (
     <div className="p-6">
-      <div className="mb-6 flex items-center justify-between">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-extrabold text-slate-900 dark:text-white">Transactions</h1>
           <p className="text-sm text-slate-500">Detailed transaction history</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-800">
+            <span className="text-xs text-slate-500 whitespace-nowrap">From</span>
+            <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)}
+              className="bg-transparent text-sm text-slate-900 focus:outline-none dark:text-white" />
+            <span className="text-xs text-slate-400">—</span>
+            <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)}
+              className="bg-transparent text-sm text-slate-900 focus:outline-none dark:text-white" />
+            {dateFiltered && (
+              <button onClick={() => { setDateFrom(''); setDateTo('') }} className="ml-1 text-slate-400 hover:text-red-500">
+                <X className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </div>
           {!isDemo && (
             <button onClick={load} className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
               <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
             </button>
           )}
-          <ExportMenu data={transactions} columns={exportColumns} title="Transactions" filename="tengapos_transactions" />
+          <ExportMenu data={transactions} columns={exportColumns} title={`Transactions${dateFiltered ? ` (${dateFrom || '…'} to ${dateTo || '…'})` : ''}`} filename="tengapos_transactions" />
         </div>
       </div>
+      {dateFiltered && (
+        <p className="mb-4 text-xs text-slate-500">
+          Showing {transactions.length} of {allTransactions.length} transactions for selected date range
+        </p>
+      )}
 
       <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
         <div className="overflow-x-auto">

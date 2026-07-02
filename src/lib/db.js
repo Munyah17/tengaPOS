@@ -527,3 +527,100 @@ export async function fetchDashboardMetrics(tenantId) {
     weekData,
   }
 }
+
+// ─── HR & Payroll ──────────────────────────────────────────────────────────────
+
+export async function fetchStaffPayroll(tenantId) {
+  const { data, error } = await supabase
+    .from('users')
+    .select('id, name, role, employment_type, pay_type, base_pay, is_active, branches(name)')
+    .eq('tenant_id', tenantId)
+    .order('name')
+  if (error) throw error
+  return data
+}
+
+export async function updateStaffPay(userId, { employmentType, payType, basePay }) {
+  const { error } = await supabase
+    .from('users')
+    .update({ employment_type: employmentType, pay_type: payType, base_pay: basePay, updated_at: new Date().toISOString() })
+    .eq('id', userId)
+  if (error) throw error
+}
+
+export async function fetchPayrollRuns(tenantId) {
+  const { data, error } = await supabase
+    .from('payroll_runs')
+    .select('*')
+    .eq('tenant_id', tenantId)
+    .order('created_at', { ascending: false })
+  if (error) throw error
+  return data
+}
+
+export async function fetchPayrollEntries(runId) {
+  const { data, error } = await supabase
+    .from('payroll_entries')
+    .select('*')
+    .eq('run_id', runId)
+    .order('employee_name')
+  if (error) throw error
+  return data
+}
+
+export async function savePayrollRun(tenantId, userId, run, entries) {
+  const totals = entries.reduce((acc, e) => {
+    const gross = parseFloat(e.gross_pay) || 0
+    const ded = (parseFloat(e.paye) || 0) + (parseFloat(e.nssa) || 0) + (parseFloat(e.other_deductions) || 0)
+    return { gross: acc.gross + gross, deductions: acc.deductions + ded, net: acc.net + Math.max(0, gross - ded) }
+  }, { gross: 0, deductions: 0, net: 0 })
+
+  let runId = run.id
+  if (runId) {
+    const { error } = await supabase.from('payroll_runs').update({
+      period_label: run.period_label, period_start: run.period_start, period_end: run.period_end,
+      pay_date: run.pay_date || null, status: run.status,
+      total_gross: totals.gross, total_deductions: totals.deductions, total_net: totals.net,
+      employee_count: entries.length, notes: run.notes || null, updated_at: new Date().toISOString(),
+    }).eq('id', runId)
+    if (error) throw error
+    await supabase.from('payroll_entries').delete().eq('run_id', runId)
+  } else {
+    const { data, error } = await supabase.from('payroll_runs').insert({
+      tenant_id: tenantId, created_by: userId,
+      period_label: run.period_label, period_start: run.period_start, period_end: run.period_end,
+      pay_date: run.pay_date || null, status: run.status,
+      total_gross: totals.gross, total_deductions: totals.deductions, total_net: totals.net,
+      employee_count: entries.length, notes: run.notes || null,
+    }).select().single()
+    if (error) throw error
+    runId = data.id
+  }
+
+  const entryRows = entries.map(e => {
+    const gross = parseFloat(e.gross_pay) || 0
+    const paye = parseFloat(e.paye) || 0
+    const nssa = parseFloat(e.nssa) || 0
+    const other = parseFloat(e.other_deductions) || 0
+    return {
+      tenant_id: tenantId, run_id: runId, user_id: e.user_id || null,
+      employee_name: e.employee_name, employment_type: e.employment_type, pay_type: e.pay_type,
+      gross_pay: gross, paye, nssa, other_deductions: other,
+      net_pay: Math.max(0, gross - paye - nssa - other), notes: e.notes || null,
+    }
+  })
+  const { error: entryError } = await supabase.from('payroll_entries').insert(entryRows)
+  if (entryError) throw entryError
+  return runId
+}
+
+export async function updatePayrollRunStatus(runId, status) {
+  const { error } = await supabase.from('payroll_runs')
+    .update({ status, updated_at: new Date().toISOString() }).eq('id', runId)
+  if (error) throw error
+}
+
+export async function deletePayrollRun(runId) {
+  const { error } = await supabase.from('payroll_runs').delete().eq('id', runId)
+  if (error) throw error
+}
