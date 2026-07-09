@@ -5,7 +5,7 @@ import {
 } from 'lucide-react'
 import { useFiscalStore } from '@/stores/fiscalStore'
 import { useAuthStore } from '@/stores/authStore'
-import { pingDevice } from '@/lib/fiscalApi'
+import { pingDevice, registerDevice } from '@/lib/fiscalApi'
 import { supabase } from '@/lib/supabase'
 import toast from 'react-hot-toast'
 
@@ -31,6 +31,7 @@ export default function Fiscalisation() {
   })
   const [pingLoading, setPingLoading] = useState(false)
   const [dayLoading, setDayLoading] = useState(false)
+  const [registerLoading, setRegisterLoading] = useState(false)
 
   useEffect(() => {
     if (isDemo || !tenant?.id) return
@@ -145,6 +146,30 @@ export default function Fiscalisation() {
     toast.success(next ? 'ZIMRA fiscalisation enabled' : 'ZIMRA fiscalisation disabled')
   }
 
+  const handleRegisterDevice = async () => {
+    if (isDemo) { toast.error('Not available in demo mode'); return }
+    if (!tenant?.id) { toast.error('Not authenticated'); return }
+    if (!fiscalForm.activationKey) { toast.error('Enter activation key from ZIMRA'); return }
+    if (!isSupabaseConfigured) { toast.error('Service not available — contact support'); return }
+
+    setRegisterLoading(true)
+    try {
+      const result = await registerDevice({
+        tenantId: tenant.id,
+        activationKey: fiscalForm.activationKey,
+        tin: fiscalForm.tin,
+        vatNumber: fiscalForm.vatNumber
+      })
+      if (result?.error) throw new Error(result.error)
+      toast.success('Device registered with ZIMRA! Ready to use.')
+      fiscal.setRegistered(true)
+    } catch (err) {
+      toast.error('Registration failed: ' + (err.message || 'Unknown error'))
+    } finally {
+      setRegisterLoading(false)
+    }
+  }
+
   const handlePing = async () => {
     if (!fiscal.isEnabled) {
       toast.error('Enable ZIMRA fiscalisation first')
@@ -165,7 +190,7 @@ export default function Fiscalisation() {
     } catch (err) {
       const msg = err?.message || ''
       toast.error(msg.includes('FunctionNotFound') || msg.includes('404')
-        ? 'ZIMRA service unavailable — contact support'
+        ? 'ZIMRA service unavailable — contact support. Check: 1) Edge functions deployed 2) ZIMRA_BASE_URL set 3) Device exists'
         : `Connection failed: ${msg || 'Unknown error'}`
       )
     } finally {

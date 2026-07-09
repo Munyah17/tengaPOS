@@ -50,3 +50,12 @@ export async function submitReceipt({ tenantId, deviceID, receipt }) {
 export async function closeFiscalDay({ tenantId, deviceID, fiscalDayNo, counters }) {
   return callEdgeFunction('zimra-close-day', { tenant_id: tenantId, deviceID, fiscalDayNo, counters })
 }
+
+export async function registerDevice({ tenantId, activationKey, tin, vatNumber }) {
+  return callEdgeFunction('zimra-register-device', {
+    tenant_id: tenantId,
+    activation_key: activationKey,
+    tin,
+    vat_number: vatNumber
+  })
+}
