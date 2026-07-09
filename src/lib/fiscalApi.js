@@ -19,10 +19,6 @@ export async function verifyTaxpayer({ tenantId, tin, vatNumber }) {
   return callEdgeFunction('zimra-verify-taxpayer', { tenant_id: tenantId, tin, vatNumber })
 }
 
-export async function registerDevice({ tenantId, deviceID, activationKey, tin }) {
-  return callEdgeFunction('zimra-register-device', { tenant_id: tenantId, deviceID, activationKey, tin })
-}
-
 export async function issueCertificate({ tenantId, deviceID }) {
   return callEdgeFunction('zimra-issue-certificate', { tenant_id: tenantId, deviceID })
 }
