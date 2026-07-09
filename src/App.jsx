@@ -30,6 +30,7 @@ import Dining from '@/pages/Dining'
 import PendingApproval from '@/pages/PendingApproval'
 import AdminLayout from '@/components/admin/AdminLayout'
 import AdminDashboard from '@/pages/admin/AdminDashboard'
+import SuperAdminDashboard from '@/pages/admin/SuperAdminDashboard'
 import AdminTenants from '@/pages/admin/AdminTenants'
 import AdminStaff from '@/pages/admin/AdminStaff'
 import AdminSupport from '@/pages/admin/AdminSupport'
@@ -57,10 +58,21 @@ function ProtectedRoute({ children }) {
 }
 
 function AdminRoute({ children }) {
-  const { isAuthenticated, userType, isDemo } = useAuthStore()
+  const { isAuthenticated, userType, isDemo, role } = useAuthStore()
   if (!isAuthenticated) return <Navigate to="/login" replace />
   // Demo users cannot access the admin panel under any circumstances
   if (isDemo || userType !== 'app_owner') return <Navigate to="/app/dashboard" replace />
+  // Super Admin redirects to super admin portal
+  if (role === 'super_admin') return <Navigate to="/admin/super/dashboard" replace />
+  // Regular admin and others stay in regular admin
+  return children
+}
+
+function SuperAdminRoute({ children }) {
+  const { isAuthenticated, userType, isDemo, role } = useAuthStore()
+  if (!isAuthenticated) return <Navigate to="/login" replace />
+  if (isDemo || userType !== 'app_owner') return <Navigate to="/app/dashboard" replace />
+  if (role !== 'super_admin') return <Navigate to="/admin/dashboard" replace />
   return children
 }
 
@@ -111,7 +123,36 @@ export default function App() {
             <Route path="settings" element={<Settings />} />
           </Route>
 
-          {/* Admin panel routes */}
+          {/* Super Admin Portal */}
+          <Route
+            path="/admin/super"
+            element={
+              <SuperAdminRoute>
+                <AdminLayout />
+              </SuperAdminRoute>
+            }
+          >
+            <Route index element={<Navigate to="dashboard" replace />} />
+            <Route path="dashboard" element={<SuperAdminDashboard />} />
+            <Route path="tenants" element={<AdminTenants />} />
+            <Route path="subscriptions" element={<AdminDashboard />} />
+            <Route path="billing" element={<AdminDashboard />} />
+            <Route path="pricing" element={<AdminDashboard />} />
+            <Route path="revenue" element={<AdminReports />} />
+            <Route path="staff-create" element={<AdminStaff />} />
+            <Route path="staff" element={<AdminStaff />} />
+            <Route path="roles" element={<AdminDashboard />} />
+            <Route path="support" element={<AdminSupport />} />
+            <Route path="announcements" element={<AdminNotifications />} />
+            <Route path="broadcasts" element={<AdminNotifications />} />
+            <Route path="audit-logs" element={<AdminDashboard />} />
+            <Route path="compliance" element={<AdminDashboard />} />
+            <Route path="backups" element={<AdminDashboard />} />
+            <Route path="settings" element={<AdminSettings />} />
+            <Route path="health" element={<AdminDashboard />} />
+          </Route>
+
+          {/* Admin Panel (Staff Operations) */}
           <Route
             path="/admin"
             element={
@@ -122,11 +163,10 @@ export default function App() {
           >
             <Route index element={<Navigate to="dashboard" replace />} />
             <Route path="dashboard" element={<AdminDashboard />} />
-            <Route path="tenants" element={<AdminTenants />} />
-            <Route path="staff" element={<AdminStaff />} />
             <Route path="support" element={<AdminSupport />} />
+            <Route path="announcements" element={<AdminNotifications />} />
             <Route path="reports" element={<AdminReports />} />
-            <Route path="settings" element={<AdminSettings />} />
+            <Route path="profile" element={<AdminSettings />} />
             <Route path="notifications" element={<AdminNotifications />} />
           </Route>
 

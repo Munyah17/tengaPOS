@@ -3,12 +3,84 @@ import { AnimatePresence, motion } from 'framer-motion'
 import {
   LayoutDashboard, Building2, Users, LifeBuoy, BarChart3,
   Settings, LogOut, Shield, X, ChevronLeft, ChevronRight, Bell,
+  DollarSign, Tag, Database, Activity, Mail, TrendingUp, Lock, Eye,
 } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import { useAuthStore } from '@/stores/authStore'
 import { supabase } from '@/lib/supabase'
-import posLogo from '@/assets/pos-logo.png'
 import posIcon from '@/assets/pos-icon.png'
+
+// Helper to render grouped navigation (Super Admin)
+function renderGroupedNav(items, collapsed, unread, onClose) {
+  const grouped = {}
+  items.forEach(item => {
+    const group = item.group || 'OTHER'
+    if (!grouped[group]) grouped[group] = []
+    grouped[group].push(item)
+  })
+
+  return (
+    <div className="space-y-4">
+      {Object.entries(grouped).map(([groupName, groupItems]) => (
+        <div key={groupName}>
+          {!collapsed && (
+            <div className="px-3 py-2 text-xs font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400">
+              {groupName}
+            </div>
+          )}
+          <div className="space-y-0.5">
+            {groupItems.map((item) => renderNavItem(item, collapsed, unread, onClose))}
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+// Helper to render single nav item
+function renderNavItem(item, collapsed, unread, onClose) {
+  return (
+    <NavLink
+      key={item.path}
+      to={item.path}
+      onClick={onClose}
+      className={({ isActive }) =>
+        `group flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all ${
+          isActive
+            ? 'bg-indigo-100 text-indigo-600 dark:bg-indigo-600/20 dark:text-indigo-400'
+            : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-white/5 dark:hover:text-white'
+        }`
+      }
+      title={collapsed ? item.label : undefined}
+    >
+      {({ isActive }) => (
+        <>
+          <div className="relative flex-shrink-0">
+            <item.icon className={`h-5 w-5 ${isActive ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-500 group-hover:text-slate-700 dark:group-hover:text-slate-300'}`} />
+            {item.badge && unread > 0 && (
+              <span className="absolute -right-1.5 -top-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[9px] font-bold text-white">
+                {unread > 9 ? '9+' : unread}
+              </span>
+            )}
+          </div>
+          <AnimatePresence mode="wait">
+            {!collapsed && (
+              <motion.span
+                key="label"
+                initial={{ opacity: 0, width: 0 }}
+                animate={{ opacity: 1, width: 'auto' }}
+                exit={{ opacity: 0, width: 0 }}
+                className="truncate"
+              >
+                {item.label}
+              </motion.span>
+            )}
+          </AnimatePresence>
+        </>
+      )}
+    </NavLink>
+  )
+}
 
 const ROLE_BADGE = {
   super_admin: { bg: 'bg-red-100 dark:bg-red-900/30', text: 'text-red-700 dark:text-red-400', label: 'Super Admin' },
@@ -18,27 +90,52 @@ const ROLE_BADGE = {
 
 const NAV_BY_ROLE = {
   super_admin: [
-    { icon: LayoutDashboard, label: 'Dashboard',      path: '/admin/dashboard' },
-    { icon: Building2,       label: 'Tenants',        path: '/admin/tenants' },
-    { icon: Bell,            label: 'Notifications',  path: '/admin/notifications', badge: true },
-    { icon: Users,           label: 'Staff',          path: '/admin/staff' },
-    { icon: LifeBuoy,        label: 'Support',        path: '/admin/support' },
-    { icon: BarChart3,       label: 'Reports',        path: '/admin/reports' },
-    { icon: Settings,        label: 'Settings',       path: '/admin/settings' },
+    // OVERVIEW
+    { icon: LayoutDashboard, label: 'Dashboard', path: '/admin/super/dashboard', group: 'OVERVIEW' },
+    { icon: Activity, label: 'System Health', path: '/admin/super/health', group: 'OVERVIEW' },
+
+    // TENANT MANAGEMENT
+    { icon: Building2, label: 'All Tenants', path: '/admin/super/tenants', group: 'TENANTS' },
+    { icon: DollarSign, label: 'Subscriptions', path: '/admin/super/subscriptions', group: 'TENANTS' },
+    { icon: BarChart3, label: 'Billing & Revenue', path: '/admin/super/billing', group: 'TENANTS' },
+
+    // PRICING
+    { icon: Tag, label: 'Pricing Tiers', path: '/admin/super/pricing', group: 'PRICING' },
+    { icon: TrendingUp, label: 'Revenue Reports', path: '/admin/super/revenue', group: 'PRICING' },
+
+    // STAFF MANAGEMENT
+    { icon: Users, label: 'Create Staff', path: '/admin/super/staff-create', group: 'STAFF' },
+    { icon: Users, label: 'Staff Directory', path: '/admin/super/staff', group: 'STAFF' },
+    { icon: Lock, label: 'Roles & Permissions', path: '/admin/super/roles', group: 'STAFF' },
+
+    // COMMUNICATIONS
+    { icon: Bell, label: 'Announcements', path: '/admin/super/announcements', group: 'COMMS', badge: true },
+    { icon: Mail, label: 'Email Broadcasts', path: '/admin/super/broadcasts', group: 'COMMS' },
+
+    // SUPPORT
+    { icon: LifeBuoy, label: 'Support Tickets', path: '/admin/super/support', group: 'SUPPORT' },
+
+    // COMPLIANCE
+    { icon: Shield, label: 'Audit Logs', path: '/admin/super/audit-logs', group: 'COMPLIANCE' },
+    { icon: Eye, label: 'ZIMRA Compliance', path: '/admin/super/compliance', group: 'COMPLIANCE' },
+
+    // SYSTEM
+    { icon: Database, label: 'Backups & Recovery', path: '/admin/super/backups', group: 'SYSTEM' },
+    { icon: Settings, label: 'System Settings', path: '/admin/super/settings', group: 'SYSTEM' },
   ],
+
   admin: [
-    { icon: LayoutDashboard, label: 'Dashboard',      path: '/admin/dashboard' },
-    { icon: Building2,       label: 'Tenants',        path: '/admin/tenants' },
-    { icon: Bell,            label: 'Notifications',  path: '/admin/notifications', badge: true },
-    { icon: Users,           label: 'Staff',          path: '/admin/staff' },
-    { icon: LifeBuoy,        label: 'Support',        path: '/admin/support' },
-    { icon: BarChart3,       label: 'Reports',        path: '/admin/reports' },
+    // LIMITED TO OPERATIONS ONLY
+    { icon: LayoutDashboard, label: 'Dashboard', path: '/admin/dashboard', group: 'OPERATIONS' },
+    { icon: LifeBuoy, label: 'Support Tickets', path: '/admin/support', group: 'OPERATIONS' },
+    { icon: Bell, label: 'Send Announcement', path: '/admin/announcements', group: 'COMMS', badge: true },
+    { icon: Eye, label: 'Reports (View Only)', path: '/admin/reports', group: 'REPORTS', readonly: true },
+    { icon: Settings, label: 'Profile Settings', path: '/admin/profile', group: 'ACCOUNT' },
   ],
+
   tech_support: [
-    { icon: LayoutDashboard, label: 'Dashboard',      path: '/admin/dashboard' },
-    { icon: Building2,       label: 'Clients',        path: '/admin/tenants' },
-    { icon: Bell,            label: 'Notifications',  path: '/admin/notifications', badge: true },
-    { icon: LifeBuoy,        label: 'Support',        path: '/admin/support' },
+    { icon: LayoutDashboard, label: 'Dashboard', path: '/admin/dashboard', group: 'SUPPORT' },
+    { icon: LifeBuoy, label: 'Support Tickets', path: '/admin/support', group: 'SUPPORT' },
   ],
 }
 
@@ -165,49 +262,15 @@ export default function AdminSidebar({ open = false, onClose }) {
 
         {/* Nav */}
         <nav className="flex-1 overflow-y-auto px-3 py-3">
-          <div className="space-y-0.5">
-            {navItems.map((item) => (
-              <NavLink
-                key={item.path}
-                to={item.path}
-                onClick={onClose}
-                className={({ isActive }) =>
-                  `group flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all ${
-                    isActive
-                      ? 'bg-indigo-100 text-indigo-600 dark:bg-indigo-600/20 dark:text-indigo-400'
-                      : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-white/5 dark:hover:text-white'
-                  }`
-                }
-                title={collapsed ? item.label : undefined}
-              >
-                {({ isActive }) => (
-                  <>
-                    <div className="relative flex-shrink-0">
-                      <item.icon className={`h-5 w-5 ${isActive ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-500 group-hover:text-slate-700 dark:group-hover:text-slate-300'}`} />
-                      {item.badge && unread > 0 && (
-                        <span className="absolute -right-1.5 -top-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[9px] font-bold text-white">
-                          {unread > 9 ? '9+' : unread}
-                        </span>
-                      )}
-                    </div>
-                    <AnimatePresence mode="wait">
-                      {!collapsed && (
-                        <motion.span
-                          key="label"
-                          initial={{ opacity: 0, width: 0 }}
-                          animate={{ opacity: 1, width: 'auto' }}
-                          exit={{ opacity: 0, width: 0 }}
-                          className="truncate"
-                        >
-                          {item.label}
-                        </motion.span>
-                      )}
-                    </AnimatePresence>
-                  </>
-                )}
-              </NavLink>
-            ))}
-          </div>
+          {role === 'super_admin' ? (
+            // GROUPED NAVIGATION FOR SUPER ADMIN
+            renderGroupedNav(navItems, collapsed, unread, onClose)
+          ) : (
+            // SIMPLE LIST FOR ADMIN/TECH_SUPPORT
+            <div className="space-y-0.5">
+              {navItems.map((item) => renderNavItem(item, collapsed, unread, onClose))}
+            </div>
+          )}
         </nav>
 
         {/* Sign out */}
