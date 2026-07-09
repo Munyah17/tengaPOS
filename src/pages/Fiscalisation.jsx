@@ -103,14 +103,46 @@ export default function Fiscalisation() {
   const updateForm = (field) => (e) =>
     setFiscalForm((prev) => ({ ...prev, [field]: e.target.value }))
 
-  const handleSave = () => {
-    fiscal.setConfig(fiscalForm)
-    toast.success('ZIMRA configuration saved')
+  const handleSave = async () => {
+    if (isDemo || !tenant?.id) {
+      fiscal.setConfig(fiscalForm)
+      toast.success('Saved locally (demo mode — connect Supabase to persist)')
+      return
+    }
+    try {
+      const { error } = await supabase
+        .from('tenant_fiscal_configs')
+        .upsert({
+          tenant_id:              tenant.id,
+          device_id:              fiscalForm.deviceID              || null,
+          activation_key:         fiscalForm.activationKey         || null,
+          device_serial_no:       fiscalForm.deviceSerialNo        || null,
+          device_model_name:      fiscalForm.deviceModelName       || 'tengaPOS-v2',
+          device_model_version_no: fiscalForm.deviceModelVersionNo || '2.0.0',
+          tin:                    fiscalForm.tin                   || null,
+          vat_number:             fiscalForm.vatNumber             || null,
+          branch_name:            fiscalForm.branchName            || null,
+          branch_address:         fiscalForm.branchAddress         || null,
+          branch_contacts:        fiscalForm.branchContacts        || null,
+          updated_at:             new Date().toISOString(),
+        }, { onConflict: 'tenant_id' })
+      if (error) throw error
+      fiscal.setConfig(fiscalForm)
+      toast.success('ZIMRA configuration saved')
+    } catch (err) {
+      toast.error(err.message || 'Failed to save configuration')
+    }
   }
 
-  const handleEnable = () => {
-    fiscal.setEnabled(!fiscal.isEnabled)
-    toast.success(fiscal.isEnabled ? 'ZIMRA fiscalisation disabled' : 'ZIMRA fiscalisation enabled')
+  const handleEnable = async () => {
+    const next = !fiscal.isEnabled
+    fiscal.setEnabled(next)
+    if (!isDemo && tenant?.id) {
+      await supabase
+        .from('tenant_fiscal_configs')
+        .upsert({ tenant_id: tenant.id, is_enabled: next, updated_at: new Date().toISOString() }, { onConflict: 'tenant_id' })
+    }
+    toast.success(next ? 'ZIMRA fiscalisation enabled' : 'ZIMRA fiscalisation disabled')
   }
 
   const handlePing = async () => {

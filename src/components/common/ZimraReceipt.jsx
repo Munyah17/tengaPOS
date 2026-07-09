@@ -29,6 +29,7 @@ const PAYMENT_DISPLAY = {
 }
 
 export default function ZimraReceipt({ receipt, onClose }) {
+  const fdmsQrUrl = receipt.fdmsQrUrl || null
   const receiptRef = useRef(null)
   const fiscal = useFiscalStore()
 
@@ -67,7 +68,8 @@ export default function ZimraReceipt({ receipt, onClose }) {
           .receipt-line { white-space: pre; display: block; }
           .center { text-align: center; }
           .separator { border-top: 1px dashed #000; margin: 4px 0; }
-          .qr-placeholder { border: 2px solid #000; width: 80px; height: 80px; margin: 8px auto; display: flex; align-items: center; justify-content: center; font-size: 9px; text-align: center; }
+          .qr-placeholder { border: 2px dashed #999; width: 80px; height: 80px; margin: 8px auto; display: flex; align-items: center; justify-content: center; font-size: 8px; text-align: center; color: #999; }
+          .qr-url-box { border: 1px solid #000; padding: 3px; margin: 4px 0; font-size: 7px; word-break: break-all; text-align: center; }
           .fiscal-badge { border: 2px solid #000; padding: 4px; margin: 4px 0; text-align: center; font-weight: bold; }
           .not-fiscal { border: 2px dashed #999; padding: 4px; margin: 4px 0; text-align: center; }
         </style>
@@ -216,11 +218,18 @@ export default function ZimraReceipt({ receipt, onClose }) {
                 </div>
                 <div className="mt-1 text-[9px]">Device ID: {deviceID}</div>
                 <div className="text-[9px]">Receipt Global No: {receiptGlobalNo}</div>
-                {/* QR code placeholder — populated by Edge Function on live fiscalisation */}
-                <div className="mx-auto my-2 flex h-20 w-20 items-center justify-center border-2 border-black text-[9px] leading-tight">
-                  ZIMRA<br />QR<br />CODE
-                </div>
-                <div className="text-[9px]">Verify: zimra.co.zw/verify</div>
+                {fdmsQrUrl ? (
+                  /* Real FDMS verification URL — print as scannable QR via thermal printer driver */
+                  <div className="mx-auto my-2 border border-black p-1">
+                    <div className="text-[8px] font-bold">SCAN TO VERIFY</div>
+                    <div className="mt-0.5 break-all text-[7px] leading-tight">{fdmsQrUrl}</div>
+                  </div>
+                ) : (
+                  <div className="mx-auto my-2 flex h-20 w-20 items-center justify-center border-2 border-dashed border-black text-[8px] leading-tight text-slate-400">
+                    QR pending<br />FDMS sync
+                  </div>
+                )}
+                <div className="text-[9px]">Verify: fdms.zimra.co.zw</div>
               </div>
             ) : (
               <div className="border border-dashed border-amber-500 p-2 text-center">

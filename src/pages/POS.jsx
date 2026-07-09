@@ -14,6 +14,8 @@ import { DEMO_PRODUCTS, DEMO_CATEGORIES, RESTAURANT_DEMO_PRODUCTS, PAYMENT_METHO
 import { formatCurrency, generateReceiptNumber } from '@/utils/formatters'
 import { initiatePaynowCheckout } from '@/lib/paynow'
 import { fetchProducts, saveCheckout } from '@/lib/db'
+import { supabase } from '@/lib/supabase'
+import { useFiscalStore } from '@/stores/fiscalStore'
 import toast from 'react-hot-toast'
 
 const restaurantCategories = [
@@ -29,6 +31,7 @@ export default function POS() {
   const { isDemo, tenant, user, branch } = useAuthStore()
   const isRestaurant = posMode === 'restaurant'
   const cart = useCartStore()
+  const fiscal = useFiscalStore()
   const [search, setSearch] = useState('')
   const [category, setCategory] = useState('all')
   const [showReceipt, setShowReceipt] = useState(false)
@@ -74,6 +77,8 @@ export default function POS() {
 
     let receiptNumber = generateReceiptNumber()
 
+    let fdmsQrUrl = null
+
     if (!isDemo && tenant?.id) {
       try {
         const result = await saveCheckout({
@@ -94,6 +99,39 @@ export default function POS() {
       } catch (err) {
         toast.error('Sale saved locally only — sync error: ' + (err.message || 'unknown'))
       }
+
+      // Submit to ZIMRA FDMS if fiscal day is open
+      if (fiscal.isEnabled && fiscal.isRegistered && fiscal.fiscalDayStatus === 'open') {
+        try {
+          const { data: fdmsData, error: fdmsErr } = await supabase.functions.invoke(
+            'zimra-submit-receipt',
+            {
+              body: {
+                tenant_id: tenant.id,
+                receipt: {
+                  receiptNumber,
+                  items: cart.items.map((i) => ({ name: i.name, price: i.price, quantity: i.quantity })),
+                  subtotal,
+                  tax,
+                  total,
+                  paymentMethod: cart.paymentMethod,
+                  date: new Date().toISOString(),
+                },
+              },
+            },
+          )
+          if (!fdmsErr && fdmsData && !fdmsData.error) {
+            fiscal.incrementReceiptNo()
+            if (fdmsData.fdmsHash) fiscal.setLastReceiptHash(fdmsData.fdmsHash)
+            fdmsQrUrl = fdmsData.receiptQrUrl || null
+            if (fdmsData.warning) {
+              toast(`Fiscalised locally — ZIMRA unreachable: ${fdmsData.warning}`, { duration: 5000 })
+            }
+          }
+        } catch {
+          // Non-blocking — the sale is already saved; fiscal failure is not fatal
+        }
+      }
     }
 
     const receipt = {
@@ -105,6 +143,7 @@ export default function POS() {
       paymentMethod: cart.paymentMethod,
       date: new Date().toISOString(),
       cashier: isDemo ? 'Demo Cashier' : (useAuthStore.getState().profile?.name || 'Cashier'),
+      fdmsQrUrl,
     }
     setReceiptData(receipt)
     setShowReceipt(true)
