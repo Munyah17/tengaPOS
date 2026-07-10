@@ -37,6 +37,17 @@ import AdminSupport from '@/pages/admin/AdminSupport'
 import AdminReports from '@/pages/admin/AdminReports'
 import AdminSettings from '@/pages/admin/AdminSettings'
 import AdminNotifications from '@/pages/admin/AdminNotifications'
+import SuperAdminSubscriptions from '@/pages/admin/SuperAdminSubscriptions'
+import SuperAdminBilling from '@/pages/admin/SuperAdminBilling'
+import SuperAdminPricing from '@/pages/admin/SuperAdminPricing'
+import SuperAdminHealth from '@/pages/admin/SuperAdminHealth'
+import SuperAdminAudit from '@/pages/admin/SuperAdminAudit'
+import SuperAdminCompliance from '@/pages/admin/SuperAdminCompliance'
+import SuperAdminBackups from '@/pages/admin/SuperAdminBackups'
+import SuperAdminRoles from '@/pages/admin/SuperAdminRoles'
+import SuperAdminAnnouncements from '@/pages/admin/SuperAdminAnnouncements'
+import SuperAdminBroadcasts from '@/pages/admin/SuperAdminBroadcasts'
+import Checkout from '@/pages/Checkout'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -48,12 +59,19 @@ const queryClient = new QueryClient({
 })
 
 function ProtectedRoute({ children }) {
-  const { isAuthenticated, userType, tenantStatus, isDemo } = useAuthStore()
+  const { isAuthenticated, userType, tenantStatus, isDemo, tenant } = useAuthStore()
   if (!isAuthenticated) return <Navigate to="/login" replace />
   // Demo users are NEVER redirected to /admin — they stay in the tenant app always
   if (!isDemo && userType === 'app_owner') return <Navigate to="/admin/dashboard" replace />
+  // 7-day trial: once it lapses without a paid plan, everything routes to checkout
+  const onTrial = tenant?.trial_ends_at && !tenant?.plan_start_date
+  const trialExpired = onTrial && new Date(tenant.trial_ends_at) <= new Date()
+  if (!isDemo && trialExpired) return <Navigate to="/checkout" replace />
   if (!isDemo && tenantStatus === 'pending') return <Navigate to="/pending" replace />
-  if (!isDemo && tenantStatus === 'suspended') return <Navigate to="/pending" replace />
+  if (!isDemo && tenantStatus === 'suspended') {
+    // Suspended because the trial ran out → pay; suspended by Super Admin → pending screen
+    return <Navigate to={onTrial ? '/checkout' : '/pending'} replace />
+  }
   return children
 }
 
@@ -94,6 +112,7 @@ export default function App() {
           <Route path="/register" element={<Register />} />
           <Route path="/dining" element={<Dining />} />
           <Route path="/pending" element={<PendingApproval />} />
+          <Route path="/checkout" element={<Checkout />} />
 
           {/* Tenant app routes */}
           <Route
@@ -134,22 +153,21 @@ export default function App() {
           >
             <Route index element={<Navigate to="dashboard" replace />} />
             <Route path="dashboard" element={<SuperAdminDashboard />} />
+            <Route path="notifications" element={<AdminNotifications />} />
             <Route path="tenants" element={<AdminTenants />} />
-            <Route path="subscriptions" element={<AdminDashboard />} />
-            <Route path="billing" element={<AdminDashboard />} />
-            <Route path="pricing" element={<AdminDashboard />} />
-            <Route path="revenue" element={<AdminReports />} />
-            <Route path="staff-create" element={<AdminStaff />} />
+            <Route path="subscriptions" element={<SuperAdminSubscriptions />} />
+            <Route path="billing" element={<SuperAdminBilling />} />
+            <Route path="pricing" element={<SuperAdminPricing />} />
             <Route path="staff" element={<AdminStaff />} />
-            <Route path="roles" element={<AdminDashboard />} />
+            <Route path="roles" element={<SuperAdminRoles />} />
             <Route path="support" element={<AdminSupport />} />
-            <Route path="announcements" element={<AdminNotifications />} />
-            <Route path="broadcasts" element={<AdminNotifications />} />
-            <Route path="audit-logs" element={<AdminDashboard />} />
-            <Route path="compliance" element={<AdminDashboard />} />
-            <Route path="backups" element={<AdminDashboard />} />
+            <Route path="announcements" element={<SuperAdminAnnouncements />} />
+            <Route path="broadcasts" element={<SuperAdminBroadcasts />} />
+            <Route path="audit-logs" element={<SuperAdminAudit />} />
+            <Route path="compliance" element={<SuperAdminCompliance />} />
+            <Route path="backups" element={<SuperAdminBackups />} />
             <Route path="settings" element={<AdminSettings />} />
-            <Route path="health" element={<AdminDashboard />} />
+            <Route path="health" element={<SuperAdminHealth />} />
           </Route>
 
           {/* Admin Panel (Staff Operations) */}
@@ -164,7 +182,7 @@ export default function App() {
             <Route index element={<Navigate to="dashboard" replace />} />
             <Route path="dashboard" element={<AdminDashboard />} />
             <Route path="support" element={<AdminSupport />} />
-            <Route path="announcements" element={<AdminNotifications />} />
+            <Route path="announcements" element={<SuperAdminAnnouncements />} />
             <Route path="reports" element={<AdminReports />} />
             <Route path="profile" element={<AdminSettings />} />
             <Route path="notifications" element={<AdminNotifications />} />

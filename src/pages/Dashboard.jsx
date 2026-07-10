@@ -8,10 +8,13 @@ import {
   AreaChart, Area, BarChart, Bar, XAxis, YAxis, Tooltip,
   ResponsiveContainer, PieChart, Pie, Cell,
 } from 'recharts'
+import { Link } from 'react-router-dom'
+import { Megaphone, Sparkles } from 'lucide-react'
 import { useThemeStore } from '@/stores/themeStore'
 import { useAuthStore } from '@/stores/authStore'
 import { fetchDashboardMetrics } from '@/lib/db'
 import { formatCurrency } from '@/utils/formatters'
+import { supabase } from '@/lib/supabase'
 
 const DEMO_REVENUE = [
   { name: 'Mon', revenue: 2400, orders: 24 },
@@ -83,11 +86,25 @@ export default function Dashboard() {
   const isRestaurant = posMode === 'restaurant'
   const accentColor = isRestaurant ? '#22c55e' : '#3b82f6'
   const [metrics, setMetrics] = useState(null)
+  const [announcements, setAnnouncements] = useState([])
 
   useEffect(() => {
     if (isDemo || !tenant?.id) return
     fetchDashboardMetrics(tenant.id).then(setMetrics).catch(() => {})
+    supabase
+      .from('announcements')
+      .select('id, title, body, created_at')
+      .eq('is_published', true)
+      .order('created_at', { ascending: false })
+      .limit(3)
+      .then(({ data }) => setAnnouncements(data || []))
   }, [isDemo, tenant?.id])
+
+  // 7-day free trial countdown
+  const onTrial = !isDemo && tenant?.trial_ends_at && !tenant?.plan_start_date
+  const trialDaysLeft = onTrial
+    ? Math.max(0, Math.ceil((new Date(tenant.trial_ends_at) - Date.now()) / 86400000))
+    : null
 
   const liveCards = metrics ? [
     { label: "Today's Revenue", value: formatCurrency(metrics.todayRevenue), change: null, up: null, icon: DollarSign, color: 'brand' },
@@ -117,6 +134,44 @@ export default function Dashboard() {
           {isDemo ? 'Welcome back — here’s your business overview' : `Welcome to tengaPOS, ${profile?.name || 'there'} — your portal is ready`}
         </p>
       </div>
+
+      {/* 7-day trial countdown */}
+      {onTrial && (
+        <div className="mb-6 flex flex-col gap-3 rounded-2xl border border-green-300 bg-green-50 p-4 dark:border-green-700/60 dark:bg-green-900/20 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-start gap-3">
+            <Sparkles className="mt-0.5 h-5 w-5 flex-shrink-0 text-green-600 dark:text-green-400" />
+            <div>
+              <p className="font-semibold text-green-900 dark:text-green-200">
+                Free trial — {trialDaysLeft} day{trialDaysLeft !== 1 ? 's' : ''} left
+              </p>
+              <p className="text-sm text-green-800 dark:text-green-300">
+                You have full access to everything. Choose a plan any time to keep going after the trial.
+              </p>
+            </div>
+          </div>
+          <Link
+            to="/checkout"
+            className="flex-shrink-0 self-start rounded-xl bg-green-600 px-4 py-2 text-sm font-bold text-white hover:bg-green-700 sm:self-auto"
+          >
+            Choose a Plan
+          </Link>
+        </div>
+      )}
+
+      {/* Platform announcements */}
+      {announcements.length > 0 && (
+        <div className="mb-6 space-y-2">
+          {announcements.map((a) => (
+            <div key={a.id} className="flex items-start gap-3 rounded-2xl border border-indigo-200 bg-indigo-50 p-4 dark:border-indigo-800/50 dark:bg-indigo-900/20">
+              <Megaphone className="mt-0.5 h-4 w-4 flex-shrink-0 text-indigo-600 dark:text-indigo-400" />
+              <div>
+                <p className="text-sm font-semibold text-indigo-900 dark:text-indigo-200">{a.title}</p>
+                <p className="text-sm text-indigo-800 dark:text-indigo-300">{a.body}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Stat Cards */}
       <div className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">

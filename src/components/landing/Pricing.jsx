@@ -138,6 +138,35 @@ export default function Pricing() {
             </div>
           </motion.div>
 
+          {/* 7-day free trial banner */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            className="mx-auto mt-10 max-w-3xl rounded-2xl border-2 border-green-500/60 bg-gradient-to-r from-green-50 to-emerald-50 p-6 dark:from-green-950/40 dark:to-emerald-950/40"
+          >
+            <div className="flex flex-col items-center gap-4 sm:flex-row sm:justify-between">
+              <div className="text-center sm:text-left">
+                <div className="flex items-center justify-center gap-2 sm:justify-start">
+                  <h3 className="text-xl font-extrabold text-slate-900 dark:text-white">7-Day Free Trial</h3>
+                  <span className="rounded-full bg-green-600 px-3 py-0.5 text-xs font-bold text-white">
+                    Due today — $0!
+                  </span>
+                </div>
+                <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
+                  Full access to the complete vendor dashboard. No credit card required.
+                  Pick a plan only when your trial ends.
+                </p>
+              </div>
+              <Link
+                to="/register"
+                className="flex-shrink-0 rounded-xl bg-green-600 px-6 py-3 text-sm font-bold text-white transition-colors hover:bg-green-700"
+              >
+                Start Free Trial
+              </Link>
+            </div>
+          </motion.div>
+
           <div className="mt-14 grid gap-8 lg:grid-cols-3">
             {plans.map((plan, i) => (
               <motion.div

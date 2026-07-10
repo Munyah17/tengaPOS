@@ -189,7 +189,7 @@ export default function Staff() {
       <Modal isOpen={showInvite} onClose={() => setShowInvite(false)} title="Invite Staff Member">
         <form onSubmit={handleInvite} className="space-y-4">
           <p className="text-sm text-slate-500">
-            Enter the email address of the new staff member. They will sign up at tengapos.vercel.app/register with this email and be linked to your account.
+            Enter the email address of the new staff member. They will sign up at www.tengapos.co.zw/register with this email and be linked to your account.
           </p>
           <div>
             <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">Email Address</label>

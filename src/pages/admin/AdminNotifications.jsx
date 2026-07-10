@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Bell, Building2, RefreshCw, CheckCheck, Clock, AlertTriangle, CreditCard } from 'lucide-react'
+import { Bell, Building2, RefreshCw, CheckCheck, Clock, CreditCard, Trash2 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import toast from 'react-hot-toast'
 
@@ -53,6 +53,25 @@ export default function AdminNotifications() {
     setNotifications((prev) => prev.map((n) => n.id === id ? { ...n, is_read: true } : n))
   }
 
+  const dismiss = async (id) => {
+    const { error } = await supabase.from('admin_notifications').delete().eq('id', id)
+    if (error) {
+      toast.error(error.message)
+    } else {
+      setNotifications((prev) => prev.filter((n) => n.id !== id))
+    }
+  }
+
+  const clearRead = async () => {
+    const { error } = await supabase.from('admin_notifications').delete().eq('is_read', true)
+    if (error) {
+      toast.error(error.message)
+    } else {
+      setNotifications((prev) => prev.filter((n) => !n.is_read))
+      toast.success('Read notifications cleared')
+    }
+  }
+
   useEffect(() => { load() }, [])
 
   const unread = notifications.filter((n) => !n.is_read).length
@@ -84,6 +103,15 @@ export default function AdminNotifications() {
               Mark all read
             </button>
           )}
+          {notifications.some((n) => n.is_read) && (
+            <button
+              onClick={clearRead}
+              className="flex items-center gap-2 rounded-xl bg-red-600/10 px-4 py-2 text-sm font-semibold text-red-400 hover:bg-red-600/20"
+            >
+              <Trash2 className="h-4 w-4" />
+              Clear read
+            </button>
+          )}
         </div>
       </div>
 
@@ -100,10 +128,10 @@ export default function AdminNotifications() {
             const meta = TYPE_META[n.type] || TYPE_META.new_signup
             const Icon = meta.icon
             return (
-              <button
+              <div
                 key={n.id}
                 onClick={() => !n.is_read && markRead(n.id)}
-                className={`flex w-full items-start gap-4 rounded-2xl border p-4 text-left transition-all ${
+                className={`flex w-full cursor-pointer items-start gap-4 rounded-2xl border p-4 text-left transition-all ${
                   n.is_read
                     ? 'border-slate-100 bg-slate-50 opacity-60 dark:border-white/5 dark:bg-white/2'
                     : 'border-slate-200 bg-white dark:border-white/10 dark:bg-white/5 hover:bg-slate-50 dark:hover:bg-white/8'
@@ -127,11 +155,20 @@ export default function AdminNotifications() {
                     <p className="mt-1 font-mono text-xs text-slate-500 dark:text-slate-600">{n.tenants.slug}</p>
                   )}
                 </div>
-                <div className="flex flex-shrink-0 items-center gap-1 text-xs text-slate-500 dark:text-slate-600">
-                  <Clock className="h-3 w-3" />
-                  {timeAgo(n.created_at)}
+                <div className="flex flex-shrink-0 items-center gap-2">
+                  <span className="flex items-center gap-1 text-xs text-slate-500 dark:text-slate-600">
+                    <Clock className="h-3 w-3" />
+                    {timeAgo(n.created_at)}
+                  </span>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); dismiss(n.id) }}
+                    title="Dismiss"
+                    className="rounded-lg p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-950/40"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
                 </div>
-              </button>
+              </div>
             )
           })}
         </div>

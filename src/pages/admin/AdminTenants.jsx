@@ -20,6 +20,8 @@ export const PLANS = {
     border: 'border-slate-600',
     renewalMonths: 1,
     tier: 1,
+    price: 50,
+    priceLabel: '$50 / month',
     desc: 'Own device · Monthly billing',
   },
   standard_plan: {
@@ -30,6 +32,8 @@ export const PLANS = {
     border: 'border-blue-500/40',
     renewalMonths: 6,
     tier: 2,
+    price: 200,
+    priceLabel: '$200 / 6 months',
     desc: 'Combo hardware · 6-month renewal',
   },
   pro_package: {
@@ -40,6 +44,8 @@ export const PLANS = {
     border: 'border-indigo-500/40',
     renewalMonths: 6,
     tier: 3,
+    price: 250,
+    priceLabel: '$250 / 6 months',
     desc: 'Combo hardware · 6-month renewal',
   },
   business: {
@@ -50,6 +56,8 @@ export const PLANS = {
     border: 'border-purple-500/40',
     renewalMonths: 12,
     tier: 4,
+    price: null,
+    priceLabel: 'Custom quote',
     desc: 'White-label · Backups · Dedicated tech',
   },
   enterprise: {
@@ -60,11 +68,13 @@ export const PLANS = {
     border: 'border-amber-500/40',
     renewalMonths: 12,
     tier: 5,
+    price: null,
+    priceLabel: 'Custom quote',
     desc: 'Full custom · Unlimited · Priority support',
   },
 }
 
-const DEFAULT_FEATURES = {
+export const DEFAULT_FEATURES = {
   byod_monthly: {
     pos: true, inventory: true, transactions: true,
     reports: 'basic', staff: false, tasks: true,
@@ -162,7 +172,7 @@ function Toggle({ value, onChange, disabled }) {
 
 const TABS = ['Plan', 'Features', 'Branding', 'Backups', 'Team']
 
-function TenantModal({ tenant, technicians, onClose, onSaved }) {
+export function TenantModal({ tenant, technicians, onClose, onSaved }) {
   const { user } = useAuthStore()
   const [tab, setTab] = useState('Plan')
   const [saving, setSaving] = useState(false)
@@ -216,10 +226,29 @@ function TenantModal({ tenant, technicians, onClose, onSaved }) {
       }
     }
 
-    const { error } = await supabase.from('tenants').update(updates).eq('id', tenant.id)
+    const { data: updated, error } = await supabase
+      .from('tenants')
+      .update(updates)
+      .eq('id', tenant.id)
+      .select('id')
     if (error) {
       toast.error(error.message)
+    } else if (!updated || updated.length === 0) {
+      // RLS silently blocked the write — surface it instead of a false success
+      toast.error('Update blocked by database permissions. Run the super_admin_launch.sql migration in Supabase.')
     } else {
+      const action = newStatus === 'active' && isPending ? 'tenant_approved'
+        : newStatus === 'suspended' ? 'tenant_suspended'
+        : newStatus === 'active' ? 'tenant_reinstated'
+        : 'tenant_updated'
+      await supabase.from('audit_logs').insert({
+        actor_id: user?.id,
+        actor_email: user?.email,
+        action,
+        target_type: 'tenant',
+        target_id: tenant.id,
+        details: { tenant_name: tenant.name, plan_type: planType, status: newStatus || tenant.status },
+      })
       toast.success(newStatus === 'active' && isPending
         ? `${tenant.name} approved on ${PLANS[planType]?.label}`
         : 'Tenant updated')

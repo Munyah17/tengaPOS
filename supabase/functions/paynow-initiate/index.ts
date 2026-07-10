@@ -58,7 +58,7 @@ serve(async (req) => {
     const amountStr    = Number(amount).toFixed(2)
     const additionalInfo = items.slice(0, 5).map((i: { name: string; qty: number }) => `${i.name}×${i.qty}`).join(', ')
     const resultUrl    = `${Deno.env.get('SUPABASE_URL')}/functions/v1/paynow-callback`
-    const returnUrl    = return_url || 'https://tengapos.vercel.app/app/payment/return'
+    const returnUrl    = return_url || 'https://www.tengapos.co.zw/app/payment/return'
     const statusField  = 'Message'
     const integId      = tenant.paynow_integration_id
     const integKey     = tenant.paynow_integration_key

@@ -3,7 +3,7 @@ import { AnimatePresence, motion } from 'framer-motion'
 import {
   LayoutDashboard, Building2, Users, LifeBuoy, BarChart3,
   Settings, LogOut, Shield, X, ChevronLeft, ChevronRight, Bell,
-  DollarSign, Tag, Database, Activity, Mail, TrendingUp, Lock, Eye,
+  DollarSign, Tag, Database, Activity, Mail, Lock, Eye, Megaphone,
 } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import { useAuthStore } from '@/stores/authStore'
@@ -92,24 +92,21 @@ const NAV_BY_ROLE = {
   super_admin: [
     // OVERVIEW
     { icon: LayoutDashboard, label: 'Dashboard', path: '/admin/super/dashboard', group: 'OVERVIEW' },
+    { icon: Bell, label: 'Notifications', path: '/admin/super/notifications', group: 'OVERVIEW', badge: true },
     { icon: Activity, label: 'System Health', path: '/admin/super/health', group: 'OVERVIEW' },
 
     // TENANT MANAGEMENT
     { icon: Building2, label: 'All Tenants', path: '/admin/super/tenants', group: 'TENANTS' },
     { icon: DollarSign, label: 'Subscriptions', path: '/admin/super/subscriptions', group: 'TENANTS' },
     { icon: BarChart3, label: 'Billing & Revenue', path: '/admin/super/billing', group: 'TENANTS' },
-
-    // PRICING
-    { icon: Tag, label: 'Pricing Tiers', path: '/admin/super/pricing', group: 'PRICING' },
-    { icon: TrendingUp, label: 'Revenue Reports', path: '/admin/super/revenue', group: 'PRICING' },
+    { icon: Tag, label: 'Pricing Tiers', path: '/admin/super/pricing', group: 'TENANTS' },
 
     // STAFF MANAGEMENT
-    { icon: Users, label: 'Create Staff', path: '/admin/super/staff-create', group: 'STAFF' },
-    { icon: Users, label: 'Staff Directory', path: '/admin/super/staff', group: 'STAFF' },
+    { icon: Users, label: 'Staff Management', path: '/admin/super/staff', group: 'STAFF' },
     { icon: Lock, label: 'Roles & Permissions', path: '/admin/super/roles', group: 'STAFF' },
 
     // COMMUNICATIONS
-    { icon: Bell, label: 'Announcements', path: '/admin/super/announcements', group: 'COMMS', badge: true },
+    { icon: Megaphone, label: 'Announcements', path: '/admin/super/announcements', group: 'COMMS' },
     { icon: Mail, label: 'Email Broadcasts', path: '/admin/super/broadcasts', group: 'COMMS' },
 
     // SUPPORT

@@ -20,13 +20,13 @@ export default function Register() {
     try {
       const data = await signUp(form.email, form.password, form.name, form.businessName, form.businessType)
       if (data.user && !data.session) {
-        // Email confirmation required — tenant records are created, pending admin approval
-        toast.success('Registration submitted! Check your email to confirm, then sign in.')
+        // Email confirmation required — trial starts once they confirm and sign in
+        toast.success('Almost there! Check your email to confirm, then sign in to start your free trial.')
         navigate('/login')
       } else {
-        // Immediate session — auth state already set in signUp(), tenant is pending approval
-        toast.success('Account created! Your application is under review.')
-        navigate('/pending')
+        // Immediate session — 7-day free trial is already active
+        toast.success('Welcome! Your 7-day free trial has started — $0 due today.')
+        navigate('/checkout')
       }
     } catch (err) {
       toast.error(err.message || 'Registration failed')
@@ -38,16 +38,16 @@ export default function Register() {
   const update = (field) => (e) => setForm({ ...form, [field]: e.target.value })
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-slate-950 via-slate-900 to-brand-950 px-4">
-      <div className="absolute inset-0 bg-[linear-gradient(rgba(59,130,246,0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(59,130,246,0.03)_1px,transparent_1px)] bg-[size:64px_64px]" />
-      <div className="absolute top-1/3 left-1/2 h-[400px] w-[400px] -translate-x-1/2 rounded-full bg-brand-600/10 blur-[128px]" />
+    <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-slate-950 via-slate-900 to-brand-950 px-4 py-10 sm:py-14">
+      <div className="pointer-events-none fixed inset-0 bg-[linear-gradient(rgba(59,130,246,0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(59,130,246,0.03)_1px,transparent_1px)] bg-[size:64px_64px]" />
+      <div className="pointer-events-none fixed top-1/3 left-1/2 h-[400px] w-[400px] -translate-x-1/2 rounded-full bg-brand-600/10 blur-[128px]" />
 
       <motion.div
         initial={{ opacity: 0, y: 20, scale: 0.98 }}
         animate={{ opacity: 1, y: 0, scale: 1 }}
         className="relative w-full max-w-md"
       >
-        <div className="rounded-2xl border border-white/10 bg-white/5 p-8 shadow-2xl backdrop-blur-xl">
+        <div className="rounded-2xl border border-white/10 bg-white/5 p-6 shadow-2xl backdrop-blur-xl sm:p-8">
           {/* Back to home */}
           <Link
             to="/"
@@ -57,10 +57,12 @@ export default function Register() {
             Back to home
           </Link>
 
-          <div className="mb-8 text-center">
-            <img src={posIcon} alt="tengaPOS" className="mx-auto mb-4 h-14 w-auto" />
+          <div className="mb-6 text-center sm:mb-8">
+            <img src={posIcon} alt="tengaPOS" className="mx-auto mb-4 h-12 w-auto sm:h-14" />
             <h1 className="text-2xl font-extrabold text-white">Create your account</h1>
-            <p className="mt-1 text-sm text-slate-400">Start your free 6-month trial</p>
+            <p className="mt-1 text-sm text-slate-400">
+              7-day free trial · Full access · <span className="font-semibold text-green-400">Due today — $0!</span>
+            </p>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">

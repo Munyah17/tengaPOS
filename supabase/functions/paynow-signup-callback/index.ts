@@ -1,0 +1,107 @@
+// Paynow result URL for subscription checkouts.
+// Paynow POSTs urlencoded status updates here; we verify the SHA-512 hash
+// with the platform integration key, then activate the tenant's plan.
+// Deploy with --no-verify-jwt (Paynow cannot send a Supabase JWT).
+import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+
+const PLAN_MONTHS: Record<string, number> = {
+  byod_monthly: 1,
+  standard_plan: 6,
+  pro_package: 6,
+}
+
+async function sha512(str: string): Promise<string> {
+  const buf = await crypto.subtle.digest('SHA-512', new TextEncoder().encode(str))
+  return Array.from(new Uint8Array(buf))
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('')
+    .toUpperCase()
+}
+
+serve(async (req) => {
+  try {
+    const integKey = Deno.env.get('PLATFORM_PAYNOW_KEY')
+    if (!integKey) return new Response('Not configured', { status: 503 })
+
+    const bodyText = await req.text()
+    const fields = new URLSearchParams(bodyText)
+
+    const reference = fields.get('reference') || ''
+    const paynowRef = fields.get('paynowreference') || ''
+    const amount = fields.get('amount') || '0'
+    const status = fields.get('status') || ''
+    const receivedHash = fields.get('hash') || ''
+
+    // Verify hash: concatenate all fields except hash, in received order, + key
+    let concat = ''
+    for (const [k, v] of fields.entries()) {
+      if (k.toLowerCase() !== 'hash') concat += v
+    }
+    const computed = await sha512(concat + integKey)
+    if (computed !== receivedHash.toUpperCase()) {
+      return new Response('Invalid hash', { status: 400 })
+    }
+
+    const admin = createClient(
+      Deno.env.get('SUPABASE_URL')!,
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
+    )
+
+    const { data: checkout } = await admin
+      .from('signup_checkouts')
+      .select('id, tenant_id, plan_type, amount, status')
+      .eq('reference', reference)
+      .maybeSingle()
+    if (!checkout) return new Response('Unknown reference', { status: 404 })
+
+    const paid = status.toLowerCase() === 'paid' || status.toLowerCase() === 'awaiting delivery'
+    const cancelled = status.toLowerCase() === 'cancelled'
+
+    if (paid && checkout.status !== 'paid') {
+      const months = PLAN_MONTHS[checkout.plan_type] || 6
+      const now = new Date()
+      const renewal = new Date(now)
+      renewal.setMonth(renewal.getMonth() + months)
+
+      await admin.from('tenants').update({
+        status: 'active',
+        plan_type: checkout.plan_type,
+        plan_start_date: now.toISOString(),
+        next_renewal_date: renewal.toISOString(),
+        approved_at: now.toISOString(),
+      }).eq('id', checkout.tenant_id)
+
+      await admin.from('signup_checkouts')
+        .update({ status: 'paid', updated_at: now.toISOString() })
+        .eq('id', checkout.id)
+
+      await admin.from('subscription_payments').insert({
+        tenant_id: checkout.tenant_id,
+        checkout_id: checkout.id,
+        provider: 'paynow',
+        provider_ref: paynowRef,
+        plan_type: checkout.plan_type,
+        amount: Number(amount) || checkout.amount,
+        currency: 'USD',
+      })
+
+      await admin.from('audit_logs').insert({
+        action: 'subscription_paid',
+        actor_email: 'paynow-callback',
+        target_type: 'tenant',
+        target_id: checkout.tenant_id,
+        details: { plan_type: checkout.plan_type, reference, provider: 'paynow' },
+      })
+    } else if (cancelled) {
+      await admin.from('signup_checkouts')
+        .update({ status: 'cancelled', updated_at: new Date().toISOString() })
+        .eq('id', checkout.id)
+    }
+
+    return new Response('OK', { status: 200 })
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err)
+    return new Response(msg, { status: 500 })
+  }
+})

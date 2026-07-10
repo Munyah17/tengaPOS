@@ -45,7 +45,8 @@ export default function Login() {
       const userType = await signIn(email, password)
       toast.success('Welcome back!')
       if (userType === 'app_owner') {
-        navigate('/admin/dashboard')
+        const { role } = useAuthStore.getState()
+        navigate(role === 'super_admin' ? '/admin/super/dashboard' : '/admin/dashboard')
       } else {
         const store = useAuthStore.getState()
         const status = store.tenantStatus

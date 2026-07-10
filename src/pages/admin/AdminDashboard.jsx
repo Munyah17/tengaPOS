@@ -8,8 +8,8 @@ export default function AdminDashboard() {
   const { role } = useAuthStore()
   const [stats, setStats] = useState({
     openTickets: 0,
+    inProgress: 0,
     resolvedToday: 0,
-    avgResolutionTime: '4.2h',
     totalTickets: 0,
   })
   const [recentTickets, setRecentTickets] = useState([])
@@ -21,34 +21,19 @@ export default function AdminDashboard() {
 
   const loadData = async () => {
     try {
-      // Get support tickets stats
-      const { count: open } = await supabase
-        .from('admin_notifications')
-        .select('*', { count: 'exact', head: true })
-        .eq('status', 'open')
-
-      const { count: total } = await supabase
-        .from('admin_notifications')
-        .select('*', { count: 'exact', head: true })
-
       const today = new Date().toISOString().split('T')[0]
-      const { count: resolved } = await supabase
-        .from('admin_notifications')
-        .select('*', { count: 'exact', head: true })
-        .eq('status', 'resolved')
-        .gte('updated_at', `${today}T00:00:00`)
-
-      // Get recent tickets
-      const { data: tickets } = await supabase
-        .from('admin_notifications')
-        .select('*')
-        .order('created_at', { ascending: false })
-        .limit(8)
+      const [{ count: open }, { count: inProgress }, { count: total }, { count: resolved }, { data: tickets }] = await Promise.all([
+        supabase.from('support_tickets').select('*', { count: 'exact', head: true }).eq('status', 'open'),
+        supabase.from('support_tickets').select('*', { count: 'exact', head: true }).eq('status', 'in_progress'),
+        supabase.from('support_tickets').select('*', { count: 'exact', head: true }),
+        supabase.from('support_tickets').select('*', { count: 'exact', head: true }).eq('status', 'resolved').gte('updated_at', `${today}T00:00:00`),
+        supabase.from('support_tickets').select('*, tenants(name)').order('created_at', { ascending: false }).limit(8),
+      ])
 
       setStats({
         openTickets: open || 0,
+        inProgress: inProgress || 0,
         resolvedToday: resolved || 0,
-        avgResolutionTime: '4.2h',
         totalTickets: total || 0,
       })
       setRecentTickets(tickets || [])
@@ -88,8 +73,8 @@ export default function AdminDashboard() {
       {/* Quick Stats */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard icon={AlertCircle} label="Open Tickets" value={stats.openTickets} color="red" />
+        <StatCard icon={Clock} label="In Progress" value={stats.inProgress} color="blue" />
         <StatCard icon={CheckCircle} label="Resolved Today" value={stats.resolvedToday} color="green" />
-        <StatCard icon={Clock} label="Avg Resolution" value={stats.avgResolutionTime} color="blue" />
         <StatCard icon={Users} label="Total Handled" value={stats.totalTickets} color="purple" />
       </div>
 
@@ -125,8 +110,8 @@ export default function AdminDashboard() {
               ) : (
                 recentTickets.map(ticket => (
                   <tr key={ticket.id} className="border-b border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800/50">
-                    <td className="py-3 px-4 font-mono text-xs text-slate-600 dark:text-slate-400">{ticket.id.slice(0, 8)}</td>
-                    <td className="py-3 px-4 text-slate-900 dark:text-white">{ticket.title}</td>
+                    <td className="py-3 px-4 font-mono text-xs text-slate-600 dark:text-slate-400">TKT-{String(ticket.ticket_no).padStart(4, '0')}</td>
+                    <td className="py-3 px-4 text-slate-900 dark:text-white">{ticket.subject}{ticket.tenants?.name ? ` — ${ticket.tenants.name}` : ''}</td>
                     <td className="py-3 px-4">
                       <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${
                         ticket.status === 'resolved'
