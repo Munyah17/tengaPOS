@@ -257,6 +257,7 @@ function EditUserModal({ user, onClose, onDone }) {
 }
 
 export default function AdminUsers() {
+  const { user: me } = useAuthStore()
   const [users, setUsers] = useState([])
   const [tenants, setTenants] = useState([])
   const [loading, setLoading] = useState(true)
@@ -285,6 +286,14 @@ export default function AdminUsers() {
     if (error) {
       toast.error(error.message)
     } else {
+      await supabase.from('audit_logs').insert({
+        actor_id: me?.id,
+        actor_email: me?.email,
+        action: user.is_active ? 'client_user_suspended' : 'client_user_reinstated',
+        target_type: 'user',
+        target_id: user.id,
+        details: { email: user.email, tenant: user.tenants?.name },
+      })
       setUsers((prev) => prev.map((u) => u.id === user.id ? { ...u, is_active: !user.is_active } : u))
       toast.success(user.is_active ? `${user.name || user.email} suspended` : `${user.name || user.email} reinstated`)
     }

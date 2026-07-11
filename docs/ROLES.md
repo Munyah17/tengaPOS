@@ -116,6 +116,40 @@ data enforcement: per-table tenant RLS policies.
 4. The Super Admin can always approve/activate/suspend any tenant manually, which
    overrides the above.
 
+## Research-informed design notes
+
+The role model was checked against published RBAC guidance for multi-tenant SaaS
+(WorkOS, Auth0, Aserto, LoginRadius, AWS SaaS prescriptive guidance) and against how
+established POS vendors (Lightspeed, KORONA, SumUp) structure back-office roles.
+Where tengaPOS stands:
+
+**Already aligned with industry norms:**
+- *Two-plane model* — a "control plane" for the platform operator (Super Admin portal)
+  strictly separated from tenant-scoped roles: the standard architecture for
+  multi-tenant SaaS.
+- *Least privilege* — Admin starts restricted and gains capabilities deliberately;
+  destructive actions (tenant delete, client-account delete) are Super Admin-only.
+- *Auditability* — privileged mutations (approvals, suspensions, account create/delete,
+  password resets, trial extensions, payments) each write an `audit_logs` row, per the
+  universal recommendation that admin actions be traceable.
+- *Fast revocation* — one-click suspend/deactivate for both platform staff and client
+  users, per POS security guidance on departing staff.
+- *Ops cockpit basics* — account search, plan change, suspend/pause, **trial extension**,
+  billing view, and support dashboards match the "typical first version" scope
+  recommended for SaaS internal admin panels.
+- *POS floor roles* — vendor/manager/supervisor/cashier/assistant mirrors the
+  manager–cashier–back-of-house pattern used by Lightspeed and KORONA (cashiers sell
+  but cannot refund, see reports, or open settings).
+
+**Deliberately not built yet (known industry patterns; add when needed):**
+- *Audited tenant impersonation* ("log in as this vendor" for support). Powerful but the
+  highest-risk feature an admin panel can have — requires session watermarking and
+  full audit capture. Decide explicitly before building.
+- *Credits/refund tooling* — billing adjustments are manual until volume justifies it.
+- *Per-tenant usage analytics* in the control plane.
+- *2FA enforcement for platform staff* — recommended before the staff team grows
+  beyond the founders.
+
 ## Invariants (never violate)
 
 - Super Admin ≠ Admin. Any feature that controls the platform (tenants, money, staff,

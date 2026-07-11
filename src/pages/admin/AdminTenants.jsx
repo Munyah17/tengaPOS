@@ -205,6 +205,32 @@ export function TenantModal({ tenant, technicians, onClose, onSaved }) {
     }
   }
 
+  const onTrial = tenant.trial_ends_at && !tenant.plan_start_date
+
+  const extendTrial = async () => {
+    const base = new Date(tenant.trial_ends_at) > new Date() ? new Date(tenant.trial_ends_at) : new Date()
+    const newEnd = new Date(base.getTime() + 7 * 86400000)
+    const { data: updated, error } = await supabase
+      .from('tenants')
+      .update({ trial_ends_at: newEnd.toISOString(), status: 'active' })
+      .eq('id', tenant.id)
+      .select('id')
+    if (error || !updated?.length) {
+      toast.error(error?.message || 'Update blocked by database permissions')
+      return
+    }
+    await supabase.from('audit_logs').insert({
+      actor_id: user?.id,
+      actor_email: user?.email,
+      action: 'trial_extended',
+      target_type: 'tenant',
+      target_id: tenant.id,
+      details: { tenant_name: tenant.name, new_trial_end: newEnd.toISOString() },
+    })
+    toast.success(`${tenant.name}'s trial extended to ${newEnd.toLocaleDateString('en-ZW', { day: 'numeric', month: 'short' })}`)
+    onSaved()
+  }
+
   const setFeature = (key, val) => setFeatures((f) => ({ ...f, [key]: val }))
   const setWL = (key, val) => setWhitelabel((w) => ({ ...w, [key]: val }))
   const setBackup = (key, val) => setBackupConfig((b) => ({ ...b, [key]: val }))
@@ -343,6 +369,24 @@ export function TenantModal({ tenant, technicians, onClose, onSaved }) {
                 <div className="mt-2 flex items-center gap-2 rounded-xl border border-amber-500/20 bg-amber-500/5 px-4 py-3 text-sm text-amber-400">
                   <Crown className="h-4 w-4 flex-shrink-0" />
                   Branding, Backups, and Team tabs are now unlocked for this plan.
+                </div>
+              )}
+
+              {/* Trial controls */}
+              {onTrial && (
+                <div className="mt-2 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-green-500/20 bg-green-500/5 px-4 py-3">
+                  <p className="text-sm text-green-500 dark:text-green-400">
+                    On free trial — {new Date(tenant.trial_ends_at) > new Date()
+                      ? `ends ${new Date(tenant.trial_ends_at).toLocaleDateString('en-ZW', { day: 'numeric', month: 'short' })}`
+                      : 'expired'}
+                  </p>
+                  <button
+                    onClick={extendTrial}
+                    disabled={saving}
+                    className="rounded-lg bg-green-600/20 px-3 py-1.5 text-xs font-bold text-green-500 hover:bg-green-600/30 dark:text-green-400"
+                  >
+                    Extend trial +7 days
+                  </button>
                 </div>
               )}
             </div>
