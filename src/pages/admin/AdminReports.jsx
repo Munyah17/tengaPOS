@@ -7,13 +7,19 @@ import {
 import { supabase } from '@/lib/supabase'
 import { PLANS } from './AdminTenants'
 
-// ─── Plan pricing (monthly equivalent) ───────────────────────────────────────
+// ─── Plan revenue model ───────────────────────────────────────────────────────
+// Only BYOD Monthly recurs. Standard/Pro are once-off hardware bundles with
+// free renewal (Ts & Cs apply). Business/Enterprise are custom quotes.
 const PLAN_MRR = {
-  byod_monthly:  200,
+  byod_monthly:  50,
+  standard_plan: 0,
+  pro_package:   0,
+  business:      0,
+  enterprise:    0,
+}
+const PLAN_ONCE_OFF = {
   standard_plan: 200,
   pro_package:   250,
-  business:      500,
-  enterprise:    1000,
 }
 
 function fmt$(n) {
@@ -238,12 +244,15 @@ export default function AdminReports() {
               {Object.entries(PLANS).map(([key, meta]) => {
                 const count = data.planDist[key] || 0
                 if (count === 0) return null
-                const revenue = count * (PLAN_MRR[key] || 0)
+                const mrrRev = count * (PLAN_MRR[key] || 0)
+                const onceOffRev = count * (PLAN_ONCE_OFF[key] || 0)
                 return (
                   <div key={key}>
                     <div className="mb-1 flex items-center justify-between text-xs">
                       <span className={`font-semibold ${meta.color}`}>{meta.label}</span>
-                      <span className="text-slate-400">{fmt$(revenue)}/mo · {count} tenant{count !== 1 ? 's' : ''}</span>
+                      <span className="text-slate-400">
+                        {mrrRev > 0 ? `${fmt$(mrrRev)}/mo` : onceOffRev > 0 ? `${fmt$(onceOffRev)} once-off` : 'Custom'} · {count} tenant{count !== 1 ? 's' : ''}
+                      </span>
                     </div>
                     <BarRow label="" value={count} max={maxPlan} color={planColors[key]} />
                   </div>
@@ -415,7 +424,7 @@ export default function AdminReports() {
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
           {Object.entries(PLANS).map(([key, meta]) => {
             const count = data.planDist[key] || 0
-            const monthlyRev = count * (PLAN_MRR[key] || 0)
+            const rev = count * (PLAN_MRR[key] || PLAN_ONCE_OFF[key] || 0)
             const Icon = meta.icon
             return (
               <div key={key} className={`rounded-2xl border p-4 ${meta.border} ${meta.bg}`}>
@@ -424,8 +433,8 @@ export default function AdminReports() {
                   <span className={`text-xs font-bold ${meta.color}`}>{count} active</span>
                 </div>
                 <p className={`text-sm font-bold ${meta.color}`}>{meta.label}</p>
-                <p className="mt-1 text-xl font-extrabold text-slate-900 dark:text-white">{fmt$(monthlyRev)}</p>
-                <p className="mt-0.5 text-[10px] text-slate-500">{fmt$(PLAN_MRR[key])}/tenant/mo</p>
+                <p className="mt-1 text-xl font-extrabold text-slate-900 dark:text-white">{fmt$(rev)}</p>
+                <p className="mt-0.5 text-[10px] text-slate-500">{meta.priceLabel}</p>
               </div>
             )
           })}

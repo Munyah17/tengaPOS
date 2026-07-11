@@ -47,6 +47,7 @@ import SuperAdminBackups from '@/pages/admin/SuperAdminBackups'
 import SuperAdminRoles from '@/pages/admin/SuperAdminRoles'
 import SuperAdminAnnouncements from '@/pages/admin/SuperAdminAnnouncements'
 import SuperAdminBroadcasts from '@/pages/admin/SuperAdminBroadcasts'
+import AdminUsers from '@/pages/admin/AdminUsers'
 import Checkout from '@/pages/Checkout'
 
 const queryClient = new QueryClient({
@@ -63,11 +64,15 @@ function ProtectedRoute({ children }) {
   if (!isAuthenticated) return <Navigate to="/login" replace />
   // Demo users are NEVER redirected to /admin — they stay in the tenant app always
   if (!isDemo && userType === 'app_owner') return <Navigate to="/admin/dashboard" replace />
-  // 7-day trial: once it lapses without a paid plan, everything routes to checkout
+  // 7-day trial is opt-in: fresh signups (no trial, no plan) choose on /checkout;
+  // an expired trial also routes to checkout to pick a paid plan
   const onTrial = tenant?.trial_ends_at && !tenant?.plan_start_date
   const trialExpired = onTrial && new Date(tenant.trial_ends_at) <= new Date()
+  const neverActivated = !tenant?.trial_ends_at && !tenant?.plan_start_date
   if (!isDemo && trialExpired) return <Navigate to="/checkout" replace />
-  if (!isDemo && tenantStatus === 'pending') return <Navigate to="/pending" replace />
+  if (!isDemo && tenantStatus === 'pending') {
+    return <Navigate to={neverActivated ? '/checkout' : '/pending'} replace />
+  }
   if (!isDemo && tenantStatus === 'suspended') {
     // Suspended because the trial ran out → pay; suspended by Super Admin → pending screen
     return <Navigate to={onTrial ? '/checkout' : '/pending'} replace />
@@ -155,6 +160,7 @@ export default function App() {
             <Route path="dashboard" element={<SuperAdminDashboard />} />
             <Route path="notifications" element={<AdminNotifications />} />
             <Route path="tenants" element={<AdminTenants />} />
+            <Route path="users" element={<AdminUsers />} />
             <Route path="subscriptions" element={<SuperAdminSubscriptions />} />
             <Route path="billing" element={<SuperAdminBilling />} />
             <Route path="pricing" element={<SuperAdminPricing />} />
@@ -181,6 +187,7 @@ export default function App() {
           >
             <Route index element={<Navigate to="dashboard" replace />} />
             <Route path="dashboard" element={<AdminDashboard />} />
+            <Route path="users" element={<AdminUsers />} />
             <Route path="support" element={<AdminSupport />} />
             <Route path="announcements" element={<SuperAdminAnnouncements />} />
             <Route path="reports" element={<AdminReports />} />

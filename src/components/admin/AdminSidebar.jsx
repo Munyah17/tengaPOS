@@ -97,6 +97,7 @@ const NAV_BY_ROLE = {
 
     // TENANT MANAGEMENT
     { icon: Building2, label: 'All Tenants', path: '/admin/super/tenants', group: 'TENANTS' },
+    { icon: Users, label: 'User Management', path: '/admin/super/users', group: 'TENANTS' },
     { icon: DollarSign, label: 'Subscriptions', path: '/admin/super/subscriptions', group: 'TENANTS' },
     { icon: BarChart3, label: 'Billing & Revenue', path: '/admin/super/billing', group: 'TENANTS' },
     { icon: Tag, label: 'Pricing Tiers', path: '/admin/super/pricing', group: 'TENANTS' },
@@ -124,8 +125,10 @@ const NAV_BY_ROLE = {
   admin: [
     // LIMITED TO OPERATIONS ONLY
     { icon: LayoutDashboard, label: 'Dashboard', path: '/admin/dashboard', group: 'OPERATIONS' },
+    { icon: Users, label: 'User Management', path: '/admin/users', group: 'OPERATIONS' },
     { icon: LifeBuoy, label: 'Support Tickets', path: '/admin/support', group: 'OPERATIONS' },
-    { icon: Bell, label: 'Send Announcement', path: '/admin/announcements', group: 'COMMS', badge: true },
+    { icon: Bell, label: 'Notifications', path: '/admin/notifications', group: 'OPERATIONS', badge: true },
+    { icon: Megaphone, label: 'Send Announcement', path: '/admin/announcements', group: 'COMMS' },
     { icon: Eye, label: 'Reports (View Only)', path: '/admin/reports', group: 'REPORTS', readonly: true },
     { icon: Settings, label: 'Profile Settings', path: '/admin/profile', group: 'ACCOUNT' },
   ],

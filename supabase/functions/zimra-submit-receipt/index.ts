@@ -153,7 +153,7 @@ Deno.serve(async (req) => {
     }
 
     // ── Submit to FDMS ───────────────────────────────────────────────────────
-    const baseUrl  = Deno.env.get('ZIMRA_BASE_URL') || 'https://fdmsapitest.zimra.co.zw'
+    const baseUrl  = Deno.env.get('ZIMRA_BASE_URL') || 'https://fdms.zimra.co.zw'
     const fdmsUrl  = `${baseUrl}/Device/v1/${deviceId}/submitreceipt`
 
     let fdmsSuccess  = false

@@ -20,12 +20,12 @@ export default function Register() {
     try {
       const data = await signUp(form.email, form.password, form.name, form.businessName, form.businessType)
       if (data.user && !data.session) {
-        // Email confirmation required — trial starts once they confirm and sign in
-        toast.success('Almost there! Check your email to confirm, then sign in to start your free trial.')
+        // Email confirmation required — they pick trial or plan after signing in
+        toast.success('Almost there! Check your email to confirm, then sign in to choose your plan or free trial.')
         navigate('/login')
       } else {
-        // Immediate session — 7-day free trial is already active
-        toast.success('Welcome! Your 7-day free trial has started — $0 due today.')
+        // Immediate session — choose free trial or a plan on checkout
+        toast.success('Account created! Pick your free trial or a plan.')
         navigate('/checkout')
       }
     } catch (err) {

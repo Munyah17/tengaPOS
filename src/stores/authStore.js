@@ -2,57 +2,6 @@ import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { supabase } from '@/lib/supabase'
 
-export const DEMO_PERSONAS = [
-  {
-    name: 'Admire Moyo',
-    role: 'vendor',
-    description: 'Business owner — default role for all sign-ups',
-    color: 'green',
-    email: 'admire@demo.tengapos.co.zw',
-    tenant: 'Moyo General Store',
-  },
-  {
-    name: 'Tatenda Chikwanda',
-    role: 'shop_manager',
-    description: 'No billing / white-label',
-    color: 'blue',
-    email: 'tatenda@demo.tengapos.co.zw',
-    tenant: 'Moyo General Store',
-  },
-  {
-    name: 'Farai Ncube',
-    role: 'supervisor',
-    description: 'Shift reports, discounts, void items',
-    color: 'purple',
-    email: 'farai@demo.tengapos.co.zw',
-    tenant: 'Moyo General Store',
-  },
-  {
-    name: 'Grace Kamau',
-    role: 'cashier',
-    description: 'POS + orders + kitchen only',
-    color: 'teal',
-    email: 'grace@demo.tengapos.co.zw',
-    tenant: 'Moyo General Store',
-  },
-  {
-    name: 'Chipo Banda',
-    role: 'shop_assistant',
-    description: 'POS + kitchen only',
-    color: 'gray',
-    email: 'chipo@demo.tengapos.co.zw',
-    tenant: 'Moyo General Store',
-  },
-  {
-    name: 'Support Agent',
-    role: 'tech_support',
-    description: 'Read-only system access',
-    color: 'orange',
-    email: 'support@demo.tengapos.co.zw',
-    tenant: 'System',
-  },
-]
-
 export const ROLE_COLORS = {
   vendor: { bg: 'bg-green-100 dark:bg-green-900/30', text: 'text-green-700 dark:text-green-400' },
   shop_manager: { bg: 'bg-blue-100 dark:bg-blue-900/30', text: 'text-blue-700 dark:text-blue-400' },
@@ -225,25 +174,6 @@ export const useAuthStore = create(
         }
 
         return data
-      },
-
-      loginAsDemo: async (persona) => {
-        // Sign out any real Supabase session first — demo must be fully isolated.
-        // Without this, a saved browser session survives page reload and overwrites demo state.
-        await supabase.auth.signOut()
-        set({
-          user: { id: `demo-${persona.role}`, email: persona.email },
-          session: { access_token: 'demo-token' },
-          profile: { name: persona.name, email: persona.email, role: persona.role },
-          tenant: { id: 'demo-tenant', name: persona.tenant },
-          role: persona.role,
-          branch: { id: 'demo-branch', name: 'Main Branch' },
-          userType: 'tenant',
-          tenantStatus: 'active',
-          isAuthenticated: true,
-          isLoading: false,
-          isDemo: true,
-        })
       },
 
       clearAuth: async () => {

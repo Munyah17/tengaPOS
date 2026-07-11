@@ -1,4 +1,12 @@
-import { ShieldCheck, Shield, Wrench } from 'lucide-react'
+import { ShieldCheck, Shield, Wrench, Store, UserCog, Eye, CreditCard, HandHelping } from 'lucide-react'
+
+const TENANT_ROLES = [
+  { icon: Store, label: 'Vendor (Owner)', color: 'text-green-500', desc: 'Full control of their business: POS, inventory, reports, staff, branches, fiscalisation, payments, HR, settings, and billing/plan decisions.' },
+  { icon: UserCog, label: 'Shop Manager', color: 'text-blue-500', desc: 'Runs day-to-day operations — everything except billing/plan and branding decisions.' },
+  { icon: Eye, label: 'Supervisor', color: 'text-purple-500', desc: 'Shift-level authority: POS, orders, transactions, shift reports, discounts, voids.' },
+  { icon: CreditCard, label: 'Cashier', color: 'text-teal-500', desc: 'POS, orders, and tasks only.' },
+  { icon: HandHelping, label: 'Shop Assistant', color: 'text-slate-500', desc: 'POS and tasks only — the narrowest role.' },
+]
 
 const ROLES = [
   {
@@ -95,6 +103,32 @@ export default function SuperAdminRoles() {
             </div>
           )
         })}
+      </div>
+
+      {/* Tenant-side roles */}
+      <div className="mt-8">
+        <h2 className="text-lg font-bold text-slate-900 dark:text-white">Client Business Roles</h2>
+        <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+          Roles inside each tenant. All tenant data is isolated per business by row-level security;
+          module access is further limited by the tenant's plan.
+        </p>
+        <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {TENANT_ROLES.map((r) => {
+            const Icon = r.icon
+            return (
+              <div key={r.label} className="rounded-2xl border border-slate-200 bg-white p-4 dark:border-white/10 dark:bg-white/5">
+                <div className="flex items-center gap-2">
+                  <Icon className={`h-5 w-5 ${r.color}`} />
+                  <p className="font-semibold text-slate-900 dark:text-white">{r.label}</p>
+                </div>
+                <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">{r.desc}</p>
+              </div>
+            )
+          })}
+        </div>
+        <p className="mt-4 text-xs text-slate-500">
+          Full specification: <span className="font-mono">docs/ROLES.md</span> in the repository.
+        </p>
       </div>
     </div>
   )

@@ -40,11 +40,10 @@ export default function SuperAdminDashboard() {
       const pendingList = all.filter((t) => t.status === 'pending')
       const active = all.filter((t) => t.status === 'active')
 
-      // Recurring revenue normalised to monthly, from real plan pricing
+      // Monthly recurring = recurring plans only (BYOD). Standard/Pro are once-off.
       const monthly = active.reduce((sum, t) => {
         const plan = PLANS[t.plan_type]
-        if (!plan?.price) return sum
-        return sum + plan.price / plan.renewalMonths
+        return plan?.recurring && plan.price ? sum + plan.price : sum
       }, 0)
 
       setMetrics({

@@ -42,7 +42,7 @@ const plans = [
     ],
     cta: 'Get Started',
     ctaStyle: 'bg-brand-600 text-white hover:bg-brand-700',
-    extras: ['6 months free use included', 'Free renewal while using our hardware'],
+    extras: ['6 months free use included', 'Free renewal while using our hardware — Ts & Cs apply'],
   },
   {
     name: 'Pro Package',
@@ -63,7 +63,7 @@ const plans = [
     ],
     cta: 'Get Started',
     ctaStyle: 'border border-slate-300 text-slate-900 hover:bg-slate-50 dark:border-slate-600 dark:text-white dark:hover:bg-slate-800',
-    extras: ['6 months free use included', 'Free renewal while using our hardware'],
+    extras: ['6 months free use included', 'Free renewal while using our hardware — Ts & Cs apply'],
   },
 ]
 
@@ -133,7 +133,7 @@ export default function Pricing() {
                 All packages come with optional ZIMRA Fiscalisation
               </span>
               <span className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-4 py-1.5 text-sm font-medium text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400">
-                &#x21bb; 6 months free use with every hardware purchase
+                &#x21bb; 6 months free use with every hardware purchase + free renewal (Ts &amp; Cs apply)
               </span>
             </div>
           </motion.div>

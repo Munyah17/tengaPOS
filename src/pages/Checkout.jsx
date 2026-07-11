@@ -23,7 +23,8 @@ const PLANS = [
     key: 'standard_plan',
     name: 'Standard Plan',
     price: 200,
-    cycle: 'per 6 months',
+    cycle: 'once-off · 6 months included',
+    renewal: 'Free renewal — Ts & Cs apply',
     desc: 'Combo hardware bundle',
     popular: true,
     features: ['Everything in BYOD', 'Kitchen display & Orders', 'ZIMRA Fiscalisation', 'Staff management · 5 users'],
@@ -32,7 +33,8 @@ const PLANS = [
     key: 'pro_package',
     name: 'Pro Package',
     price: 250,
-    cycle: 'per 6 months',
+    cycle: 'once-off · 6 months included',
+    renewal: 'Free renewal — Ts & Cs apply',
     desc: 'Full restaurant & retail suite',
     features: ['Everything in Standard', 'Dining board & Drive-through', 'Advanced reports', '3 branches · 10 users'],
   },
@@ -57,6 +59,24 @@ export default function Checkout() {
   const trialActive = tenant?.trial_ends_at && !tenant?.plan_start_date && new Date(tenant.trial_ends_at) > new Date()
   const trialExpired = tenant?.trial_ends_at && !tenant?.plan_start_date && new Date(tenant.trial_ends_at) <= new Date()
   const hasPaidPlan = !!tenant?.plan_start_date
+  // Trial is opt-in and once per business
+  const trialAvailable = !tenant?.trial_ends_at && !hasPaidPlan
+  const [startingTrial, setStartingTrial] = useState(false)
+
+  const startTrial = async () => {
+    setStartingTrial(true)
+    try {
+      const { data, error } = await supabase.rpc('start_free_trial')
+      if (error) throw error
+      if (data?.ok === false) throw new Error('Could not start trial')
+      await initAuth()
+      toast.success('Your 7-day free trial is live — $0 due today!')
+      navigate('/app/dashboard')
+    } catch (err) {
+      toast.error(err.message || 'Could not start the free trial')
+      setStartingTrial(false)
+    }
+  }
 
   useEffect(() => {
     if (!isAuthenticated) navigate('/login')
@@ -159,6 +179,34 @@ export default function Checkout() {
           )}
         </div>
 
+        {/* 7-Day Free Trial — its own pricing option */}
+        {trialAvailable && (
+          <div className="mx-auto mb-6 max-w-2xl rounded-2xl border-2 border-green-500/70 bg-green-500/10 p-5 sm:p-6">
+            <div className="flex flex-col items-center gap-4 sm:flex-row sm:justify-between">
+              <div className="text-center sm:text-left">
+                <div className="flex flex-wrap items-center justify-center gap-2 sm:justify-start">
+                  <Sparkles className="h-5 w-5 text-green-400" />
+                  <h2 className="text-lg font-extrabold text-white">7-Day Free Trial</h2>
+                  <span className="rounded-full bg-green-500 px-3 py-0.5 text-xs font-bold text-white">
+                    Due today — $0!
+                  </span>
+                </div>
+                <p className="mt-1 text-sm text-green-200/80">
+                  Full vendor dashboard access for 7 days. No card needed. One trial per business.
+                </p>
+              </div>
+              <button
+                onClick={startTrial}
+                disabled={startingTrial}
+                className="flex flex-shrink-0 items-center gap-2 rounded-xl bg-green-600 px-6 py-3 text-sm font-bold text-white hover:bg-green-500 disabled:opacity-60"
+              >
+                {startingTrial ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+                {startingTrial ? 'Starting…' : 'Start Free Trial'}
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Plans */}
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
           {PLANS.map((plan) => (
@@ -181,6 +229,9 @@ export default function Checkout() {
               <p className="text-xs text-slate-400">{plan.desc}</p>
               <p className="mt-3 text-3xl font-extrabold text-white">${plan.price}</p>
               <p className="text-xs text-slate-500">{plan.cycle}</p>
+              {plan.renewal && (
+                <p className="mt-0.5 text-xs font-semibold text-green-400">{plan.renewal}</p>
+              )}
               <ul className="mt-4 space-y-1.5">
                 {plan.features.map((f) => (
                   <li key={f} className="flex items-start gap-1.5 text-xs text-slate-300">

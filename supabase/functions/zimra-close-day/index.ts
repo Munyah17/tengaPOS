@@ -134,7 +134,7 @@ Deno.serve(async (req) => {
       },
     }
 
-    const baseUrl  = Deno.env.get('ZIMRA_BASE_URL') || 'https://fdmsapitest.zimra.co.zw'
+    const baseUrl  = Deno.env.get('ZIMRA_BASE_URL') || 'https://fdms.zimra.co.zw'
     const zimraUrl = `${baseUrl}/Device/v1/${cfg.device_id}/closeday`
 
     let zimraSuccess = false

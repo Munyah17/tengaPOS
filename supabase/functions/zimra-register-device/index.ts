@@ -62,7 +62,7 @@ Deno.serve(async (req) => {
     }
 
     // 2. Call ZIMRA device registration endpoint
-    const baseUrl = Deno.env.get('ZIMRA_BASE_URL') || 'https://fdmsapitest.zimra.co.zw'
+    const baseUrl = Deno.env.get('ZIMRA_BASE_URL') || 'https://fdms.zimra.co.zw'
 
     // ZIMRA register endpoint requires:
     // - POST /Device/v1/register

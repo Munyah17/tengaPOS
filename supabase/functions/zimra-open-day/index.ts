@@ -54,7 +54,7 @@ Deno.serve(async (req) => {
     const fiscalDayOpened  = fdmsDate(openedAt)
 
     // FDMS v7.2 OpenDay body: fiscalDayNo (optional) + fiscalDayOpened timestamp
-    const baseUrl  = Deno.env.get('ZIMRA_BASE_URL') || 'https://fdmsapitest.zimra.co.zw'
+    const baseUrl  = Deno.env.get('ZIMRA_BASE_URL') || 'https://fdms.zimra.co.zw'
     const zimraUrl = `${baseUrl}/Device/v1/${cfg.device_id}/openday`
 
     let zimraSuccess = false

@@ -21,6 +21,7 @@ export const PLANS = {
     renewalMonths: 1,
     tier: 1,
     price: 50,
+    recurring: true,
     priceLabel: '$50 / month',
     desc: 'Own device · Monthly billing',
   },
@@ -33,8 +34,10 @@ export const PLANS = {
     renewalMonths: 6,
     tier: 2,
     price: 200,
-    priceLabel: '$200 / 6 months',
-    desc: 'Combo hardware · 6-month renewal',
+    recurring: false,
+    priceLabel: '$200 once-off · 6 months included',
+    renewalNote: 'Free renewal — Ts & Cs apply',
+    desc: 'Combo hardware · Free renewal (Ts & Cs apply)',
   },
   pro_package: {
     label: 'Pro Package',
@@ -45,8 +48,10 @@ export const PLANS = {
     renewalMonths: 6,
     tier: 3,
     price: 250,
-    priceLabel: '$250 / 6 months',
-    desc: 'Combo hardware · 6-month renewal',
+    recurring: false,
+    priceLabel: '$250 once-off · 6 months included',
+    renewalNote: 'Free renewal — Ts & Cs apply',
+    desc: 'Combo hardware · Free renewal (Ts & Cs apply)',
   },
   business: {
     label: 'Business',
@@ -57,6 +62,7 @@ export const PLANS = {
     renewalMonths: 12,
     tier: 4,
     price: null,
+    recurring: false,
     priceLabel: 'Custom quote',
     desc: 'White-label · Backups · Dedicated tech',
   },
@@ -69,6 +75,7 @@ export const PLANS = {
     renewalMonths: 12,
     tier: 5,
     price: null,
+    recurring: false,
     priceLabel: 'Custom quote',
     desc: 'Full custom · Unlimited · Priority support',
   },
@@ -211,9 +218,9 @@ export function TenantModal({ tenant, technicians, onClose, onSaved }) {
     const updates = {
       plan_type: planType,
       features,
-      whitelabel: currentIsHighTier ? whitelabel : {},
-      backup_config: currentIsHighTier ? backupConfig : {},
-      dedicated_technician_id: currentIsHighTier && technicianId ? technicianId : null,
+      whitelabel,
+      backup_config: backupConfig,
+      dedicated_technician_id: technicianId || null,
     }
 
     if (newStatus) {
@@ -274,24 +281,23 @@ export function TenantModal({ tenant, technicians, onClose, onSaved }) {
           </button>
         </div>
 
-        {/* Tabs */}
+        {/* Tabs — Super Admin has full control on every tab, regardless of plan */}
         <div className="flex flex-shrink-0 gap-1 overflow-x-auto border-b border-white/10 px-4 pt-3">
           {TABS.map((t) => {
-            const locked = ['Branding', 'Backups', 'Team'].includes(t) && !currentIsHighTier
+            const premium = ['Branding', 'Backups', 'Team'].includes(t) && !currentIsHighTier
             return (
               <button
                 key={t}
-                onClick={() => !locked && setTab(t)}
+                onClick={() => setTab(t)}
                 className={`flex flex-shrink-0 items-center gap-1.5 rounded-t-lg px-4 py-2 text-sm font-semibold transition-colors ${
                   tab === t
                     ? 'border-b-2 border-indigo-500 text-indigo-400'
-                    : locked
-                      ? 'cursor-not-allowed text-slate-700'
-                      : 'text-slate-500 hover:text-slate-300'
+                    : 'text-slate-500 hover:text-slate-300'
                 }`}
+                title={premium ? 'Normally a Business/Enterprise feature — you can still configure it' : undefined}
               >
                 {t}
-                {locked && <Crown className="h-3 w-3 text-amber-600" />}
+                {premium && <Crown className="h-3 w-3 text-amber-600" />}
               </button>
             )
           })}
@@ -327,9 +333,10 @@ export function TenantModal({ tenant, technicians, onClose, onSaved }) {
 
               {/* Renewal period info */}
               <div className="mt-4 rounded-xl border border-slate-100 dark:border-white/5 bg-white/5 px-4 py-3 text-sm text-slate-400">
-                Renewal cycle: <span className="font-semibold text-slate-900 dark:text-white">
-                  {PLANS[planType]?.renewalMonths === 1 ? 'Monthly' : `Every ${PLANS[planType]?.renewalMonths} months`}
-                </span>
+                Billing: <span className="font-semibold text-slate-900 dark:text-white">{PLANS[planType]?.priceLabel}</span>
+                {PLANS[planType]?.renewalNote && (
+                  <span className="ml-2 text-green-500 dark:text-green-400 font-medium">{PLANS[planType].renewalNote}</span>
+                )}
               </div>
 
               {currentIsHighTier && (
@@ -405,7 +412,7 @@ export function TenantModal({ tenant, technicians, onClose, onSaved }) {
           )}
 
           {/* ── Branding tab ── */}
-          {tab === 'Branding' && currentIsHighTier && (
+          {tab === 'Branding' && (
             <div className="space-y-4">
               <div className="flex items-center gap-2 rounded-xl border border-purple-500/20 bg-purple-500/5 px-4 py-3 text-sm text-purple-300">
                 <Palette className="h-4 w-4 flex-shrink-0" />
@@ -452,7 +459,7 @@ export function TenantModal({ tenant, technicians, onClose, onSaved }) {
           )}
 
           {/* ── Backups tab ── */}
-          {tab === 'Backups' && currentIsHighTier && (
+          {tab === 'Backups' && (
             <div className="space-y-4">
               <div className="flex items-center gap-2 rounded-xl border border-blue-500/20 bg-blue-500/5 px-4 py-3 text-sm text-blue-300">
                 <HardDrive className="h-4 w-4 flex-shrink-0" />
@@ -496,7 +503,7 @@ export function TenantModal({ tenant, technicians, onClose, onSaved }) {
           )}
 
           {/* ── Team tab ── */}
-          {tab === 'Team' && currentIsHighTier && (
+          {tab === 'Team' && (
             <div className="space-y-4">
               <div className="flex items-center gap-2 rounded-xl border border-green-500/20 bg-green-500/5 px-4 py-3 text-sm text-green-300">
                 <Users className="h-4 w-4 flex-shrink-0" />

@@ -37,6 +37,19 @@ html.dark {
 
 body {
   font-family: var(--font-sans);
+  /* Never allow horizontal page pan/drag — wide content must scroll inside
+     its own container, not stretch the viewport (mobile overflow fix) */
+  overflow-x: hidden;
+}
+
+#root {
+  max-width: 100vw;
+  overflow-x: clip;
+}
+
+/* Tables inside admin/tenant pages scroll within their card, not the page */
+table {
+  min-width: 0;
 }
 
 .glass {
