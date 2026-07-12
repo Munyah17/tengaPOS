@@ -6,14 +6,6 @@ import { formatCurrency, formatDateTime } from '@/utils/formatters'
 import { useAuthStore } from '@/stores/authStore'
 import { fetchTransactions } from '@/lib/db'
 
-const DEMO_TRANSACTIONS = [
-  { id: 'TP-260524-0001', date: '2026-05-24T14:30:00', cashier: 'Grace K.', items: 3, subtotal: 13.48, tax: 2.02, total: 15.50, method: 'Cash', branch: 'Main' },
-  { id: 'TP-260524-0002', date: '2026-05-24T14:22:00', cashier: 'Tatenda M.', items: 7, subtotal: 37.17, tax: 5.58, total: 42.75, method: 'EcoCash', branch: 'Main' },
-  { id: 'TP-260524-0003', date: '2026-05-24T14:15:00', cashier: 'Grace K.', items: 2, subtotal: 7.13, tax: 1.07, total: 8.20, method: 'Cash', branch: 'CBD' },
-  { id: 'TP-260524-0004', date: '2026-05-24T14:08:00', cashier: 'Farai N.', items: 12, subtotal: 59.04, tax: 8.86, total: 67.90, method: 'Visa', branch: 'Main' },
-  { id: 'TP-260524-0005', date: '2026-05-24T13:55:00', cashier: 'Grace K.', items: 4, subtotal: 20.00, tax: 3.00, total: 23.00, method: 'InnBucks', branch: 'Mall' },
-]
-
 const exportColumns = [
   { header: 'Receipt #', key: 'id' },
   { header: 'Date', key: 'date' },
@@ -27,17 +19,17 @@ const exportColumns = [
 ]
 
 export default function Transactions() {
-  const { isDemo, tenant } = useAuthStore()
-  const [liveTransactions, setLiveTransactions] = useState([])
+  const { tenant } = useAuthStore()
+  const [allTransactions, setAllTransactions] = useState([])
   const [loading, setLoading] = useState(false)
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
 
   const load = () => {
-    if (isDemo || !tenant?.id) return
+    if (!tenant?.id) return
     setLoading(true)
     fetchTransactions(tenant.id)
-      .then(rows => setLiveTransactions(rows.map(t => ({
+      .then(rows => setAllTransactions(rows.map(t => ({
         id: t.reference || t.id,
         date: t.created_at,
         cashier: t.users?.name || '—',
@@ -52,9 +44,7 @@ export default function Transactions() {
       .finally(() => setLoading(false))
   }
 
-  useEffect(() => { load() }, [isDemo, tenant?.id])
-
-  const allTransactions = isDemo ? DEMO_TRANSACTIONS : liveTransactions
+  useEffect(() => { load() }, [tenant?.id])
 
   const transactions = useMemo(() => {
     if (!dateFrom && !dateTo) return allTransactions
@@ -89,11 +79,9 @@ export default function Transactions() {
               </button>
             )}
           </div>
-          {!isDemo && (
-            <button onClick={load} className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
-              <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-            </button>
-          )}
+          <button onClick={load} className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
+            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+          </button>
           <ExportMenu data={transactions} columns={exportColumns} title={`Transactions${dateFiltered ? ` (${dateFrom || '…'} to ${dateTo || '…'})` : ''}`} filename="tengapos_transactions" />
         </div>
       </div>

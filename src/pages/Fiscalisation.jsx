@@ -16,7 +16,7 @@ const isSupabaseConfigured = !!(
 
 export default function Fiscalisation() {
   const fiscal = useFiscalStore()
-  const { isDemo, tenant } = useAuthStore()
+  const { tenant } = useAuthStore()
   const [fiscalForm, setFiscalForm] = useState({
     deviceID: fiscal.deviceID,
     activationKey: fiscal.activationKey,
@@ -34,7 +34,7 @@ export default function Fiscalisation() {
   const [registerLoading, setRegisterLoading] = useState(false)
 
   useEffect(() => {
-    if (isDemo || !tenant?.id) return
+    if (!tenant?.id) return
     supabase.from('tenant_fiscal_configs')
       .select('*')
       .eq('tenant_id', tenant.id)
@@ -55,10 +55,9 @@ export default function Fiscalisation() {
           branchContacts:       data.branch_contacts       || '',
         })
       })
-  }, [tenant?.id, isDemo])
+  }, [tenant?.id])
 
   const handleOpenDay = async () => {
-    if (isDemo) { toast('Demo mode — fiscal day toggle is simulated'); fiscal.setFiscalDayStatus('open'); return }
     if (!tenant?.id) { toast.error('Not authenticated'); return }
     setDayLoading(true)
     try {
@@ -80,7 +79,6 @@ export default function Fiscalisation() {
   }
 
   const handleCloseDay = async () => {
-    if (isDemo) { toast('Demo mode — fiscal day toggle is simulated'); fiscal.setFiscalDayStatus('closed'); return }
     if (!tenant?.id) { toast.error('Not authenticated'); return }
     setDayLoading(true)
     try {
@@ -105,11 +103,7 @@ export default function Fiscalisation() {
     setFiscalForm((prev) => ({ ...prev, [field]: e.target.value }))
 
   const handleSave = async () => {
-    if (isDemo || !tenant?.id) {
-      fiscal.setConfig(fiscalForm)
-      toast.success('Saved locally (demo mode — connect Supabase to persist)')
-      return
-    }
+    if (!tenant?.id) return
     try {
       const { error } = await supabase
         .from('tenant_fiscal_configs')
@@ -138,7 +132,7 @@ export default function Fiscalisation() {
   const handleEnable = async () => {
     const next = !fiscal.isEnabled
     fiscal.setEnabled(next)
-    if (!isDemo && tenant?.id) {
+    if (tenant?.id) {
       await supabase
         .from('tenant_fiscal_configs')
         .upsert({ tenant_id: tenant.id, is_enabled: next, updated_at: new Date().toISOString() }, { onConflict: 'tenant_id' })
@@ -147,7 +141,6 @@ export default function Fiscalisation() {
   }
 
   const handleRegisterDevice = async () => {
-    if (isDemo) { toast.error('Not available in demo mode'); return }
     if (!tenant?.id) { toast.error('Not authenticated'); return }
     if (!fiscalForm.activationKey) { toast.error('Enter activation key from ZIMRA'); return }
     if (!isSupabaseConfigured) { toast.error('Service not available — contact support'); return }

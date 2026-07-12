@@ -8,13 +8,14 @@ import {
 import posIcon from '@/assets/pos-icon.png'
 import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/stores/authStore'
+import { usePlanPricing } from '@/lib/platformSettings'
 import toast from 'react-hot-toast'
 
 const PLANS = [
   {
     key: 'byod_monthly',
     name: 'BYOD Monthly',
-    price: 50,
+    price: 30,
     cycle: 'per month',
     desc: 'Use your own device',
     features: ['POS & Inventory', 'Transactions & Reports', 'Task manager', '1 branch · 3 users'],
@@ -22,21 +23,21 @@ const PLANS = [
   {
     key: 'standard_plan',
     name: 'Standard Plan',
-    price: 200,
+    price: 170,
     cycle: 'once-off · 6 months included',
     renewal: 'Free renewal — Ts & Cs apply',
-    desc: 'Combo hardware bundle',
+    desc: '10″ tablet + thermal printer + software',
     popular: true,
-    features: ['Everything in BYOD', 'Kitchen display & Orders', 'ZIMRA Fiscalisation', 'Staff management · 5 users'],
+    features: ['Everything in BYOD', 'Kitchen display & Orders', 'Staff management · 5 users', 'No subscriptions'],
   },
   {
     key: 'pro_package',
     name: 'Pro Package',
-    price: 250,
+    price: 200,
     cycle: 'once-off · 6 months included',
     renewal: 'Free renewal — Ts & Cs apply',
-    desc: 'Full restaurant & retail suite',
-    features: ['Everything in Standard', 'Dining board & Drive-through', 'Advanced reports', '3 branches · 10 users'],
+    desc: '12″ tablet + thermal printer + software',
+    features: ['Everything in Standard', 'Dining board & Drive-through', 'Advanced reports · 3 branches', 'No subscriptions'],
   },
 ]
 
@@ -47,7 +48,9 @@ function daysLeft(iso) {
 export default function Checkout() {
   const navigate = useNavigate()
   const [params] = useSearchParams()
-  const { isAuthenticated, tenant, initAuth, isDemo } = useAuthStore()
+  const { isAuthenticated, tenant, initAuth } = useAuthStore()
+  const { pricing } = usePlanPricing()
+  const planPrice = (plan) => pricing[plan.key]?.price ?? plan.price
   const [selectedPlan, setSelectedPlan] = useState('standard_plan')
   const [provider, setProvider] = useState('paynow')
   const [redirecting, setRedirecting] = useState(false)
@@ -80,8 +83,7 @@ export default function Checkout() {
 
   useEffect(() => {
     if (!isAuthenticated) navigate('/login')
-    if (isDemo) navigate('/app/dashboard')
-  }, [isAuthenticated, isDemo, navigate])
+  }, [isAuthenticated, navigate])
 
   // Poll for webhook confirmation after returning from a provider
   useEffect(() => {
@@ -227,7 +229,7 @@ export default function Checkout() {
               )}
               <p className="font-bold text-white">{plan.name}</p>
               <p className="text-xs text-slate-400">{plan.desc}</p>
-              <p className="mt-3 text-3xl font-extrabold text-white">${plan.price}</p>
+              <p className="mt-3 text-3xl font-extrabold text-white">${planPrice(plan)}</p>
               <p className="text-xs text-slate-500">{plan.cycle}</p>
               {plan.renewal && (
                 <p className="mt-0.5 text-xs font-semibold text-green-400">{plan.renewal}</p>
@@ -283,7 +285,7 @@ export default function Checkout() {
             className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-brand-600 py-3.5 text-sm font-bold text-white transition-colors hover:bg-brand-700 disabled:opacity-60"
           >
             {redirecting ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}
-            {redirecting ? 'Redirecting to secure checkout…' : `Continue to secure checkout — $${PLANS.find((p) => p.key === selectedPlan)?.price}`}
+            {redirecting ? 'Redirecting to secure checkout…' : `Continue to secure checkout — $${planPrice(PLANS.find((p) => p.key === selectedPlan))}`}
           </button>
 
           <p className="mt-3 text-center text-xs text-slate-500">

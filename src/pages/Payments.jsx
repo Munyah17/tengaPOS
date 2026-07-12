@@ -9,27 +9,6 @@ import { useAuthStore } from '@/stores/authStore'
 import { formatCurrency, formatDateTime } from '@/utils/formatters'
 import { fetchPaymentSessions, approvePaymentSession, declinePaymentSession } from '@/lib/db'
 
-const DEMO_SESSIONS = [
-  {
-    id: 'demo-1', reference: 'TPOS-1717237800000-AB12C', amount: 42.75,
-    status: 'pending', created_at: new Date(Date.now() - 1000 * 60 * 30).toISOString(),
-    paynow_reference: null, manually_confirmed: false,
-    order_data: { items: [{ name: 'Zviyo Chicken', qty: 2, price: 12.00 }, { name: 'Sadza & Veg', qty: 1, price: 8.75 }], total: 42.75 },
-  },
-  {
-    id: 'demo-2', reference: 'TPOS-1717234200000-CD34E', amount: 15.50,
-    status: 'paid', created_at: new Date(Date.now() - 1000 * 60 * 90).toISOString(),
-    paynow_reference: '7298374892', manually_confirmed: false,
-    order_data: { items: [{ name: 'T-Bone Steak', qty: 1, price: 15.50 }], total: 15.50 },
-  },
-  {
-    id: 'demo-3', reference: 'TPOS-1717230600000-EF56G', amount: 8.20,
-    status: 'cancelled', created_at: new Date(Date.now() - 1000 * 60 * 150).toISOString(),
-    paynow_reference: null, manually_confirmed: true,
-    order_data: { items: [{ name: 'Juice', qty: 2, price: 4.10 }], total: 8.20 },
-  },
-]
-
 const STATUS_CONFIG = {
   pending:            { label: 'Pending',    icon: Clock,        bg: 'bg-amber-100 dark:bg-amber-900/40',  text: 'text-amber-700 dark:text-amber-300' },
   paid:               { label: 'Paid',       icon: CheckCircle,  bg: 'bg-green-100 dark:bg-green-900/40',  text: 'text-green-700 dark:text-green-300' },
@@ -163,14 +142,13 @@ function ConfirmModal({ session, action, onConfirm, onCancel }) {
 }
 
 export default function Payments() {
-  const { isDemo, tenant, user } = useAuthStore()
+  const { tenant, user } = useAuthStore()
   const [sessions, setSessions] = useState([])
   const [loading, setLoading] = useState(false)
   const [filter, setFilter] = useState('all')
   const [modal, setModal] = useState(null) // { session, action }
 
   const load = () => {
-    if (isDemo) { setSessions(DEMO_SESSIONS); return }
     if (!tenant?.id) return
     setLoading(true)
     fetchPaymentSessions(tenant.id)
@@ -179,7 +157,7 @@ export default function Payments() {
       .finally(() => setLoading(false))
   }
 
-  useEffect(() => { load() }, [isDemo, tenant?.id])
+  useEffect(() => { load() }, [tenant?.id])
 
   const pendingCount = sessions.filter(s => s.status === 'pending').length
 
@@ -189,12 +167,6 @@ export default function Payments() {
   })
 
   const handleConfirm = async (session, note) => {
-    if (isDemo) {
-      setSessions(prev => prev.map(s => s.id === session.id ? { ...s, status: modal.action === 'approve' ? 'paid' : 'cancelled', manually_confirmed: true } : s))
-      toast.success(modal.action === 'approve' ? 'Payment approved (demo)' : 'Payment declined (demo)')
-      setModal(null)
-      return
-    }
     try {
       if (modal.action === 'approve') {
         await approvePaymentSession(session.id, user?.id, note)

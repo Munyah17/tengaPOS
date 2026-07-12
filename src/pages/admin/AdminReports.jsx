@@ -11,15 +11,15 @@ import { PLANS } from './AdminTenants'
 // Only BYOD Monthly recurs. Standard/Pro are once-off hardware bundles with
 // free renewal (Ts & Cs apply). Business/Enterprise are custom quotes.
 const PLAN_MRR = {
-  byod_monthly:  50,
+  byod_monthly:  30,
   standard_plan: 0,
   pro_package:   0,
   business:      0,
   enterprise:    0,
 }
 const PLAN_ONCE_OFF = {
-  standard_plan: 200,
-  pro_package:   250,
+  standard_plan: 170,
+  pro_package:   200,
 }
 
 function fmt$(n) {

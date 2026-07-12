@@ -3,6 +3,7 @@ import { ArrowRight, ShoppingBag, SlidersHorizontal, TrendingUp, ExternalLink } 
 import { Link } from 'react-router-dom'
 import Navbar from '@/components/landing/Navbar'
 import Hero from '@/components/landing/Hero'
+import { useSiteBanner } from '@/lib/platformSettings'
 import Features from '@/components/landing/Features'
 import Pricing from '@/components/landing/Pricing'
 import Footer from '@/components/landing/Footer'
@@ -50,9 +51,23 @@ const stats = [
   { value: '24/7', label: 'Support access' },
 ]
 
+const BANNER_STYLES = {
+  info: 'bg-blue-600 text-white',
+  promo: 'bg-green-600 text-white',
+  warning: 'bg-amber-500 text-slate-900',
+}
+
 export default function Landing() {
+  // Site-wide announcement banner, toggled from the Super Admin portal
+  const banner = useSiteBanner()
+
   return (
     <div className="min-h-screen bg-white dark:bg-slate-950">
+      {banner?.enabled && banner.text && (
+        <div className={`relative z-[60] px-4 py-2.5 text-center text-sm font-semibold ${BANNER_STYLES[banner.type] || BANNER_STYLES.info}`}>
+          {banner.text}
+        </div>
+      )}
       <Navbar />
       <Hero />
 

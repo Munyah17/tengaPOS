@@ -24,6 +24,7 @@ import Insights from '@/pages/Insights'
 import PaymentReturn from '@/pages/PaymentReturn'
 import Payments from '@/pages/Payments'
 import HR from '@/pages/HR'
+import Notifications from '@/pages/Notifications'
 import AppLayout from '@/components/layout/AppLayout'
 
 import Dining from '@/pages/Dining'
@@ -48,6 +49,7 @@ import SuperAdminRoles from '@/pages/admin/SuperAdminRoles'
 import SuperAdminAnnouncements from '@/pages/admin/SuperAdminAnnouncements'
 import SuperAdminBroadcasts from '@/pages/admin/SuperAdminBroadcasts'
 import AdminUsers from '@/pages/admin/AdminUsers'
+import AdminFiscalRequests from '@/pages/admin/AdminFiscalRequests'
 import Checkout from '@/pages/Checkout'
 
 const queryClient = new QueryClient({
@@ -60,20 +62,19 @@ const queryClient = new QueryClient({
 })
 
 function ProtectedRoute({ children }) {
-  const { isAuthenticated, userType, tenantStatus, isDemo, tenant } = useAuthStore()
+  const { isAuthenticated, userType, tenantStatus, tenant } = useAuthStore()
   if (!isAuthenticated) return <Navigate to="/login" replace />
-  // Demo users are NEVER redirected to /admin — they stay in the tenant app always
-  if (!isDemo && userType === 'app_owner') return <Navigate to="/admin/dashboard" replace />
+  if (userType === 'app_owner') return <Navigate to="/admin/dashboard" replace />
   // 7-day trial is opt-in: fresh signups (no trial, no plan) choose on /checkout;
   // an expired trial also routes to checkout to pick a paid plan
   const onTrial = tenant?.trial_ends_at && !tenant?.plan_start_date
   const trialExpired = onTrial && new Date(tenant.trial_ends_at) <= new Date()
   const neverActivated = !tenant?.trial_ends_at && !tenant?.plan_start_date
-  if (!isDemo && trialExpired) return <Navigate to="/checkout" replace />
-  if (!isDemo && tenantStatus === 'pending') {
+  if (trialExpired) return <Navigate to="/checkout" replace />
+  if (tenantStatus === 'pending') {
     return <Navigate to={neverActivated ? '/checkout' : '/pending'} replace />
   }
-  if (!isDemo && tenantStatus === 'suspended') {
+  if (tenantStatus === 'suspended') {
     // Suspended because the trial ran out → pay; suspended by Super Admin → pending screen
     return <Navigate to={onTrial ? '/checkout' : '/pending'} replace />
   }
@@ -81,10 +82,9 @@ function ProtectedRoute({ children }) {
 }
 
 function AdminRoute({ children }) {
-  const { isAuthenticated, userType, isDemo, role } = useAuthStore()
+  const { isAuthenticated, userType, role } = useAuthStore()
   if (!isAuthenticated) return <Navigate to="/login" replace />
-  // Demo users cannot access the admin panel under any circumstances
-  if (isDemo || userType !== 'app_owner') return <Navigate to="/app/dashboard" replace />
+  if (userType !== 'app_owner') return <Navigate to="/app/dashboard" replace />
   // Super Admin redirects to super admin portal
   if (role === 'super_admin') return <Navigate to="/admin/super/dashboard" replace />
   // Regular admin and others stay in regular admin
@@ -92,9 +92,9 @@ function AdminRoute({ children }) {
 }
 
 function SuperAdminRoute({ children }) {
-  const { isAuthenticated, userType, isDemo, role } = useAuthStore()
+  const { isAuthenticated, userType, role } = useAuthStore()
   if (!isAuthenticated) return <Navigate to="/login" replace />
-  if (isDemo || userType !== 'app_owner') return <Navigate to="/app/dashboard" replace />
+  if (userType !== 'app_owner') return <Navigate to="/app/dashboard" replace />
   if (role !== 'super_admin') return <Navigate to="/admin/dashboard" replace />
   return children
 }
@@ -144,6 +144,7 @@ export default function App() {
             <Route path="fiscalisation" element={<Fiscalisation />} />
             <Route path="payments" element={<Payments />} />
             <Route path="hr" element={<HR />} />
+            <Route path="notifications" element={<Notifications />} />
             <Route path="settings" element={<Settings />} />
           </Route>
 
@@ -161,6 +162,7 @@ export default function App() {
             <Route path="notifications" element={<AdminNotifications />} />
             <Route path="tenants" element={<AdminTenants />} />
             <Route path="users" element={<AdminUsers />} />
+            <Route path="fiscal-requests" element={<AdminFiscalRequests />} />
             <Route path="subscriptions" element={<SuperAdminSubscriptions />} />
             <Route path="billing" element={<SuperAdminBilling />} />
             <Route path="pricing" element={<SuperAdminPricing />} />
@@ -188,6 +190,7 @@ export default function App() {
             <Route index element={<Navigate to="dashboard" replace />} />
             <Route path="dashboard" element={<AdminDashboard />} />
             <Route path="users" element={<AdminUsers />} />
+            <Route path="fiscal-requests" element={<AdminFiscalRequests />} />
             <Route path="support" element={<AdminSupport />} />
             <Route path="announcements" element={<SuperAdminAnnouncements />} />
             <Route path="reports" element={<AdminReports />} />

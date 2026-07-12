@@ -18,7 +18,15 @@ export async function initiatePaynowCheckout({ tenantId, amount, items }) {
     },
   })
 
-  if (error) throw new Error(error.message || 'Edge function error')
+  if (error) {
+    // supabase-js hides the real error body behind "non-2xx status code" — unwrap it
+    let msg = error.message || 'Edge function error'
+    try {
+      const ctx = await error.context?.json()
+      if (ctx?.error) msg = ctx.error
+    } catch { /* keep default */ }
+    throw new Error(msg)
+  }
   if (data?.error) throw new Error(data.error)
   if (!data?.browserUrl) throw new Error('No checkout URL returned from Paynow')
 

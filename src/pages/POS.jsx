@@ -1,19 +1,20 @@
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useMemo, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Search, Barcode, Plus, Minus, Trash2, ShoppingCart,
   CreditCard, Banknote, Smartphone, Receipt, X, Car, Store, Package as PackageIcon,
-  RefreshCw, ExternalLink,
+  RefreshCw, ExternalLink, Camera,
 } from 'lucide-react'
 import Button from '@/components/common/Button'
 import ZimraReceipt from '@/components/common/ZimraReceipt'
 import { useCartStore } from '@/stores/cartStore'
 import { useThemeStore } from '@/stores/themeStore'
 import { useAuthStore } from '@/stores/authStore'
-import { DEMO_PRODUCTS, DEMO_CATEGORIES, RESTAURANT_DEMO_PRODUCTS, PAYMENT_METHODS } from '@/utils/constants'
+import { PAYMENT_METHODS } from '@/utils/constants'
 import { formatCurrency, generateReceiptNumber } from '@/utils/formatters'
 import { initiatePaynowCheckout } from '@/lib/paynow'
 import { fetchProducts, saveCheckout } from '@/lib/db'
+import { getOfflineProducts, queueOfflineSale } from '@/lib/offlineSync'
 import { supabase } from '@/lib/supabase'
 import { useFiscalStore } from '@/stores/fiscalStore'
 import toast from 'react-hot-toast'
@@ -28,7 +29,7 @@ const restaurantCategories = [
 
 export default function POS() {
   const { posMode } = useThemeStore()
-  const { isDemo, tenant, user, branch } = useAuthStore()
+  const { tenant, user, branch } = useAuthStore()
   const isRestaurant = posMode === 'restaurant'
   const cart = useCartStore()
   const fiscal = useFiscalStore()
@@ -40,20 +41,109 @@ export default function POS() {
   const [showMobileCart, setShowMobileCart] = useState(false)
   const [liveProducts, setLiveProducts] = useState([])
   const [productsLoading, setProductsLoading] = useState(false)
+  const [showScanner, setShowScanner] = useState(false)
+  const [searchFocused, setSearchFocused] = useState(false)
+  const [checkingOut, setCheckingOut] = useState(false)
+  const videoRef = useRef(null)
+  const scanStreamRef = useRef(null)
+  const fmt = (n) => formatCurrency(n, tenant?.currency)
 
   useEffect(() => {
-    if (isDemo || !tenant?.id) return
+    if (!tenant?.id) return
     setProductsLoading(true)
     fetchProducts(tenant.id)
       .then(setLiveProducts)
-      .catch(() => toast.error('Failed to load products'))
+      .catch(async () => {
+        // Offline or request failed — fall back to the locally cached copy
+        const cached = await getOfflineProducts(tenant.id)
+        if (cached.length > 0) {
+          setLiveProducts(cached)
+          toast('Offline — showing cached inventory', { icon: '📴' })
+        } else {
+          toast.error('Failed to load products')
+        }
+      })
       .finally(() => setProductsLoading(false))
-  }, [isDemo, tenant?.id])
+  }, [tenant?.id])
 
-  const products = isDemo
-    ? (isRestaurant ? RESTAURANT_DEMO_PRODUCTS : DEMO_PRODUCTS)
-    : liveProducts
-  const categories = isRestaurant ? restaurantCategories : (isDemo ? DEMO_CATEGORIES : [{ id: 'all', name: 'All' }])
+  // VAT config comes from the tenant's own settings (inclusive pricing)
+  useEffect(() => {
+    if (tenant) cart.setVatConfig(tenant.vat_enabled, tenant.vat_rate)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tenant?.vat_enabled, tenant?.vat_rate])
+
+  // ─── Camera barcode scanning (phone/tablet camera via BarcodeDetector) ───
+  const stopScanner = () => {
+    scanStreamRef.current?.getTracks().forEach((t) => t.stop())
+    scanStreamRef.current = null
+    setShowScanner(false)
+  }
+
+  const handleBarcodeFound = (code) => {
+    const product = products.find((p) => p.barcode && p.barcode === code)
+    if (product) {
+      cart.addItem(product)
+      toast.success(`${product.name} added`)
+      stopScanner()
+    } else {
+      setSearch(code)
+      toast(`No product with barcode ${code}`, { icon: '🔍' })
+      stopScanner()
+    }
+  }
+
+  const startScanner = async () => {
+    if (!('BarcodeDetector' in window)) {
+      toast.error('Camera scanning needs Chrome/Edge on Android or desktop. USB/Bluetooth scanners work in the search box.')
+      return
+    }
+    setShowScanner(true)
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'environment' },
+      })
+      scanStreamRef.current = stream
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream
+        await videoRef.current.play()
+      }
+      const detector = new window.BarcodeDetector({
+        formats: ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128', 'code_39', 'qr_code'],
+      })
+      const tick = async () => {
+        if (!scanStreamRef.current || !videoRef.current) return
+        try {
+          const codes = await detector.detect(videoRef.current)
+          if (codes.length > 0) {
+            handleBarcodeFound(codes[0].rawValue)
+            return
+          }
+        } catch { /* frame not ready */ }
+        if (scanStreamRef.current) requestAnimationFrame(tick)
+      }
+      requestAnimationFrame(tick)
+    } catch (err) {
+      stopScanner()
+      toast.error(err.name === 'NotAllowedError'
+        ? 'Camera permission denied — allow camera access to scan'
+        : 'Could not open the camera')
+    }
+  }
+
+  // Hardware scanners type the barcode + Enter into the search box
+  const handleSearchKeyDown = (e) => {
+    if (e.key === 'Enter' && search.trim()) {
+      const product = products.find((p) => p.barcode && p.barcode === search.trim())
+      if (product) {
+        cart.addItem(product)
+        setSearch('')
+        toast.success(`${product.name} added`)
+      }
+    }
+  }
+
+  const products = liveProducts
+  const categories = isRestaurant ? restaurantCategories : [{ id: 'all', name: 'All' }]
 
   const filtered = useMemo(() => {
     return products.filter((p) => {
@@ -66,11 +156,21 @@ export default function POS() {
     })
   }, [products, search, category])
 
+  // Mobile-money methods run through Paynow's hosted checkout, never manually
+  const PAYNOW_METHODS = ['ecocash', 'innbucks', 'omari', 'onemoney', 'zipit']
+
   const handleCheckout = async () => {
     if (cart.items.length === 0) {
       toast.error('Cart is empty')
       return
     }
+    if (PAYNOW_METHODS.includes(cart.paymentMethod)) {
+      // Redirect to Paynow — it completes the payment, our return page polls for 30s
+      return handlePaynowCheckout()
+    }
+    // Give the button a paint frame before the network work (INP fix)
+    setCheckingOut(true)
+    await new Promise((r) => setTimeout(r, 30))
     const subtotal = cart.getSubtotal()
     const tax = cart.getTax()
     const total = cart.getGrandTotal()
@@ -79,25 +179,45 @@ export default function POS() {
 
     let fdmsQrUrl = null
 
-    if (!isDemo && tenant?.id) {
-      try {
-        const result = await saveCheckout({
-          tenantId: tenant.id,
-          branchId: branch?.id || null,
-          userId: user?.id || null,
-          cartItems: cart.items,
-          paymentMethod: cart.paymentMethod,
-          subtotal,
-          tax,
-          total,
-          posMode,
-          orderType: isRestaurant ? (cart.orderType || 'counter') : 'sale',
-        })
-        receiptNumber = result.receiptNo
-        // Refresh product list after sale to reflect updated stock
-        fetchProducts(tenant.id).then(setLiveProducts).catch(() => {})
-      } catch (err) {
-        toast.error('Sale saved locally only — sync error: ' + (err.message || 'unknown'))
+    if (tenant?.id) {
+      const checkoutPayload = {
+        tenantId: tenant.id,
+        branchId: branch?.id || null,
+        userId: user?.id || null,
+        cartItems: cart.items,
+        paymentMethod: cart.paymentMethod,
+        subtotal,
+        tax,
+        total,
+        posMode,
+        orderType: isRestaurant ? (cart.orderType || 'counter') : 'sale',
+      }
+
+      if (!navigator.onLine) {
+        // Offline: queue the sale for background sync, don't block the cashier.
+        // Stock isn't decremented until the sale syncs — acceptable trade-off
+        // for offline-first operation.
+        await queueOfflineSale(checkoutPayload)
+        toast('Offline — sale saved, will sync automatically', { icon: '📴' })
+      } else {
+        try {
+          const result = await saveCheckout(checkoutPayload)
+          receiptNumber = result.receiptNo
+          // Refresh product list after sale to reflect updated stock
+          fetchProducts(tenant.id).then(setLiveProducts).catch(() => {})
+        } catch (err) {
+          const msg = err.message || 'unknown'
+          if (msg.includes('Insufficient stock') || msg.includes('Stock check failed')) {
+            // Hard stop — never sell what isn't in stock
+            toast.error(msg)
+            setCheckingOut(false)
+            fetchProducts(tenant.id).then(setLiveProducts).catch(() => {})
+            return
+          }
+          // Network/server error mid-sale — queue it rather than lose the sale
+          await queueOfflineSale(checkoutPayload)
+          toast('Connection issue — sale saved, will sync automatically', { icon: '📴' })
+        }
       }
 
       // Submit to ZIMRA FDMS if fiscal day is open
@@ -142,22 +262,22 @@ export default function POS() {
       total,
       paymentMethod: cart.paymentMethod,
       date: new Date().toISOString(),
-      cashier: isDemo ? 'Demo Cashier' : (useAuthStore.getState().profile?.name || 'Cashier'),
+      cashier: useAuthStore.getState().profile?.name || 'Cashier',
       fdmsQrUrl,
+      vatEnabled: cart.vatEnabled,
+      vatRate: cart.vatRate,
+      currency: tenant?.currency,
     }
     setReceiptData(receipt)
     setShowReceipt(true)
     setShowMobileCart(false)
     cart.clearCart()
+    setCheckingOut(false)
     toast.success(isRestaurant ? 'Order sent to kitchen!' : 'Transaction completed!')
   }
 
   const handlePaynowCheckout = async () => {
     if (cart.items.length === 0) { toast.error('Cart is empty'); return }
-    if (isDemo) {
-      toast.error('Paynow is not available in demo mode. Configure your integration keys in Settings → Payments.')
-      return
-    }
     if (!tenant?.id) { toast.error('Not authenticated'); return }
 
     setPaynowLoading(true)
@@ -191,12 +311,42 @@ export default function POS() {
                 type="text"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
+                onFocus={() => setSearchFocused(true)}
+                onBlur={() => setTimeout(() => setSearchFocused(false), 150)}
+                onKeyDown={handleSearchKeyDown}
                 placeholder="Search by name, SKU, or barcode..."
                 className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 pl-10 pr-4 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 dark:border-slate-700 dark:bg-slate-900 dark:text-white"
               />
+              {/* Suggestive search — matching products drop down as you type */}
+              {searchFocused && search.trim().length > 0 && filtered.length > 0 && (
+                <div className="absolute left-0 right-0 top-full z-30 mt-1 max-h-72 overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-900">
+                  {filtered.slice(0, 8).map((p) => (
+                    <button
+                      key={p.id}
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => { cart.addItem(p); setSearch(''); toast.success(`${p.name} added`) }}
+                      className="flex w-full items-center gap-3 border-b border-slate-100 px-3 py-2.5 text-left last:border-0 hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-800"
+                    >
+                      <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center overflow-hidden rounded-lg bg-slate-100 dark:bg-slate-800">
+                        {p.image
+                          ? <img src={p.image} alt="" className="h-full w-full object-cover" />
+                          : <PackageIcon className="h-4 w-4 text-slate-400" />}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-semibold text-slate-900 dark:text-white">{p.name}</p>
+                        <p className="text-xs text-slate-500">{p.sku} · {p.stock} in stock</p>
+                      </div>
+                      <span className="flex-shrink-0 text-sm font-bold text-slate-900 dark:text-white">{fmt(p.price)}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
-            <button className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-medium text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
-              <Barcode className="h-4 w-4" />
+            <button
+              onClick={startScanner}
+              className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-medium text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300"
+            >
+              <Camera className="h-4 w-4" />
               Scan
             </button>
           </div>
@@ -263,7 +413,7 @@ export default function POS() {
                   <span className={`text-lg font-extrabold ${
                     isRestaurant ? 'text-restaurant-600 dark:text-restaurant-400' : 'text-brand-600 dark:text-brand-400'
                   }`}>
-                    {formatCurrency(product.price)}
+                    {fmt(product.price)}
                   </span>
                   <span className="text-xs text-slate-500">{product.stock} in stock</span>
                 </div>
@@ -283,7 +433,7 @@ export default function POS() {
       >
         <ShoppingCart className="h-5 w-5" />
         {cart.items.length > 0
-          ? <span>{cart.items.length} item{cart.items.length !== 1 ? 's' : ''} · {formatCurrency(cart.getGrandTotal())}</span>
+          ? <span>{cart.items.length} item{cart.items.length !== 1 ? 's' : ''} · {fmt(cart.getGrandTotal())}</span>
           : <span>{isRestaurant ? 'Order' : 'Cart'}</span>}
         {cart.items.length > 0 && (
           <span className="flex h-5 w-5 items-center justify-center rounded-full bg-white/25 text-xs font-extrabold">
@@ -375,7 +525,7 @@ export default function POS() {
                         <h4 className="text-sm font-semibold text-slate-900 dark:text-white">
                           {item.name}
                         </h4>
-                        <p className="text-xs text-slate-500">{formatCurrency(item.price)} each</p>
+                        <p className="text-xs text-slate-500">{fmt(item.price)} each</p>
                       </div>
                       <button
                         onClick={() => cart.removeItem(item.id)}
@@ -405,7 +555,7 @@ export default function POS() {
                         </button>
                       </div>
                       <span className="text-sm font-bold text-slate-900 dark:text-white">
-                        {formatCurrency(item.price * item.quantity)}
+                        {fmt(item.price * item.quantity)}
                       </span>
                     </div>
                   </motion.div>
@@ -440,24 +590,28 @@ export default function POS() {
         {/* Totals + Checkout */}
         <div className="border-t border-slate-200 p-4 dark:border-slate-800">
           <div className="space-y-2">
-            <div className="flex justify-between text-sm">
-              <span className="text-slate-500">Subtotal</span>
-              <span className="font-medium text-slate-900 dark:text-white">
-                {formatCurrency(cart.getSubtotal())}
-              </span>
-            </div>
-            <div className="flex justify-between text-sm">
-              <span className="text-slate-500">Tax (15%)</span>
-              <span className="font-medium text-slate-900 dark:text-white">
-                {formatCurrency(cart.getTax())}
-              </span>
-            </div>
+            {cart.vatEnabled ? (
+              <>
+                <div className="flex justify-between text-sm">
+                  <span className="text-slate-500">Net (ex VAT)</span>
+                  <span className="font-medium text-slate-900 dark:text-white">
+                    {fmt(cart.getSubtotal())}
+                  </span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-slate-500">VAT {cart.vatRate}% (included)</span>
+                  <span className="font-medium text-slate-900 dark:text-white">
+                    {fmt(cart.getTax())}
+                  </span>
+                </div>
+              </>
+            ) : null}
             <div className="flex justify-between border-t border-slate-200 pt-2 dark:border-slate-700">
               <span className="text-base font-bold text-slate-900 dark:text-white">Total</span>
               <span className={`text-xl font-extrabold ${
                 isRestaurant ? 'text-restaurant-600 dark:text-restaurant-400' : 'text-brand-600 dark:text-brand-400'
               }`}>
-                {formatCurrency(cart.getGrandTotal())}
+                {fmt(cart.getGrandTotal())}
               </span>
             </div>
           </div>
@@ -466,10 +620,14 @@ export default function POS() {
             size="lg"
             className="mt-4 w-full"
             onClick={handleCheckout}
-            disabled={cart.items.length === 0}
+            disabled={cart.items.length === 0 || checkingOut}
           >
-            <Receipt className="h-4 w-4" />
-            {isRestaurant ? 'Place Order' : 'Complete Sale'}
+            {checkingOut ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Receipt className="h-4 w-4" />}
+            {checkingOut
+              ? 'Processing…'
+              : PAYNOW_METHODS.includes(cart.paymentMethod)
+                ? 'Continue to Paynow'
+                : isRestaurant ? 'Place Order' : 'Complete Sale'}
           </Button>
 
           {/* Paynow hosted checkout — redirects to Paynow, returns to /payment/return */}
@@ -495,6 +653,31 @@ export default function POS() {
           receipt={receiptData}
           onClose={() => setShowReceipt(false)}
         />
+      )}
+
+      {/* Camera barcode scanner */}
+      {showScanner && (
+        <div className="fixed inset-0 z-[70] flex flex-col items-center justify-center bg-black/90 p-4">
+          <div className="w-full max-w-md">
+            <div className="mb-3 flex items-center justify-between">
+              <p className="flex items-center gap-2 text-sm font-semibold text-white">
+                <Barcode className="h-4 w-4" /> Point the camera at a barcode or QR code
+              </p>
+              <button onClick={stopScanner} className="rounded-lg bg-white/10 p-2 text-white hover:bg-white/20">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <video
+              ref={videoRef}
+              playsInline
+              muted
+              className="aspect-[4/3] w-full rounded-2xl border-2 border-white/30 object-cover"
+            />
+            <p className="mt-3 text-center text-xs text-slate-400">
+              Works with phone and tablet cameras. USB/Bluetooth scanners can type straight into the search box.
+            </p>
+          </div>
+        </div>
       )}
     </div>
   )

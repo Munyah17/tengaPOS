@@ -26,9 +26,9 @@ export default function Modal({ isOpen, onClose, title, children, size = 'md' })
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95, y: 20 }}
             transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-            className={`relative w-full ${sizeClasses[size]} rounded-2xl bg-white p-6 shadow-2xl dark:bg-slate-900`}
+            className={`relative flex max-h-[90vh] w-full ${sizeClasses[size]} flex-col rounded-2xl bg-white p-6 shadow-2xl dark:bg-slate-900`}
           >
-            <div className="mb-4 flex items-center justify-between">
+            <div className="mb-4 flex flex-shrink-0 items-center justify-between">
               <h2 className="text-xl font-bold text-slate-900 dark:text-white">{title}</h2>
               <button
                 onClick={onClose}
@@ -37,7 +37,10 @@ export default function Modal({ isOpen, onClose, title, children, size = 'md' })
                 <X className="h-5 w-5" />
               </button>
             </div>
-            {children}
+            {/* Content scrolls inside the modal — never past the screen edges */}
+            <div className="min-h-0 flex-1 overflow-y-auto">
+              {children}
+            </div>
           </motion.div>
         </div>
       )}

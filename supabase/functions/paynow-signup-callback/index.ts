@@ -59,18 +59,33 @@ serve(async (req) => {
     const cancelled = status.toLowerCase() === 'cancelled'
 
     if (paid && checkout.status !== 'paid') {
-      const months = PLAN_MONTHS[checkout.plan_type] || 6
+      const isFiscal = String(checkout.plan_type).startsWith('fiscal_')
+      const FISCAL_MONTHS: Record<string, number> = {
+        fiscal_monthly: 1, fiscal_quarterly: 3, fiscal_halfyear: 6, fiscal_yearly: 12,
+      }
+      const months = isFiscal
+        ? (FISCAL_MONTHS[checkout.plan_type] || 1)
+        : (PLAN_MONTHS[checkout.plan_type] || 6)
       const now = new Date()
       const renewal = new Date(now)
       renewal.setMonth(renewal.getMonth() + months)
 
-      await admin.from('tenants').update({
-        status: 'active',
-        plan_type: checkout.plan_type,
-        plan_start_date: now.toISOString(),
-        next_renewal_date: renewal.toISOString(),
-        approved_at: now.toISOString(),
-      }).eq('id', checkout.tenant_id)
+      if (isFiscal) {
+        // Unlock the ZIMRA Fiscalisation add-on for the paid period
+        const { data: t } = await admin.from('tenants').select('features').eq('id', checkout.tenant_id).maybeSingle()
+        await admin.from('tenants').update({
+          features: { ...(t?.features || {}), fiscalisation: true },
+          fiscal_expires_at: renewal.toISOString(),
+        }).eq('id', checkout.tenant_id)
+      } else {
+        await admin.from('tenants').update({
+          status: 'active',
+          plan_type: checkout.plan_type,
+          plan_start_date: now.toISOString(),
+          next_renewal_date: renewal.toISOString(),
+          approved_at: now.toISOString(),
+        }).eq('id', checkout.tenant_id)
+      }
 
       await admin.from('signup_checkouts')
         .update({ status: 'paid', updated_at: now.toISOString() })

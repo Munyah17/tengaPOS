@@ -32,6 +32,9 @@ export default function ZimraReceipt({ receipt, onClose }) {
   const fdmsQrUrl = receipt.fdmsQrUrl || null
   const receiptRef = useRef(null)
   const fiscal = useFiscalStore()
+  const vatEnabled = receipt.vatEnabled !== false
+  const vatRate = receipt.vatRate ?? 15.5
+  const fmt = (n) => formatCurrency(n, receipt.currency)
 
   const isFiscalised = fiscal.isEnabled && fiscal.isRegistered
 
@@ -49,36 +52,116 @@ export default function ZimraReceipt({ receipt, onClose }) {
 
   const zimraPaymentType = ZIMRA_PAYMENT_MAP[receipt.paymentMethod] || 'Cash'
 
-  // VAT breakdown — standard ZIMRA tax code D = 15% VAT
-  const vatRate = 0.15
+  // VAT breakdown — standard ZIMRA tax code D. VAT is inclusive in shelf prices.
   const taxableAmt = receipt.subtotal
   const vatAmt = receipt.tax
 
+  // Escapes text dropped into the generated print document
+  const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]))
+  const row = (left, right) => `<div class="row"><span>${esc(left)}</span><span>${esc(right)}</span></div>`
+
   const handlePrint = () => {
-    const printContents = receiptRef.current.innerHTML
-    const printWindow = window.open('', '_blank', 'width=400,height=800')
-    printWindow.document.write(`
+    // Built from the receipt data with real CSS (not Tailwind class names) —
+    // the print/PDF window has no access to the app's stylesheet, so relying
+    // on className alone silently drops every border and layout rule.
+    const itemsHtml = receipt.items.map((item) => `
+      <div class="item">
+        <div class="item-name">${esc(item.name)}</div>
+        <div class="row indent"><span>${item.quantity} x ${esc(fmt(item.price))}</span><span>${esc(fmt(item.price * item.quantity))}</span></div>
+        <div class="tiny indent">HS: 000000 | Tax: D (15%)</div>
+      </div>
+    `).join('')
+
+    const fiscalHtml = isFiscalised ? `
+      <div class="center">
+        <div class="fiscal-badge">ZIMRA FISCAL RECEIPT</div>
+        <div class="tiny">Device ID: ${esc(deviceID)}</div>
+        <div class="tiny">Receipt Global No: ${esc(receiptGlobalNo)}</div>
+        ${fdmsQrUrl
+          ? `<div class="qr-url-box"><div class="tiny bold">SCAN TO VERIFY</div><div class="tiny break">${esc(fdmsQrUrl)}</div></div>`
+          : `<div class="qr-placeholder">QR pending<br/>FDMS sync</div>`}
+        <div class="tiny">Verify: fdms.zimra.co.zw</div>
+      </div>
+    ` : `
+      <div class="not-fiscal">
+        <div class="tiny bold">NOT YET FISCALISED</div>
+        <div class="tiny">Configure ZIMRA in Settings</div>
+      </div>
+    `
+
+    const html = `
       <!DOCTYPE html>
       <html>
       <head>
-        <title>ZIMRA Receipt - ${receipt.receiptNumber}</title>
+        <meta charset="utf-8" />
+        <title>Receipt ${esc(receipt.receiptNumber)}</title>
         <style>
           * { margin: 0; padding: 0; box-sizing: border-box; }
-          body { font-family: 'Courier New', Courier, monospace; font-size: 11px; width: 72mm; padding: 4mm; background: white; color: black; }
-          .receipt-line { white-space: pre; display: block; }
+          body { font-family: 'Courier New', Courier, monospace; font-size: 11px; width: 72mm; padding: 4mm; background: #fff; color: #000; }
           .center { text-align: center; }
-          .separator { border-top: 1px dashed #000; margin: 4px 0; }
-          .qr-placeholder { border: 2px dashed #999; width: 80px; height: 80px; margin: 8px auto; display: flex; align-items: center; justify-content: center; font-size: 8px; text-align: center; color: #999; }
-          .qr-url-box { border: 1px solid #000; padding: 3px; margin: 4px 0; font-size: 7px; word-break: break-all; text-align: center; }
-          .fiscal-badge { border: 2px solid #000; padding: 4px; margin: 4px 0; text-align: center; font-weight: bold; }
-          .not-fiscal { border: 2px dashed #999; padding: 4px; margin: 4px 0; text-align: center; }
+          .bold { font-weight: bold; }
+          .upper { text-transform: uppercase; }
+          .tiny { font-size: 9px; }
+          .break { word-break: break-all; }
+          .indent { padding-left: 8px; }
+          .store-name { font-size: 13px; font-weight: bold; text-transform: uppercase; }
+          .row { display: flex; justify-content: space-between; }
+          .row-4 { display: flex; justify-content: space-between; font-size: 10px; }
+          .sep { border-top: 1px dashed #000; margin: 6px 0; }
+          .sep-solid { border-top: 1px solid #000; margin: 4px 0; padding-top: 4px; }
+          .item { margin-top: 6px; }
+          .item-name { font-weight: bold; }
+          .fiscal-badge { border: 2px solid #000; padding: 4px; margin: 4px 0; font-weight: bold; }
+          .not-fiscal { border: 2px dashed #999; padding: 6px; text-align: center; }
+          .qr-placeholder { border: 2px dashed #000; width: 80px; height: 80px; margin: 8px auto; display: flex; align-items: center; justify-content: center; font-size: 8px; text-align: center; }
+          .qr-url-box { border: 1px solid #000; padding: 3px; margin: 6px 0; text-align: center; }
+          @media print { body { width: 72mm; } }
         </style>
       </head>
       <body>
-        <div id="print-receipt">${printContents}</div>
+        <div class="center">
+          <div class="store-name">${esc(storeName)}</div>
+          <div>${esc(storeAddress)}</div>
+          <div>${esc(storeContacts)}</div>
+          <div>TIN: ${esc(tin)}</div>
+          <div>VAT Reg: ${esc(vatNo)}</div>
+        </div>
+        <div class="sep"></div>
+        <div class="center bold">FISCAL TAX INVOICE</div>
+        ${row('Receipt No:', receipt.receiptNumber)}
+        ${row('Date:', dateStr)}
+        ${row('Time:', timeStr)}
+        ${row('Cashier:', receipt.cashier)}
+        <div class="sep"></div>
+        <div class="bold upper">Items</div>
+        ${itemsHtml}
+        <div class="sep"></div>
+        ${vatEnabled ? row('Net (ex VAT)', fmt(receipt.subtotal)) : ''}
+        ${vatEnabled ? row(`VAT ${vatRate}% (included)`, fmt(receipt.tax)) : ''}
+        <div class="sep-solid bold">${row('TOTAL', fmt(receipt.total))}</div>
+        <div class="sep"></div>
+        <div class="bold upper">Payment</div>
+        ${row(PAYMENT_DISPLAY[receipt.paymentMethod] || receipt.paymentMethod, fmt(receipt.total))}
+        <div class="tiny">Type: ${esc(zimraPaymentType)}</div>
+        ${vatEnabled ? `
+        <div class="sep"></div>
+        <div class="bold upper">Tax Breakdown</div>
+        <div class="row-4"><span>Code</span><span>Rate</span><span>Taxable</span><span>VAT</span></div>
+        <div class="row-4"><span>D</span><span>${esc(vatRate)}%</span><span>${esc(fmt(taxableAmt))}</span><span>${esc(fmt(vatAmt))}</span></div>
+        ` : ''}
+        <div class="sep"></div>
+        ${fiscalHtml}
+        <div class="sep"></div>
+        <div class="center tiny">
+          <div>Thank you for your business!</div>
+          <div>Powered by tengaPOS</div>
+        </div>
       </body>
       </html>
-    `)
+    `
+
+    const printWindow = window.open('', '_blank', 'width=400,height=800')
+    printWindow.document.write(html)
     printWindow.document.close()
     printWindow.focus()
     printWindow.print()
@@ -158,8 +241,8 @@ export default function ZimraReceipt({ receipt, onClose }) {
               <div key={i} className="mt-1">
                 <div className="font-semibold">{item.name}</div>
                 <div className="flex justify-between pl-2">
-                  <span>{item.quantity} x {formatCurrency(item.price)}</span>
-                  <span>{formatCurrency(item.price * item.quantity)}</span>
+                  <span>{item.quantity} x {fmt(item.price)}</span>
+                  <span>{fmt(item.price * item.quantity)}</span>
                 </div>
                 <div className="pl-2 text-[9px] text-slate-500">HS: 000000 | Tax: D (15%)</div>
               </div>
@@ -168,17 +251,21 @@ export default function ZimraReceipt({ receipt, onClose }) {
             <div className="my-2 border-t border-dashed border-black" />
 
             {/* Totals */}
-            <div className="flex justify-between">
-              <span>Subtotal</span>
-              <span>{formatCurrency(receipt.subtotal)}</span>
-            </div>
-            <div className="flex justify-between">
-              <span>VAT (15%)</span>
-              <span>{formatCurrency(receipt.tax)}</span>
-            </div>
+            {vatEnabled && (
+              <>
+                <div className="flex justify-between">
+                  <span>Net (ex VAT)</span>
+                  <span>{fmt(receipt.subtotal)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>VAT {vatRate}% (included)</span>
+                  <span>{fmt(receipt.tax)}</span>
+                </div>
+              </>
+            )}
             <div className="flex justify-between border-t border-black pt-1 font-bold">
               <span>TOTAL</span>
-              <span>{formatCurrency(receipt.total)}</span>
+              <span>{fmt(receipt.total)}</span>
             </div>
 
             <div className="my-2 border-t border-dashed border-black" />
@@ -187,26 +274,30 @@ export default function ZimraReceipt({ receipt, onClose }) {
             <div className="font-bold uppercase">Payment</div>
             <div className="flex justify-between">
               <span>{PAYMENT_DISPLAY[receipt.paymentMethod] || receipt.paymentMethod}</span>
-              <span>{formatCurrency(receipt.total)}</span>
+              <span>{fmt(receipt.total)}</span>
             </div>
             <div className="text-[9px] text-slate-500">Type: {zimraPaymentType}</div>
 
             <div className="my-2 border-t border-dashed border-black" />
 
             {/* Tax table */}
-            <div className="font-bold uppercase">Tax Breakdown</div>
-            <div className="mt-1 flex justify-between text-[10px]">
-              <span>Code</span>
-              <span>Rate</span>
-              <span>Taxable</span>
-              <span>VAT</span>
-            </div>
-            <div className="flex justify-between text-[10px]">
-              <span>D</span>
-              <span>15%</span>
-              <span>{formatCurrency(taxableAmt)}</span>
-              <span>{formatCurrency(vatAmt)}</span>
-            </div>
+            {vatEnabled && (
+              <>
+                <div className="font-bold uppercase">Tax Breakdown</div>
+                <div className="mt-1 flex justify-between text-[10px]">
+                  <span>Code</span>
+                  <span>Rate</span>
+                  <span>Taxable</span>
+                  <span>VAT</span>
+                </div>
+                <div className="flex justify-between text-[10px]">
+                  <span>D</span>
+                  <span>{vatRate}%</span>
+                  <span>{fmt(taxableAmt)}</span>
+                  <span>{fmt(vatAmt)}</span>
+                </div>
+              </>
+            )}
 
             <div className="my-2 border-t border-dashed border-black" />
 

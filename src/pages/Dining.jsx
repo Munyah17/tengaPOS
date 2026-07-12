@@ -2,7 +2,6 @@ import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Car, Store, ChefHat, Clock } from 'lucide-react'
 import { useOrderStore } from '@/stores/orderStore'
-import { useAuthStore } from '@/stores/authStore'
 
 function waitLabel(ms) {
   const s = Math.floor(ms / 1000)
@@ -44,13 +43,8 @@ function OrderTile({ order, now }) {
 }
 
 export default function Dining() {
-  const { orders, seedDemo } = useOrderStore()
-  const { isDemo } = useAuthStore()
+  const { orders } = useOrderStore()
   const [now, setNow] = useState(Date.now())
-
-  useEffect(() => {
-    if (isDemo) seedDemo()
-  }, [isDemo, seedDemo])
 
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 1000)

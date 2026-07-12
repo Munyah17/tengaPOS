@@ -81,20 +81,9 @@ export const useAuthStore = create(
       tenantStatus: null,
       isAuthenticated: false,
       isLoading: true,
-      isDemo: false,
 
       initAuth: async () => {
         set({ isLoading: true })
-
-        // Demo sessions are fully isolated from real Supabase auth.
-        // If the persisted state says we're in demo mode, honour it and skip
-        // the real session check entirely — a saved browser session must never
-        // hijack a demo user and redirect them to /admin.
-        if (get().isDemo) {
-          set({ isLoading: false })
-          return
-        }
-
         try {
           const { data: { session } } = await supabase.auth.getSession()
           if (session?.user) {
@@ -110,7 +99,6 @@ export const useAuthStore = create(
               tenantStatus: profileData.tenantStatus || null,
               isAuthenticated: true,
               isLoading: false,
-              isDemo: false,
             })
           } else {
             set({ isLoading: false, isAuthenticated: false })
@@ -136,7 +124,6 @@ export const useAuthStore = create(
           tenantStatus: profileData.tenantStatus || null,
           isAuthenticated: true,
           isLoading: false,
-          isDemo: false,
         })
         return profileData.userType
       },
@@ -166,7 +153,6 @@ export const useAuthStore = create(
               tenantStatus: profileData.tenantStatus || 'pending',
               isAuthenticated: true,
               isLoading: false,
-              isDemo: false,
             })
           } catch {
             // Profile may not be ready yet in edge cases; user can sign in normally
@@ -177,9 +163,7 @@ export const useAuthStore = create(
       },
 
       clearAuth: async () => {
-        if (!get().isDemo) {
-          await supabase.auth.signOut()
-        }
+        await supabase.auth.signOut()
         set({
           user: null,
           session: null,
@@ -191,7 +175,6 @@ export const useAuthStore = create(
           tenantStatus: null,
           isAuthenticated: false,
           isLoading: false,
-          isDemo: false,
         })
       },
 
@@ -211,8 +194,6 @@ export const useAuthStore = create(
         userType: state.userType,
         isAuthenticated: state.isAuthenticated,
         tenantStatus: state.tenantStatus,
-        // isDemo intentionally NOT persisted — demo sessions never survive a page reload
-        // This prevents a crashed demo tab from bleeding into a real tenant login
       }),
     }
   )

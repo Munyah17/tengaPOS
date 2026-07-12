@@ -13,33 +13,6 @@ import toast from 'react-hot-toast'
 
 const CAN_MANAGE = ['vendor']
 
-const INITIAL_BRANCHES = [
-  {
-    id: 1, name: 'Main Branch', location: 'Harare CBD', address: '45 Samora Machel Ave, Harare',
-    phone: '+263 242 700 000', manager: 'Tatenda Chikwanda',
-    staff: 5, revenue: 45200, expenses: 28000, orders: 312,
-    status: 'active', isMain: true,
-    topProducts: ['Coca-Cola 500ml', 'Bread 700g', 'Eggs 18pk'],
-    inventory: [{ name: 'Coca-Cola 500ml', qty: 48, reorder: 20 }, { name: 'Bread 700g', qty: 12, reorder: 15 }, { name: 'Eggs 18pk', qty: 24, reorder: 10 }],
-  },
-  {
-    id: 2, name: 'CBD Branch', location: 'Sam Levy Village, Harare', address: 'Shop 12, Sam Levy Village',
-    phone: '+263 242 850 000', manager: 'Grace Kamau',
-    staff: 3, revenue: 32100, expenses: 20000, orders: 198,
-    status: 'active', isMain: false,
-    topProducts: ['Mazoe Orange 2L', 'Washing Powder 2kg', 'Maggi Noodles'],
-    inventory: [{ name: 'Mazoe Orange 2L', qty: 30, reorder: 12 }, { name: 'Washing Powder 2kg', qty: 8, reorder: 10 }, { name: 'Maggi Noodles', qty: 55, reorder: 20 }],
-  },
-  {
-    id: 3, name: 'Eastgate Branch', location: 'Eastgate Mall, Harare', address: 'Upper Level, Eastgate Mall',
-    phone: '+263 242 920 000', manager: 'Farai Ncube',
-    staff: 4, revenue: 28400, expenses: 18000, orders: 175,
-    status: 'active', isMain: false,
-    topProducts: ['Sugar 2kg', 'Cooking Oil 2L', 'Rice 5kg'],
-    inventory: [{ name: 'Sugar 2kg', qty: 20, reorder: 10 }, { name: 'Cooking Oil 2L', qty: 15, reorder: 8 }, { name: 'Rice 5kg', qty: 9, reorder: 8 }],
-  },
-]
-
 const BLANK = { name: '', location: '', address: '', phone: '', manager: '', status: 'active' }
 
 function BranchDetail({ branch, onBack }) {
@@ -156,10 +129,10 @@ function BranchDetail({ branch, onBack }) {
 }
 
 export default function Branches() {
-  const { isDemo, role, tenant } = useAuthStore()
+  const { role, tenant } = useAuthStore()
   const canManage = CAN_MANAGE.includes(role)
 
-  const [branches, setBranches] = useState(isDemo ? INITIAL_BRANCHES : [])
+  const [branches, setBranches] = useState([])
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [viewing, setViewing] = useState(null)
@@ -168,7 +141,7 @@ export default function Branches() {
   const [form, setForm] = useState(BLANK)
 
   const loadBranches = () => {
-    if (isDemo || !tenant?.id) return
+    if (!tenant?.id) return
     setLoading(true)
     fetchBranches(tenant.id)
       .then(data => setBranches(data.map(b => ({
@@ -179,7 +152,7 @@ export default function Branches() {
       .finally(() => setLoading(false))
   }
 
-  useEffect(() => { loadBranches() }, [isDemo, tenant?.id])
+  useEffect(() => { loadBranches() }, [tenant?.id])
 
   if (viewing) {
     return (
@@ -191,16 +164,6 @@ export default function Branches() {
 
   const handleSave = async (e) => {
     e.preventDefault()
-    if (isDemo) {
-      if (editing) {
-        setBranches(prev => prev.map(b => b.id === editing.id ? { ...b, ...form } : b))
-        toast.success('Branch updated'); setEditing(null)
-      } else {
-        setBranches(prev => [...prev, { ...form, id: Date.now(), staff: 0, revenue: 0, expenses: 0, orders: 0, isMain: false, topProducts: [], inventory: [] }])
-        toast.success('Branch added'); setShowNew(false)
-      }
-      setForm(BLANK); return
-    }
     setSaving(true)
     try {
       if (editing) {
@@ -225,7 +188,7 @@ export default function Branches() {
     if (b?.isMain || b?.is_main) { toast.error('Cannot delete main branch'); return }
     setBranches(prev => prev.filter(x => x.id !== id))
     toast.success('Branch removed')
-    if (!isDemo) await deleteBranch(id).catch(() => {})
+    await deleteBranch(id).catch(() => {})
   }
 
   const openEdit = (branch) => {

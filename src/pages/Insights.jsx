@@ -1,14 +1,16 @@
-import { useState, useRef } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
+import { useState, useRef, useEffect } from 'react'
+import { motion } from 'framer-motion'
 import {
   Sparkles, TrendingUp, Package, DollarSign, AlertCircle,
-  RefreshCw, MapPin, ChevronDown, ChevronUp,
+  RefreshCw, MapPin,
   FileText, Table, Printer, Lightbulb, Target, ShoppingCart,
   Star, ArrowUp, ArrowDown, Minus,
 } from 'lucide-react'
 import { useAuthStore } from '@/stores/authStore'
 import { useThemeStore } from '@/stores/themeStore'
 import { supabase } from '@/lib/supabase'
+import { fetchProductPerformance } from '@/lib/db'
+import { getPresetRange } from '@/utils/dateRanges'
 import toast from 'react-hot-toast'
 import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
@@ -16,51 +18,16 @@ import * as XLSX from 'xlsx'
 import { saveAs } from 'file-saver'
 import Papa from 'papaparse'
 
-// ─── Demo product data ────────────────────────────────────────────────────────
-const DEMO_RETAIL = [
-  { name: 'Coca-Cola 500ml',     category: 'Beverages',  sold: 312, revenue: 624.00,  cost: 350.00, returnRate: 0.01 },
-  { name: 'Bread (700g)',         category: 'Bakery',     sold: 285, revenue: 713.00,  cost: 427.50, returnRate: 0.02 },
-  { name: 'Eggs (18-pack)',       category: 'Dairy',      sold: 198, revenue: 1188.00, cost: 891.00, returnRate: 0.00 },
-  { name: 'Maggi Noodles',        category: 'Dry Goods',  sold: 176, revenue: 264.00,  cost: 176.00, returnRate: 0.01 },
-  { name: 'Washing Powder 2kg',  category: 'Household',  sold: 134, revenue: 1072.00, cost: 804.00, returnRate: 0.03 },
-  { name: 'Mazoe Orange 2L',     category: 'Beverages',  sold: 89,  revenue: 534.00,  cost: 356.00, returnRate: 0.01 },
-  { name: 'Sugar 2kg',           category: 'Dry Goods',  sold: 67,  revenue: 469.00,  cost: 335.00, returnRate: 0.00 },
-  { name: 'Cooking Oil 2L',      category: 'Cooking',    sold: 54,  revenue: 702.00,  cost: 540.00, returnRate: 0.00 },
-  { name: 'Baked Beans 400g',    category: 'Canned',     sold: 43,  revenue: 129.00,  cost: 86.00,  returnRate: 0.02 },
-  { name: 'Rice 5kg',            category: 'Dry Goods',  sold: 38,  revenue: 570.00,  cost: 380.00, returnRate: 0.01 },
-  { name: 'Milk 1L',             category: 'Dairy',      sold: 32,  revenue: 128.00,  cost: 96.00,  returnRate: 0.00 },
-  { name: 'Detergent 750ml',     category: 'Household',  sold: 21,  revenue: 189.00,  cost: 147.00, returnRate: 0.01 },
-]
-
-const DEMO_RESTAURANT = [
-  { name: 'Sadza & Chicken',     category: 'Mains',      sold: 287, revenue: 2296.00, cost: 1148.00, returnRate: 0.00 },
-  { name: 'Zinger Burger',       category: 'Burgers',    sold: 243, revenue: 2187.00, cost: 972.00,  returnRate: 0.01 },
-  { name: 'Grilled Tilapia',     category: 'Mains',      sold: 198, revenue: 2376.00, cost: 1188.00, returnRate: 0.01 },
-  { name: 'Streetwise 2',        category: 'Combos',     sold: 176, revenue: 2112.00, cost: 880.00,  returnRate: 0.00 },
-  { name: 'Chips Large',         category: 'Sides',      sold: 312, revenue: 936.00,  cost: 312.00,  returnRate: 0.01 },
-  { name: 'Mazoe Orange',        category: 'Drinks',     sold: 198, revenue: 396.00,  cost: 148.50, returnRate: 0.00 },
-  { name: 'Family Bucket',       category: 'Combos',     sold: 89,  revenue: 3115.00, cost: 1424.00, returnRate: 0.00 },
-  { name: 'Beef Stew & Rice',    category: 'Mains',      sold: 134, revenue: 1474.00, cost: 804.00,  returnRate: 0.02 },
-  { name: 'Veggie Wrap',         category: 'Light',      sold: 67,  revenue: 670.00,  cost: 335.00,  returnRate: 0.01 },
-  { name: 'Ice Cream Cone',      category: 'Desserts',   sold: 43,  revenue: 215.00,  cost: 86.00,   returnRate: 0.00 },
-]
-
+// Date-range presets — real accounts query actual sales for the matching
+// window (see dateRanges.js). No trend deltas until a prior-period baseline
+// is tracked, so trends are simply omitted rather than fabricated.
 const TIMELINES = [
-  { key: 'today',    label: 'Today',           multiplier: 1 / 30 },
-  { key: 'week',     label: 'This Week',        multiplier: 7 / 30 },
-  { key: 'month',    label: 'This Month',       multiplier: 1 },
-  { key: '3months',  label: 'Last 3 Months',    multiplier: 3 },
-  { key: 'year',     label: 'This Year',        multiplier: 12 },
+  { key: 'today',      label: 'Today' },
+  { key: 'this_week',  label: 'This Week' },
+  { key: 'this_month', label: 'This Month' },
+  { key: '3months',    label: 'Last 3 Months' },
+  { key: 'year',       label: 'This Year' },
 ]
-
-// Trend figures per timeline (vs previous equivalent period)
-const TIMELINE_TRENDS = {
-  today:   { revenue: 4,  profit: 2,  units: 3 },
-  week:    { revenue: 8,  profit: 6,  units: 7 },
-  month:   { revenue: 12, profit: 8,  units: 5 },
-  '3months': { revenue: 18, profit: 14, units: 11 },
-  year:    { revenue: 23, profit: 19, units: 15 },
-}
 
 function Metric({ label, value, sub, color = 'brand', icon: Icon, trend }) {
   const colors = {
@@ -96,16 +63,12 @@ async function callGroqEdge(prompt) {
   return data
 }
 
-function buildPrompt(products, timeline, location, landingPrices, posMode) {
+function buildPrompt(products, timeline, location, posMode) {
   const top = [...products].sort((a, b) => b.sold - a.sold).slice(0, 8)
   const slow = [...products].sort((a, b) => a.sold - b.sold).slice(0, 4)
   const totalRevenue = products.reduce((s, p) => s + p.revenue, 0)
   const totalProfit = products.reduce((s, p) => s + (p.revenue - p.cost), 0)
   const type = posMode === 'restaurant' ? 'restaurant/food service' : 'retail shop'
-
-  const pricingSection = Object.entries(landingPrices).length > 0
-    ? `\nLANDING (COST) PRICES ENTERED BY USER:\n${Object.entries(landingPrices).map(([n, c]) => `- ${n}: $${c}`).join('\n')}\n`
-    : ''
 
   return `
 You are advising a ${type} business in ${location || 'Zimbabwe'} for the period: ${timeline}.
@@ -120,7 +83,7 @@ ${top.map(p => `- ${p.name} (${p.category}): ${p.sold} units, $${p.revenue.toFix
 
 SLOW MOVERS (lowest sales):
 ${slow.map(p => `- ${p.name} (${p.category}): ${p.sold} units, $${p.revenue.toFixed(2)} revenue`).join('\n')}
-${pricingSection}
+
 Respond ONLY with this exact JSON structure:
 {
   "headline": "one-sentence business health summary",
@@ -168,43 +131,43 @@ function InsightCard({ insight, i }) {
 }
 
 export default function Insights() {
-  const { isDemo, profile, tenant } = useAuthStore()
+  const { profile, tenant } = useAuthStore()
   const { posMode } = useThemeStore()
-  const isRestaurant = posMode === 'restaurant'
-  const baseProducts = isDemo ? (isRestaurant ? DEMO_RESTAURANT : DEMO_RETAIL) : []
 
-  const [timeline, setTimeline] = useState('month')
+  const [timeline, setTimeline] = useState('this_month')
   const [location, setLocation] = useState('')
-  const [landingPrices, setLandingPrices] = useState({})
-  const [showPricing, setShowPricing] = useState(false)
   const [loading, setLoading] = useState(false)
   const [result, setResult] = useState(null)
   const [error, setError] = useState(null)
+  const [products, setProducts] = useState([])
+  const [dataLoading, setDataLoading] = useState(false)
   const reportRef = useRef(null)
 
   const tlMeta = TIMELINES.find((t) => t.key === timeline) || TIMELINES[2]
-  const m = tlMeta.multiplier
-  const trends = TIMELINE_TRENDS[timeline] || TIMELINE_TRENDS.month
 
-  // Scale demo data to match the selected period
-  const products = baseProducts.map((p) => ({
-    ...p,
-    sold:    Math.round(p.sold    * m),
-    revenue: +(p.revenue * m).toFixed(2),
-    cost:    +(p.cost    * m).toFixed(2),
-  }))
+  // Fetch actual sales for the date range — starts at zero for a brand-new
+  // business and grows only from real transactions.
+  useEffect(() => {
+    if (!tenant?.id) return
+    setDataLoading(true)
+    const { start } = getPresetRange(timeline)
+    fetchProductPerformance(tenant.id, start.toISOString())
+      .then(setProducts)
+      .catch(() => toast.error('Failed to load sales data'))
+      .finally(() => setDataLoading(false))
+  }, [tenant?.id, timeline])
 
   const totalRevenue = products.reduce((s, p) => s + p.revenue, 0)
   const totalProfit  = products.reduce((s, p) => s + (p.revenue - p.cost), 0)
   const totalUnits   = products.reduce((s, p) => s + p.sold, 0)
 
   const generateInsights = async () => {
-    if (products.length === 0) { toast.error('No product data available'); return }
+    if (products.length === 0) { toast.error('No sales in this period yet — insights need transaction history'); return }
     setLoading(true)
     setError(null)
     setResult(null)
     try {
-      const prompt = buildPrompt(products, tlMeta.label, location, landingPrices, posMode)
+      const prompt = buildPrompt(products, tlMeta.label, location, posMode)
       const data = await callGroqEdge(prompt)
       setResult(data)
       toast.success('AI analysis complete!')
@@ -289,7 +252,7 @@ export default function Insights() {
             <Sparkles className="h-6 w-6 text-brand-600 dark:text-brand-400" />
             <h1 className="text-2xl font-extrabold text-slate-900 dark:text-white">AI Insights</h1>
           </div>
-          <p className="mt-1 text-sm text-slate-500">Powered by LLaMA 3.3 (Groq) — free, open-source model</p>
+          <p className="mt-1 text-sm text-slate-500">AI-Powered Data Analysis</p>
         </div>
 
         {/* Controls */}
@@ -329,164 +292,64 @@ export default function Insights() {
 
       {/* KPI row */}
       <div className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Metric label="Total Revenue" value={`$${totalRevenue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} icon={DollarSign} color="brand" trend={trends.revenue} sub={tlMeta.label} />
-        <Metric label="Gross Profit"  value={`$${totalProfit.toLocaleString(undefined,  { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} icon={TrendingUp}  color="green"  trend={trends.profit}  sub={`${totalRevenue > 0 ? ((totalProfit / totalRevenue) * 100).toFixed(1) : 0}% margin`} />
-        <Metric label="Units Sold"    value={totalUnits.toLocaleString()}            icon={ShoppingCart} color="purple" trend={trends.units} />
-        <Metric label="Products Active" value={baseProducts.length}                  icon={Package}      color="amber"  sub="All categories" />
+        <Metric label="Total Revenue" value={`$${totalRevenue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} icon={DollarSign} color="brand" sub={tlMeta.label} />
+        <Metric label="Gross Profit"  value={`$${totalProfit.toLocaleString(undefined,  { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} icon={TrendingUp}  color="green"  sub={`${totalRevenue > 0 ? ((totalProfit / totalRevenue) * 100).toFixed(1) : 0}% margin`} />
+        <Metric label="Units Sold"    value={totalUnits.toLocaleString()}            icon={ShoppingCart} color="purple" />
+        <Metric label="Products Sold" value={products.length}                        icon={Package}      color="amber"  sub="In this period" />
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-[1fr_360px]">
-        {/* Left: product table */}
-        <div>
-          {/* Location + pricing input */}
-          <div className="mb-4 flex flex-wrap gap-3">
-            <div className="flex min-w-[220px] flex-1 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-900">
-              <MapPin className="h-4 w-4 flex-shrink-0 text-slate-400" />
-              <input
-                value={location}
-                onChange={(e) => setLocation(e.target.value)}
-                placeholder="Location (e.g. Harare CBD, Bulawayo)"
-                className="flex-1 bg-transparent text-sm text-slate-700 placeholder-slate-400 focus:outline-none dark:text-white"
-              />
-            </div>
-            <button
-              onClick={() => setShowPricing((v) => !v)}
-              className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800"
-            >
-              <DollarSign className="h-4 w-4" />
-              Enter Landing Prices
-              {showPricing ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
-            </button>
-          </div>
-
-          <AnimatePresence>
-            {showPricing && (
-              <motion.div
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: 'auto' }}
-                exit={{ opacity: 0, height: 0 }}
-                className="mb-4 overflow-hidden rounded-2xl border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900"
-              >
-                <div className="border-b border-slate-100 px-4 py-3 dark:border-slate-800">
-                  <p className="text-sm font-bold text-slate-900 dark:text-white">Landing Prices (your cost price)</p>
-                  <p className="text-xs text-slate-500">AI will use these to suggest sell prices with market context</p>
-                </div>
-                <div className="grid gap-2 p-4 sm:grid-cols-2">
-                  {products.slice(0, 8).map((p) => (
-                    <div key={p.name} className="flex items-center gap-2">
-                      <span className="min-w-0 flex-1 truncate text-sm text-slate-700 dark:text-slate-300">{p.name}</span>
-                      <div className="flex items-center rounded-lg border border-slate-200 dark:border-slate-700">
-                        <span className="border-r border-slate-200 px-2 py-1 text-xs text-slate-400 dark:border-slate-700">$</span>
-                        <input
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          placeholder="0.00"
-                          value={landingPrices[p.name] || ''}
-                          onChange={(e) => setLandingPrices(prev => ({ ...prev, [p.name]: e.target.value }))}
-                          className="w-20 bg-transparent px-2 py-1 text-sm focus:outline-none dark:text-white"
-                        />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
-
-          {/* Product performance table */}
-          <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
-            <div className="border-b border-slate-100 px-4 py-3 dark:border-slate-800">
-              <h2 className="text-sm font-bold text-slate-900 dark:text-white">Product Performance</h2>
-            </div>
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[580px]">
-                <thead>
-                  <tr className="border-b border-slate-100 bg-slate-50 dark:border-slate-800 dark:bg-slate-900/50">
-                    <th className="px-4 py-2.5 text-left text-xs font-semibold uppercase text-slate-500">Product</th>
-                    <th className="px-4 py-2.5 text-right text-xs font-semibold uppercase text-slate-500">Units</th>
-                    <th className="px-4 py-2.5 text-right text-xs font-semibold uppercase text-slate-500">Revenue</th>
-                    <th className="px-4 py-2.5 text-right text-xs font-semibold uppercase text-slate-500">Profit</th>
-                    <th className="px-4 py-2.5 text-right text-xs font-semibold uppercase text-slate-500">Margin</th>
-                    <th className="px-4 py-2.5 text-right text-xs font-semibold uppercase text-slate-500">Rank</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {[...products].sort((a, b) => b.revenue - a.revenue).map((p, i) => {
-                    const profit = p.revenue - p.cost
-                    const margin = (profit / p.revenue) * 100
-                    return (
-                      <tr key={p.name} className="border-b border-slate-50 hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-800/40">
-                        <td className="px-4 py-2.5">
-                          <div className="text-sm font-semibold text-slate-900 dark:text-white">{p.name}</div>
-                          <div className="text-xs text-slate-400">{p.category}</div>
-                        </td>
-                        <td className="px-4 py-2.5 text-right text-sm font-medium text-slate-700 dark:text-slate-300">{p.sold}</td>
-                        <td className="px-4 py-2.5 text-right text-sm font-medium text-slate-900 dark:text-white">${p.revenue.toFixed(2)}</td>
-                        <td className={`px-4 py-2.5 text-right text-sm font-semibold ${profit >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-500'}`}>${profit.toFixed(2)}</td>
-                        <td className="px-4 py-2.5 text-right">
-                          <span className={`rounded-full px-2 py-0.5 text-xs font-bold ${margin >= 40 ? 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400' : margin >= 20 ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400' : 'bg-red-100 text-red-600 dark:bg-red-900/40 dark:text-red-400'}`}>
-                            {margin.toFixed(0)}%
-                          </span>
-                        </td>
-                        <td className="px-4 py-2.5 text-right">
-                          {i < 3 && <Star className={`ml-auto h-4 w-4 ${i === 0 ? 'text-yellow-400' : i === 1 ? 'text-slate-400' : 'text-amber-700'}`} />}
-                        </td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          <div className="mt-4 flex items-center gap-2 rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-3 dark:border-slate-700 dark:bg-slate-900/50">
-            <Sparkles className="h-4 w-4 flex-shrink-0 text-brand-500" />
-            <p className="text-xs text-slate-500">
-              Powered by <strong className="text-slate-700 dark:text-slate-300">LLaMA 3.3 70B</strong> via Groq — free, open-source model. Managed by the platform.
-            </p>
-          </div>
+      {/* Location input */}
+      <div className="mb-4 flex flex-wrap gap-3">
+        <div className="flex min-w-[220px] flex-1 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-900">
+          <MapPin className="h-4 w-4 flex-shrink-0 text-slate-400" />
+          <input
+            value={location}
+            onChange={(e) => setLocation(e.target.value)}
+            placeholder="Location (e.g. Harare CBD, Bulawayo)"
+            className="flex-1 bg-transparent text-sm text-slate-700 placeholder-slate-400 focus:outline-none dark:text-white"
+          />
         </div>
+      </div>
 
-        {/* Right: AI results */}
-        <div className="space-y-4">
-          {!result && !loading && !error && (
-            <div className="flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-slate-200 py-16 text-center dark:border-slate-700">
-              <Sparkles className="mb-3 h-10 w-10 text-slate-300 dark:text-slate-700" />
-              <p className="font-semibold text-slate-500">AI analysis ready</p>
-              <p className="mt-1 text-xs text-slate-400">Set your timeline, location, and optional landing prices, then click Generate Insights</p>
+      {/* AI results — always above the product table, full width */}
+      <div className="mb-6">
+        {!result && !loading && !error && (
+          <div className="flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-slate-200 py-12 text-center dark:border-slate-700">
+            <Sparkles className="mb-3 h-10 w-10 text-slate-300 dark:text-slate-700" />
+            <p className="font-semibold text-slate-500">AI analysis ready</p>
+            <p className="mt-1 text-xs text-slate-400">Set your timeline and location, then click Generate Insights</p>
+          </div>
+        )}
+
+        {loading && (
+          <div className="flex flex-col items-center justify-center rounded-2xl border border-slate-200 bg-white py-12 dark:border-slate-800 dark:bg-slate-900">
+            <RefreshCw className="mb-3 h-8 w-8 animate-spin text-brand-500" />
+            <p className="text-sm font-semibold text-slate-600 dark:text-slate-400">Analysing your business data…</p>
+          </div>
+        )}
+
+        {error && (
+          <div className="rounded-2xl border border-red-200 bg-red-50 p-4 dark:border-red-800 dark:bg-red-950/30">
+            <div className="flex items-center gap-2 text-red-700 dark:text-red-400">
+              <AlertCircle className="h-4 w-4" />
+              <span className="text-sm font-bold">Analysis failed</span>
             </div>
-          )}
+            <p className="mt-1 text-xs text-red-600 dark:text-red-400">{error}</p>
+          </div>
+        )}
 
-          {loading && (
-            <div className="flex flex-col items-center justify-center rounded-2xl border border-slate-200 bg-white py-16 dark:border-slate-800 dark:bg-slate-900">
-              <RefreshCw className="mb-3 h-8 w-8 animate-spin text-brand-500" />
-              <p className="text-sm font-semibold text-slate-600 dark:text-slate-400">Analysing your business data…</p>
-              <p className="mt-1 text-xs text-slate-400">LLaMA 3.3 70B is reviewing your products and market context</p>
-            </div>
-          )}
-
-          {error && (
-            <div className="rounded-2xl border border-red-200 bg-red-50 p-4 dark:border-red-800 dark:bg-red-950/30">
-              <div className="flex items-center gap-2 text-red-700 dark:text-red-400">
-                <AlertCircle className="h-4 w-4" />
-                <span className="text-sm font-bold">Analysis failed</span>
+        {result && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-4">
+            {/* Headline */}
+            <div className="rounded-2xl border border-brand-200 bg-brand-50 p-4 dark:border-brand-800 dark:bg-brand-950/30">
+              <div className="flex items-center gap-2 text-brand-700 dark:text-brand-400">
+                <Sparkles className="h-4 w-4" />
+                <span className="text-sm font-bold">AI Summary</span>
               </div>
-              <p className="mt-1 text-xs text-red-600 dark:text-red-400">{error}</p>
+              <p className="mt-1 text-sm text-brand-800 dark:text-brand-300">{result.headline}</p>
             </div>
-          )}
 
-          {result && (
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-4">
-              {/* Headline */}
-              <div className="rounded-2xl border border-brand-200 bg-brand-50 p-4 dark:border-brand-800 dark:bg-brand-950/30">
-                <div className="flex items-center gap-2 text-brand-700 dark:text-brand-400">
-                  <Sparkles className="h-4 w-4" />
-                  <span className="text-sm font-bold">AI Summary</span>
-                </div>
-                <p className="mt-1 text-sm text-brand-800 dark:text-brand-300">{result.headline}</p>
-              </div>
-
+            <div className="grid gap-4 lg:grid-cols-2">
               {/* Key insights */}
               {result.topInsights?.length > 0 && (
                 <div className="space-y-2">
@@ -574,9 +437,70 @@ export default function Insights() {
                   )}
                 </div>
               )}
-            </motion.div>
-          )}
-        </div>
+            </div>
+          </motion.div>
+        )}
+      </div>
+
+      {/* Product performance table — always below the AI analysis */}
+      <div>
+          <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
+            <div className="border-b border-slate-100 px-4 py-3 dark:border-slate-800">
+              <h2 className="text-sm font-bold text-slate-900 dark:text-white">Product Performance</h2>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[580px]">
+                <thead>
+                  <tr className="border-b border-slate-100 bg-slate-50 dark:border-slate-800 dark:bg-slate-900/50">
+                    <th className="px-4 py-2.5 text-left text-xs font-semibold uppercase text-slate-500">Product</th>
+                    <th className="px-4 py-2.5 text-right text-xs font-semibold uppercase text-slate-500">Units</th>
+                    <th className="px-4 py-2.5 text-right text-xs font-semibold uppercase text-slate-500">Revenue</th>
+                    <th className="px-4 py-2.5 text-right text-xs font-semibold uppercase text-slate-500">Profit</th>
+                    <th className="px-4 py-2.5 text-right text-xs font-semibold uppercase text-slate-500">Margin</th>
+                    <th className="px-4 py-2.5 text-right text-xs font-semibold uppercase text-slate-500">Rank</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {dataLoading ? (
+                    <tr><td colSpan={6} className="py-10 text-center text-sm text-slate-400">
+                      <RefreshCw className="mx-auto mb-2 h-5 w-5 animate-spin" /> Loading sales data…
+                    </td></tr>
+                  ) : products.length === 0 ? (
+                    <tr><td colSpan={6} className="py-10 text-center text-sm text-slate-400">
+                      No sales in this period yet — insights fill in as you sell.
+                    </td></tr>
+                  ) : [...products].sort((a, b) => b.revenue - a.revenue).map((p, i) => {
+                    const profit = p.revenue - p.cost
+                    const margin = (profit / p.revenue) * 100
+                    return (
+                      <tr key={p.name} className="border-b border-slate-50 hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-800/40">
+                        <td className="px-4 py-2.5">
+                          <div className="text-sm font-semibold text-slate-900 dark:text-white">{p.name}</div>
+                          <div className="text-xs text-slate-400">{p.category}</div>
+                        </td>
+                        <td className="px-4 py-2.5 text-right text-sm font-medium text-slate-700 dark:text-slate-300">{p.sold}</td>
+                        <td className="px-4 py-2.5 text-right text-sm font-medium text-slate-900 dark:text-white">${p.revenue.toFixed(2)}</td>
+                        <td className={`px-4 py-2.5 text-right text-sm font-semibold ${profit >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-500'}`}>${profit.toFixed(2)}</td>
+                        <td className="px-4 py-2.5 text-right">
+                          <span className={`rounded-full px-2 py-0.5 text-xs font-bold ${margin >= 40 ? 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400' : margin >= 20 ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400' : 'bg-red-100 text-red-600 dark:bg-red-900/40 dark:text-red-400'}`}>
+                            {margin.toFixed(0)}%
+                          </span>
+                        </td>
+                        <td className="px-4 py-2.5 text-right">
+                          {i < 3 && <Star className={`ml-auto h-4 w-4 ${i === 0 ? 'text-yellow-400' : i === 1 ? 'text-slate-400' : 'text-amber-700'}`} />}
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div className="mt-4 flex items-center gap-2 rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-3 dark:border-slate-700 dark:bg-slate-900/50">
+            <Sparkles className="h-4 w-4 flex-shrink-0 text-brand-500" />
+            <p className="text-xs text-slate-500">AI-Powered Data Analysis</p>
+          </div>
       </div>
     </div>
   )

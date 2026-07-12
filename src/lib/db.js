@@ -17,6 +17,7 @@ export async function fetchProducts(tenantId) {
     category: p.categories?.name ?? '',
     image: p.image_url ?? null,
     barcode: p.barcode ?? '',
+    imageUnavailable: p.image_unavailable === true,
   }))
 }
 
@@ -26,20 +27,25 @@ export async function insertProduct(tenantId, product) {
     .insert({
       tenant_id: tenantId,
       name: product.name,
+      brand: product.brand || null,
       sku: product.sku || null,
       barcode: product.barcode || null,
       price: parseFloat(product.price),
-      cost_price: product.costPrice ? parseFloat(product.costPrice) : null,
+      // landing price (what it cost you) — powers margins & AI insights
+      cost_price: product.landingPrice ? parseFloat(product.landingPrice)
+        : product.costPrice ? parseFloat(product.costPrice) : null,
       stock_qty: parseInt(product.stock) || 0,
       low_stock_threshold: parseInt(product.lowStockThreshold) || 10,
       unit: product.unit || null,
+      image_url: product.imageUrl || null,
+      image_unavailable: product.imageUnavailable === true,
       is_active: true,
       pos_visible: true,
     })
     .select()
     .single()
   if (error) throw error
-  return { ...data, stock: data.stock_qty ?? 0, category: '', barcode: data.barcode ?? '' }
+  return { ...data, stock: data.stock_qty ?? 0, category: '', barcode: data.barcode ?? '', image: data.image_url ?? null }
 }
 
 export async function updateProduct(id, updates) {
@@ -47,18 +53,35 @@ export async function updateProduct(id, updates) {
     .from('products')
     .update({
       name: updates.name,
+      brand: updates.brand || null,
       sku: updates.sku || null,
       barcode: updates.barcode || null,
       price: parseFloat(updates.price),
+      cost_price: updates.landingPrice ? parseFloat(updates.landingPrice) : null,
       stock_qty: parseInt(updates.stock) || 0,
       low_stock_threshold: parseInt(updates.lowStockThreshold) || 10,
+      image_url: updates.imageUrl || null,
+      image_unavailable: updates.imageUnavailable === true,
       updated_at: new Date().toISOString(),
     })
     .eq('id', id)
     .select()
     .single()
   if (error) throw error
-  return { ...data, stock: data.stock_qty ?? 0 }
+  return { ...data, stock: data.stock_qty ?? 0, image: data.image_url ?? null }
+}
+
+// Upload a product photo to storage; returns its public URL
+export async function uploadProductImage(tenantId, file) {
+  const ext = file.name.split('.').pop()?.toLowerCase() || 'jpg'
+  const path = `${tenantId}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`
+  const { error } = await supabase.storage.from('product-images').upload(path, file, {
+    cacheControl: '3600',
+    upsert: false,
+  })
+  if (error) throw error
+  const { data } = supabase.storage.from('product-images').getPublicUrl(path)
+  return data.publicUrl
 }
 
 export async function deleteProduct(id) {
@@ -73,6 +96,31 @@ export async function deleteProduct(id) {
 
 export async function saveCheckout({ tenantId, branchId, userId, cartItems, paymentMethod, subtotal, tax, total, posMode, orderType }) {
   const receiptNo = generateReceiptNumber()
+
+  // 0. Reserve stock ATOMICALLY before anything else — the database refuses
+  //    the sale if any line would oversell (fixes selling 3 when 2 in stock)
+  const decremented = []
+  for (const item of cartItems) {
+    const pid = item.id
+    if (pid && typeof pid === 'string' && pid.length === 36) {
+      const { error } = await supabase.rpc('decrement_stock', { p_product_id: pid, p_qty: item.quantity })
+      if (error) {
+        // Roll back any lines already reserved, then surface a clear message
+        for (const done of decremented) {
+          const { data: p } = await supabase.from('products').select('stock_qty').eq('id', done.pid).single()
+          if (p) {
+            await supabase.from('products')
+              .update({ stock_qty: (p.stock_qty ?? 0) + done.restoreBy, updated_at: new Date().toISOString() })
+              .eq('id', done.pid)
+          }
+        }
+        throw new Error(error.message?.includes('Insufficient stock')
+          ? error.message
+          : `Stock check failed: ${error.message}`)
+      }
+      decremented.push({ pid, restoreBy: item.quantity })
+    }
+  }
 
   // 1. Create order
   const { data: order, error: orderError } = await supabase
@@ -122,21 +170,7 @@ export async function saveCheckout({ tenantId, branchId, userId, cartItems, paym
     })
   if (txError) throw txError
 
-  // 4. Decrement stock (fire-and-forget — never blocks checkout)
-  for (const item of cartItems) {
-    const pid = item.id
-    if (pid && typeof pid === 'string' && pid.length === 36) {
-      supabase.from('products').select('stock_qty').eq('id', pid).single()
-        .then(({ data }) => {
-          if (data) {
-            supabase.from('products')
-              .update({ stock_qty: Math.max(0, (data.stock_qty ?? 0) - item.quantity), updated_at: new Date().toISOString() })
-              .eq('id', pid)
-              .then(() => {})
-          }
-        })
-    }
-  }
+  // Stock was already decremented atomically in step 0
 
   return { order, receiptNo }
 }
@@ -268,9 +302,10 @@ export async function completeKitchenOrder(orderId) {
 // ─── Staff ────────────────────────────────────────────────────────────────────
 
 export async function fetchStaff(tenantId) {
+  // users has no branch_id FK — embedding branches() breaks PostgREST
   const { data, error } = await supabase
     .from('users')
-    .select('*, branches(name)')
+    .select('*')
     .eq('tenant_id', tenantId)
     .order('name')
   if (error) throw error
@@ -463,13 +498,101 @@ export async function fetchReportMetrics(tenantId) {
   return { mtdRevenue, mtdOrders, avgOrderValue, productsSold, monthlyData, branchData }
 }
 
+// ─── AI Insights (real, per-product performance) ──────────────────────────────
+
+export async function fetchProductPerformance(tenantId, sinceISO) {
+  const [{ data: items, error }, { data: products }] = await Promise.all([
+    supabase
+      .from('order_items')
+      .select('product_id, name, qty, total, orders!inner(tenant_id, created_at)')
+      .eq('orders.tenant_id', tenantId)
+      .gte('orders.created_at', sinceISO),
+    supabase
+      .from('products')
+      .select('id, cost_price, categories(name)')
+      .eq('tenant_id', tenantId),
+  ])
+  if (error) throw error
+
+  const meta = {}
+  ;(products || []).forEach((p) => {
+    meta[p.id] = { cost: Number(p.cost_price) || 0, category: p.categories?.name || 'Uncategorised' }
+  })
+
+  const agg = {}
+  ;(items || []).forEach((it) => {
+    const key = it.product_id || it.name
+    if (!agg[key]) {
+      agg[key] = {
+        name: it.name,
+        category: it.product_id ? (meta[it.product_id]?.category || 'Uncategorised') : 'Uncategorised',
+        sold: 0, revenue: 0, cost: 0,
+      }
+    }
+    agg[key].sold += it.qty || 0
+    agg[key].revenue += Number(it.total) || 0
+    agg[key].cost += (it.product_id ? (meta[it.product_id]?.cost || 0) : 0) * (it.qty || 0)
+  })
+  return Object.values(agg)
+}
+
+// ─── Data export (download everything, like "download your data") ────────────
+
+export async function fetchAllTenantData(tenantId) {
+  const [products, orders, orderItems, transactions, staff, branches, tasks] = await Promise.all([
+    supabase.from('products').select('*').eq('tenant_id', tenantId),
+    supabase.from('orders').select('*').eq('tenant_id', tenantId),
+    supabase.from('order_items').select('*, orders!inner(tenant_id)').eq('orders.tenant_id', tenantId),
+    supabase.from('transactions').select('*').eq('tenant_id', tenantId),
+    supabase.from('users').select('id, name, email, role, is_active, created_at').eq('tenant_id', tenantId),
+    supabase.from('branches').select('*').eq('tenant_id', tenantId),
+    supabase.from('tasks').select('*').eq('tenant_id', tenantId),
+  ])
+
+  return {
+    exported_at: new Date().toISOString(),
+    products: products.data || [],
+    orders: orders.data || [],
+    order_items: orderItems.data || [],
+    transactions: transactions.data || [],
+    staff: staff.data || [],
+    branches: branches.data || [],
+    tasks: tasks.data || [],
+  }
+}
+
+// Raw transactions for a specific date range — used for formatted report
+// exports (custom range or quick presets like "This Week", "Yesterday").
+export async function fetchTransactionsInRange(tenantId, startISO, endISO) {
+  const { data, error } = await supabase
+    .from('transactions')
+    .select('reference, amount, method, status, created_at, branches(name), orders(order_items(qty))')
+    .eq('tenant_id', tenantId)
+    .gte('created_at', startISO)
+    .lte('created_at', endISO)
+    .order('created_at', { ascending: false })
+  if (error) throw error
+  return (data || []).map((t) => ({
+    reference: t.reference,
+    date: new Date(t.created_at).toLocaleDateString('en-GB'),
+    time: new Date(t.created_at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }),
+    branch: t.branches?.name || '—',
+    method: t.method,
+    status: t.status,
+    items: t.orders?.order_items?.reduce((s, i) => s + i.qty, 0) || 0,
+    amount: parseFloat(t.amount),
+  }))
+}
+
 // ─── Dashboard metrics ────────────────────────────────────────────────────────
 
 export async function fetchDashboardMetrics(tenantId) {
   const todayStart = new Date()
   todayStart.setHours(0, 0, 0, 0)
+  const weekStart = new Date(todayStart)
+  weekStart.setDate(weekStart.getDate() - 6)
 
-  const [txRes, productRes, staffRes, recentRes] = await Promise.all([
+  const [txRes, weekTxRes, productRes, staffRes, recentRes, itemsRes] = await Promise.all([
     // Today's transactions
     supabase
       .from('transactions')
@@ -477,10 +600,17 @@ export async function fetchDashboardMetrics(tenantId) {
       .eq('tenant_id', tenantId)
       .eq('status', 'completed')
       .gte('created_at', todayStart.toISOString()),
-    // Product count + low stock
+    // Last 7 days, for the weekly chart
+    supabase
+      .from('transactions')
+      .select('amount, created_at')
+      .eq('tenant_id', tenantId)
+      .eq('status', 'completed')
+      .gte('created_at', weekStart.toISOString()),
+    // Product count + low stock + category
     supabase
       .from('products')
-      .select('id, stock_qty, low_stock_threshold, name')
+      .select('id, stock_qty, low_stock_threshold, name, categories(name)')
       .eq('tenant_id', tenantId)
       .eq('is_active', true),
     // Active staff
@@ -497,25 +627,64 @@ export async function fetchDashboardMetrics(tenantId) {
       .eq('status', 'completed')
       .order('created_at', { ascending: false })
       .limit(5),
+    // Top products this week, via order_items
+    supabase
+      .from('order_items')
+      .select('name, qty, total, orders!inner(tenant_id, created_at)')
+      .eq('orders.tenant_id', tenantId)
+      .gte('orders.created_at', weekStart.toISOString()),
   ])
 
   const txs = txRes.data ?? []
+  const weekTxs = weekTxRes.data ?? []
   const products = productRes.data ?? []
   const staff = staffRes.data ?? []
   const recent = recentRes.data ?? []
+  const items = itemsRes.data ?? []
 
   const todayRevenue = txs.reduce((s, t) => s + parseFloat(t.amount), 0)
   const todayOrders = txs.length
   const lowStock = products.filter(p => p.stock_qty <= (p.low_stock_threshold ?? 10))
 
-  // Weekly chart: last 7 days
+  // Weekly chart: last 7 days, aggregated from real transactions
   const weekData = []
+  const dayBuckets = {}
   for (let i = 6; i >= 0; i--) {
-    const d = new Date()
+    const d = new Date(todayStart)
     d.setDate(d.getDate() - i)
+    const key = d.toDateString()
     const label = d.toLocaleDateString('en-US', { weekday: 'short' })
-    weekData.push({ name: label, revenue: 0, orders: 0 })
+    dayBuckets[key] = { name: label, revenue: 0, orders: 0 }
   }
+  for (const t of weekTxs) {
+    const key = new Date(t.created_at).toDateString()
+    if (dayBuckets[key]) {
+      dayBuckets[key].revenue += parseFloat(t.amount)
+      dayBuckets[key].orders += 1
+    }
+  }
+  weekData.push(...Object.values(dayBuckets))
+
+  // Top products this week
+  const productAgg = {}
+  for (const it of items) {
+    if (!productAgg[it.name]) productAgg[it.name] = { name: it.name, sold: 0, revenue: 0 }
+    productAgg[it.name].sold += it.qty || 0
+    productAgg[it.name].revenue += Number(it.total) || 0
+  }
+  const topProducts = Object.values(productAgg).sort((a, b) => b.revenue - a.revenue).slice(0, 5)
+
+  // Category breakdown, by product count (proxy for stock mix)
+  const catCounts = {}
+  for (const p of products) {
+    const cat = p.categories?.name || 'Uncategorised'
+    catCounts[cat] = (catCounts[cat] || 0) + 1
+  }
+  const totalCatCount = products.length || 1
+  const categoryData = Object.entries(catCounts)
+    .map(([name, count]) => ({ name, value: Math.round((count / totalCatCount) * 100) }))
+    .sort((a, b) => b.value - a.value)
+    .slice(0, 6)
 
   return {
     todayRevenue,
@@ -525,6 +694,8 @@ export async function fetchDashboardMetrics(tenantId) {
     lowStockItems: lowStock,
     recentTransactions: recent,
     weekData,
+    topProducts,
+    categoryData,
   }
 }
 
@@ -533,7 +704,7 @@ export async function fetchDashboardMetrics(tenantId) {
 export async function fetchStaffPayroll(tenantId) {
   const { data, error } = await supabase
     .from('users')
-    .select('id, name, role, employment_type, pay_type, base_pay, is_active, branches(name)')
+    .select('id, name, role, employment_type, pay_type, base_pay, is_active')
     .eq('tenant_id', tenantId)
     .order('name')
   if (error) throw error

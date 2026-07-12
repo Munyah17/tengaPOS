@@ -1,11 +1,13 @@
 import { motion } from 'framer-motion'
 import { Check, Smartphone, Tablet, Monitor, Laptop, Building2 } from 'lucide-react'
 import { Link } from 'react-router-dom'
+import { usePlanPricing, useFiscalPricing } from '@/lib/platformSettings'
 
 const plans = [
   {
+    key: 'byod_monthly',
     name: 'Bring Your Own Device',
-    price: '$50',
+    price: '$30',
     period: '/ month',
     description: 'Use your own hardware. Full cloud POS access with all core features included.',
     icon: Smartphone,
@@ -24,8 +26,9 @@ const plans = [
     ctaStyle: 'border border-slate-300 text-slate-900 hover:bg-slate-50 dark:border-slate-600 dark:text-white dark:hover:bg-slate-800',
   },
   {
+    key: 'standard_plan',
     name: 'Standard Plan',
-    price: '$200',
+    price: '$170',
     period: 'once-off',
     description: '10″ Android tablet + portable Bluetooth thermal printer + full system access.',
     icon: Tablet,
@@ -45,8 +48,9 @@ const plans = [
     extras: ['6 months free use included', 'Free renewal while using our hardware — Ts & Cs apply'],
   },
   {
+    key: 'pro_package',
     name: 'Pro Package',
-    price: '$250',
+    price: '$200',
     period: 'once-off',
     description: '12″ Android tablet + Bluetooth portable thermal printer + full system access.',
     icon: Monitor,
@@ -105,6 +109,12 @@ const turnkeyPackages = [
 ]
 
 export default function Pricing() {
+  // Live prices from platform settings (Super Admin controlled)
+  const { pricing } = usePlanPricing()
+  const fiscalPricing = useFiscalPricing()
+  const livePrice = (plan) =>
+    plan.key && pricing[plan.key]?.price != null ? `$${pricing[plan.key].price}` : plan.price
+
   return (
     <>
       {/* Pricing cards */}
@@ -130,7 +140,7 @@ export default function Pricing() {
             <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
               <span className="inline-flex items-center gap-1.5 rounded-full border border-green-200 bg-green-50 px-4 py-1.5 text-sm font-medium text-green-700 dark:border-green-800 dark:bg-green-950/40 dark:text-green-400">
                 <Check className="h-3.5 w-3.5" />
-                All packages come with optional ZIMRA Fiscalisation
+                Optional ZIMRA Fiscalisation add-on — ${fiscalPricing.monthly?.price ?? 20}/month
               </span>
               <span className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-4 py-1.5 text-sm font-medium text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400">
                 &#x21bb; 6 months free use with every hardware purchase + free renewal (Ts &amp; Cs apply)
@@ -195,7 +205,7 @@ export default function Pricing() {
                 <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">{plan.description}</p>
 
                 <div className="mt-6 flex items-baseline gap-1">
-                  <span className="text-5xl font-extrabold text-slate-900 dark:text-white">{plan.price}</span>
+                  <span className="text-5xl font-extrabold text-slate-900 dark:text-white">{livePrice(plan)}</span>
                   <span className="text-slate-500">{plan.period}</span>
                 </div>
 

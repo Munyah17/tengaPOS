@@ -1,16 +1,11 @@
-import { Bell, Search, Wifi, WifiOff, ShieldAlert, Menu, User, Settings, LogOut, ChevronDown, CheckCheck, BellOff, ShoppingBag, UtensilsCrossed, AlertTriangle } from 'lucide-react'
+import { Bell, Wifi, WifiOff, ShieldAlert, Menu, User, Settings, LogOut, ChevronDown, CheckCheck, BellOff, ShoppingBag, UtensilsCrossed, AlertTriangle } from 'lucide-react'
 import { useState, useEffect, useRef } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, Link } from 'react-router-dom'
 import ThemeToggle from '@/components/common/ThemeToggle'
 import { useThemeStore } from '@/stores/themeStore'
 import { useAuthStore, ROLE_COLORS, ROLE_LABELS } from '@/stores/authStore'
 import { useFiscalStore } from '@/stores/fiscalStore'
-
-const SAMPLE_NOTIFICATIONS = [
-  { id: 1, text: 'Table 4 order ready to serve', time: '2m ago', unread: true },
-  { id: 2, text: 'Low stock: Sadza (3 portions left)', time: '15m ago', unread: true },
-  { id: 3, text: 'ORD-006 marked as cooking', time: '22m ago', unread: false },
-]
+import { useTenantNotifications } from '@/hooks/useTenantNotifications'
 
 function useClickOutside(ref, handler) {
   useEffect(() => {
@@ -23,16 +18,17 @@ function useClickOutside(ref, handler) {
 
 export default function TopBar({ onMenuClick }) {
   const { posMode, setPosMode } = useThemeStore()
-  const { profile, role, clearAuth } = useAuthStore()
+  const { profile, role, clearAuth, tenant } = useAuthStore()
   const { fiscalDayStatus, isEnabled: fiscalEnabled } = useFiscalStore()
   const navigate = useNavigate()
   const [isOnline, setIsOnline] = useState(navigator.onLine)
   const [bellOpen, setBellOpen] = useState(false)
   const [avatarOpen, setAvatarOpen] = useState(false)
-  const [notifications, setNotifications] = useState(SAMPLE_NOTIFICATIONS)
   const [showFiscalWarning, setShowFiscalWarning] = useState(false)
   const bellRef = useRef(null)
   const avatarRef = useRef(null)
+
+  const { notifications, markAllRead } = useTenantNotifications({ tenantId: tenant?.id, posMode })
 
   const isRestaurant = posMode === 'restaurant'
   const isReadOnly = role === 'tech_support'
@@ -52,8 +48,6 @@ export default function TopBar({ onMenuClick }) {
     window.addEventListener('offline', off)
     return () => { window.removeEventListener('online', on); window.removeEventListener('offline', off) }
   }, [])
-
-  const markAllRead = () => setNotifications((prev) => prev.map((n) => ({ ...n, unread: false })))
 
   const handleSignOut = async () => {
     setAvatarOpen(false)
@@ -84,20 +78,9 @@ export default function TopBar({ onMenuClick }) {
         <Menu className="h-5 w-5" />
       </button>
 
-      {/* Search — hidden on mobile */}
-      <div className="hidden flex-1 items-center gap-3 md:flex">
-        <div className="relative max-w-xs flex-1 sm:max-w-sm">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-          <input
-            type="text"
-            placeholder="Search..."
-            className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2 pl-10 pr-4 text-sm text-slate-900 placeholder-slate-400 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 dark:border-slate-700 dark:bg-slate-900 dark:text-white dark:placeholder-slate-500"
-          />
-        </div>
-      </div>
-
-      {/* Spacer on mobile so right items stay right */}
-      <div className="flex-1 md:hidden" />
+      {/* Spacer keeps right-side items right-aligned — the header has no search box.
+          Product search lives on the POS and Inventory pages where it's actually needed. */}
+      <div className="flex-1" />
 
       {/* Right */}
       <div className="flex items-center gap-1.5">
@@ -169,6 +152,13 @@ export default function TopBar({ onMenuClick }) {
                   ))
                 )}
               </div>
+              <Link
+                to="/app/notifications"
+                onClick={() => setBellOpen(false)}
+                className="block border-t border-slate-100 px-4 py-2.5 text-center text-xs font-semibold text-brand-600 hover:bg-slate-50 dark:border-slate-800 dark:text-brand-400 dark:hover:bg-slate-800"
+              >
+                See all
+              </Link>
             </div>
           )}
         </div>

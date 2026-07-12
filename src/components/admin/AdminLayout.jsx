@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { Outlet, useNavigate } from 'react-router-dom'
-import { Bell, Search, Menu, User, Settings, LogOut, ChevronDown } from 'lucide-react'
+import { Bell, Menu, User, Settings, LogOut, ChevronDown } from 'lucide-react'
 import AdminSidebar from './AdminSidebar'
 import ThemeToggle from '@/components/common/ThemeToggle'
 import { useAuthStore } from '@/stores/authStore'
@@ -56,17 +56,6 @@ export default function AdminLayout() {
           >
             <Menu className="h-5 w-5" />
           </button>
-
-          <div className="hidden min-w-0 flex-1 items-center sm:flex">
-            <div className="relative w-full max-w-xs lg:max-w-sm">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400 dark:text-slate-500" />
-              <input
-                type="text"
-                placeholder="Search tenants, users..."
-                className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2 pl-10 pr-4 text-sm text-slate-900 placeholder-slate-400 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 dark:border-white/10 dark:bg-white/5 dark:text-white dark:placeholder-slate-500"
-              />
-            </div>
-          </div>
 
           <div className="ml-auto flex flex-shrink-0 items-center gap-1 sm:gap-2">
             <ThemeToggle />

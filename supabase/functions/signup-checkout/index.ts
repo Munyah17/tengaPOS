@@ -12,11 +12,23 @@ const CORS = {
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 }
 
-// Server-side price list — the client can never set its own amount
-const PLAN_PRICES: Record<string, { amount: number; label: string; months: number }> = {
-  byod_monthly:  { amount: 50,  label: 'tengaPOS BYOD Monthly (1 month)',   months: 1 },
-  standard_plan: { amount: 200, label: 'tengaPOS Standard Plan (6 months)', months: 6 },
-  pro_package:   { amount: 250, label: 'tengaPOS Pro Package (6 months)',   months: 6 },
+// Fallback prices — live prices come from platform_settings (Super Admin editable).
+// The client can never set its own amount.
+const FALLBACK_PLAN_PRICES: Record<string, { price: number; renewalMonths: number }> = {
+  byod_monthly:  { price: 30,  renewalMonths: 1 },
+  standard_plan: { price: 170, renewalMonths: 6 },
+  pro_package:   { price: 200, renewalMonths: 6 },
+}
+const FALLBACK_FISCAL_PRICES: Record<string, { price: number; months: number; label: string }> = {
+  monthly:   { price: 20,  months: 1,  label: 'Monthly' },
+  quarterly: { price: 50,  months: 3,  label: '3 Months' },
+  halfyear:  { price: 90,  months: 6,  label: '6 Months' },
+  yearly:    { price: 170, months: 12, label: 'Yearly' },
+}
+const PLAN_LABELS: Record<string, string> = {
+  byod_monthly: 'tengaPOS BYOD Monthly (1 month)',
+  standard_plan: 'tengaPOS Standard Plan (once-off, 6 months included)',
+  pro_package: 'tengaPOS Pro Package (once-off, 6 months included)',
 }
 
 function json(body: unknown, status = 200) {
@@ -48,10 +60,26 @@ serve(async (req) => {
     const { data: { user: caller }, error: authErr } = await admin.auth.getUser(jwt)
     if (authErr || !caller) return json({ error: 'Not authenticated' }, 401)
 
-    const { plan_type, provider, return_url } = await req.json()
-    const plan = PLAN_PRICES[plan_type]
-    if (!plan) return json({ error: 'Business and Enterprise plans are quoted — contact sales' }, 400)
+    const { plan_type, provider, return_url, type, period } = await req.json()
     if (!['stripe', 'paynow'].includes(provider)) return json({ error: 'provider must be stripe or paynow' }, 400)
+
+    const isFiscal = type === 'fiscalisation'
+
+    // Live pricing from platform_settings (Super Admin controlled)
+    let plan: { amount: number; label: string; months: number } | null = null
+    if (isFiscal) {
+      const { data: fp } = await admin.from('platform_settings').select('value').eq('key', 'fiscalisation_pricing').maybeSingle()
+      const table = { ...FALLBACK_FISCAL_PRICES, ...((fp?.value as Record<string, { price: number; months: number; label: string }>) || {}) }
+      const p = table[period as string]
+      if (!p) return json({ error: 'Invalid fiscalisation period' }, 400)
+      plan = { amount: p.price, label: `ZIMRA Fiscalisation — ${p.label}`, months: p.months }
+    } else {
+      const { data: pp } = await admin.from('platform_settings').select('value').eq('key', 'plan_pricing').maybeSingle()
+      const table = { ...FALLBACK_PLAN_PRICES, ...((pp?.value as Record<string, { price: number; renewalMonths: number }>) || {}) }
+      const p = table[plan_type as string]
+      if (!p?.price) return json({ error: 'Business and Enterprise plans are quoted — contact sales' }, 400)
+      plan = { amount: p.price, label: PLAN_LABELS[plan_type] || `tengaPOS ${plan_type}`, months: p.renewalMonths }
+    }
 
     // Resolve the caller's tenant server-side — never trust a client tenant_id
     const { data: userRow } = await admin
@@ -62,7 +90,9 @@ serve(async (req) => {
     if (!userRow?.tenant_id) return json({ error: 'No tenant found for this account' }, 400)
 
     const tenantId = userRow.tenant_id
-    const reference = `SUB-${Date.now()}-${Math.random().toString(36).slice(2, 7).toUpperCase()}`
+    const checkoutKind = isFiscal ? 'fiscalisation' : 'plan'
+    const planKey = isFiscal ? `fiscal_${period}` : plan_type
+    const reference = `${isFiscal ? 'FIS' : 'SUB'}-${Date.now()}-${Math.random().toString(36).slice(2, 7).toUpperCase()}`
     const amountStr = plan.amount.toFixed(2)
     const returnUrl = return_url || 'https://www.tengapos.co.zw/checkout'
 
@@ -87,7 +117,9 @@ serve(async (req) => {
         client_reference_id: tenantId,
         customer_email: userRow.email || caller.email || '',
         'metadata[tenant_id]': tenantId,
-        'metadata[plan_type]': plan_type,
+        'metadata[plan_type]': planKey,
+        'metadata[kind]': checkoutKind,
+        'metadata[months]': String(plan.months),
         'metadata[reference]': reference,
       })
 
@@ -147,7 +179,7 @@ serve(async (req) => {
 
     await admin.from('signup_checkouts').insert({
       tenant_id: tenantId,
-      plan_type,
+      plan_type: planKey,
       provider,
       provider_session_id: providerSessionId,
       reference,

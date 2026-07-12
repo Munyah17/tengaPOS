@@ -13,44 +13,6 @@ import toast from 'react-hot-toast'
 
 const CAN_ASSIGN = ['vendor', 'shop_manager']
 
-const DEMO_STAFF = [
-  { id: 'u1', name: 'Tatenda Chikwanda', role: 'shop_manager' },
-  { id: 'u2', name: 'Farai Ncube',       role: 'supervisor' },
-  { id: 'u3', name: 'Grace Kamau',       role: 'cashier' },
-  { id: 'u4', name: 'Chipo Banda',       role: 'shop_assistant' },
-  { id: 'u5', name: 'Admire Moyo',       role: 'vendor' },
-]
-
-const INITIAL_TASKS = [
-  {
-    id: 1, title: 'Restock beverages section', description: 'Ensure all shelf slots are filled before 9am',
-    assigneeId: 'u3', assigneeName: 'Grace Kamau', assignedById: 'u1', assignedByName: 'Tatenda Chikwanda',
-    deadline: '2026-07-02', status: 'in_progress', priority: 'high', proofs: [],
-    acceptedAt: '2026-07-01T08:00:00', notes: 'Checked coolers already',
-  },
-  {
-    id: 2, title: 'Update price tags — dairy section', description: '',
-    assigneeId: 'u3', assigneeName: 'Grace Kamau', assignedById: 'u1', assignedByName: 'Tatenda Chikwanda',
-    deadline: '2026-07-03', status: 'pending', priority: 'medium', proofs: [], acceptedAt: null, notes: '',
-  },
-  {
-    id: 3, title: 'Clean and organise storeroom', description: 'Full inventory count afterward',
-    assigneeId: 'u4', assigneeName: 'Chipo Banda', assignedById: 'u5', assignedByName: 'Admire Moyo',
-    deadline: '2026-07-01', status: 'completed', priority: 'low', proofs: [{ name: 'storeroom_done.jpg', type: 'image', note: 'Before and after photos' }],
-    acceptedAt: '2026-07-01T06:30:00', notes: 'Done by 10am',
-  },
-  {
-    id: 4, title: 'Count inventory for audit', description: 'Full count — beverages, dry goods, household',
-    assigneeId: 'u2', assigneeName: 'Farai Ncube', assignedById: 'u5', assignedByName: 'Admire Moyo',
-    deadline: '2026-07-04', status: 'pending', priority: 'high', proofs: [], acceptedAt: null, notes: '',
-  },
-  {
-    id: 5, title: 'Train new cashier on POS system', description: 'Go through checkout and end-of-day process',
-    assigneeId: 'u3', assigneeName: 'Grace Kamau', assignedById: 'u1', assignedByName: 'Tatenda Chikwanda',
-    deadline: '2026-07-05', status: 'in_progress', priority: 'medium', proofs: [], acceptedAt: '2026-07-01T09:15:00', notes: '',
-  },
-]
-
 const PRIORITY_COLORS = {
   high: 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300',
   medium: 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300',
@@ -78,7 +40,7 @@ function StaffPicker({ value, onChange, staffList }) {
   const [open, setOpen] = useState(false)
   const ref = useRef(null)
 
-  const list = staffList && staffList.length > 0 ? staffList : DEMO_STAFF
+  const list = staffList || []
   const filtered = list.filter((s) =>
     s.name.toLowerCase().includes(search.toLowerCase()) ||
     s.role.toLowerCase().includes(search.toLowerCase())
@@ -216,11 +178,11 @@ function dbRowToTask(row) {
 
 export default function Tasks() {
   const { posMode } = useThemeStore()
-  const { isDemo, role, profile, tenant, user } = useAuthStore()
+  const { role, profile, tenant, user } = useAuthStore()
   const isRestaurant = posMode === 'restaurant'
   const canAssign = CAN_ASSIGN.includes(role)
 
-  const [tasks, setTasks] = useState(isDemo ? INITIAL_TASKS : [])
+  const [tasks, setTasks] = useState([])
   const [staffList, setStaffList] = useState([])
   const [filter, setFilter] = useState('all')
   const [showNew, setShowNew] = useState(false)
@@ -230,12 +192,12 @@ export default function Tasks() {
   const [updateProofs, setUpdateProofs] = useState([])
 
   useEffect(() => {
-    if (isDemo || !tenant?.id) return
+    if (!tenant?.id) return
     fetchTasks(tenant.id).then(rows => setTasks(rows.map(dbRowToTask))).catch(() => {})
     fetchStaff(tenant.id).then(rows => setStaffList(rows.map(r => ({ id: r.id, name: r.name, role: r.role })))).catch(() => {})
-  }, [isDemo, tenant?.id])
+  }, [tenant?.id])
 
-  const myId = isDemo ? `demo-${role}` : (user?.id || '')
+  const myId = user?.id || ''
 
   const filteredTasks = tasks.filter((t) => {
     const passFilter = filter === 'all' ? true : t.status === filter
@@ -266,7 +228,7 @@ export default function Tasks() {
     setShowNew(false)
     toast.success('Task assigned!')
 
-    if (!isDemo && tenant?.id) {
+    if (tenant?.id) {
       try {
         const created = await insertTask(tenant.id, myId, {
           assignedTo: newTask.assigneeId,
@@ -285,7 +247,7 @@ export default function Tasks() {
   const accept = async (id) => {
     setTasks(prev => prev.map(t => t.id === id ? { ...t, status: 'in_progress', acceptedAt: new Date().toISOString() } : t))
     toast.success('Task accepted — get to it!')
-    if (!isDemo) await updateTaskStatus(id, 'in_progress').catch(() => {})
+    await updateTaskStatus(id, 'in_progress').catch(() => {})
   }
 
   const openUpdate = (task) => {
@@ -303,19 +265,19 @@ export default function Tasks() {
     ))
     setUpdateTask(null)
     toast.success('Task updated')
-    if (!isDemo) await updateTaskStatus(updateTask.id, nextStatus).catch(() => {})
+    await updateTaskStatus(updateTask.id, nextStatus).catch(() => {})
   }
 
   const markComplete = async (id) => {
     setTasks(prev => prev.map(t => t.id === id ? { ...t, status: 'completed' } : t))
     toast.success('Task completed!')
-    if (!isDemo) await updateTaskStatus(id, 'completed').catch(() => {})
+    await updateTaskStatus(id, 'completed').catch(() => {})
   }
 
   const deleteTask = async (id) => {
     setTasks(prev => prev.filter(t => t.id !== id))
     toast.success('Task removed')
-    if (!isDemo) await dbDeleteTask(id).catch(() => {})
+    await dbDeleteTask(id).catch(() => {})
   }
 
   const accent = isRestaurant ? 'bg-green-600 hover:bg-green-700' : 'bg-brand-600 hover:bg-brand-700'

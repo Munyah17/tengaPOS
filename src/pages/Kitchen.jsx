@@ -2,7 +2,6 @@ import { useEffect, useRef, useCallback, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { ChefHat, Clock, CheckCircle, Timer, Flame, Volume2, VolumeX, Car, Store } from 'lucide-react'
 import { Link } from 'react-router-dom'
-import { useOrderStore } from '@/stores/orderStore'
 import { useAuthStore } from '@/stores/authStore'
 import { supabase } from '@/lib/supabase'
 import { fetchKitchenOrders, advanceKitchenOrder, completeKitchenOrder } from '@/lib/db'
@@ -105,22 +104,16 @@ function OrderCard({ order, onAdvance, onComplete }) {
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export default function Kitchen() {
-  const demoStore = useOrderStore()
-  const { isDemo, tenant } = useAuthStore()
+  const { tenant } = useAuthStore()
   const [liveOrders, setLiveOrders] = useState([])
   const [soundOn, setSoundOn] = useState(true)
   const [filter, setFilter] = useState('all')
   const soundRef = useRef(soundOn)
   soundRef.current = soundOn
 
-  // Demo mode: use in-memory order store
+  // Load from DB + subscribe to Realtime changes
   useEffect(() => {
-    if (isDemo) demoStore.seedDemo()
-  }, [isDemo])
-
-  // Real mode: load from DB + subscribe to Realtime changes
-  useEffect(() => {
-    if (isDemo || !tenant?.id) return
+    if (!tenant?.id) return
 
     fetchKitchenOrders(tenant.id).then(setLiveOrders).catch(() => {})
 
@@ -162,17 +155,16 @@ export default function Kitchen() {
       .subscribe()
 
     return () => { supabase.removeChannel(channel) }
-  }, [isDemo, tenant?.id])
+  }, [tenant?.id])
 
-  const orders = isDemo ? demoStore.orders : liveOrders
+  const orders = liveOrders
   const prevLen = useRef(orders.length)
   useEffect(() => {
-    if (!isDemo && orders.length > prevLen.current && soundRef.current) playBeep()
+    if (orders.length > prevLen.current && soundRef.current) playBeep()
     prevLen.current = orders.length
   }, [orders.length])
 
   const handleAdvance = async (id) => {
-    if (isDemo) { demoStore.advance(id); return }
     const order = liveOrders.find(o => o.id === id)
     if (!order) return
     const idx = STATUS_FLOW.indexOf(order.status)
@@ -182,7 +174,6 @@ export default function Kitchen() {
   }
 
   const handleComplete = async (id) => {
-    if (isDemo) { demoStore.complete(id); return }
     setLiveOrders(prev => prev.filter(o => o.id !== id))
     await completeKitchenOrder(id).catch(() => {})
   }

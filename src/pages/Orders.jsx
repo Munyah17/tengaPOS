@@ -9,24 +9,6 @@ import { useOrderStore } from '@/stores/orderStore'
 import { fetchOrders } from '@/lib/db'
 import toast from 'react-hot-toast'
 
-const DEMO_ORDERS = [
-  { id: 'TP-260524-0001', date: '2026-05-24T14:30:00', items: 3, total: 15.50, method: 'Cash', status: 'completed', customer: 'Walk-in' },
-  { id: 'TP-260524-0002', date: '2026-05-24T14:22:00', items: 7, total: 42.75, method: 'EcoCash', status: 'completed', customer: 'Walk-in' },
-  { id: 'TP-260524-0003', date: '2026-05-24T14:15:00', items: 2, total: 8.20, method: 'Cash', status: 'completed', customer: 'Walk-in' },
-  { id: 'TP-260524-0004', date: '2026-05-24T14:08:00', items: 12, total: 67.90, method: 'Visa', status: 'completed', customer: 'John D.' },
-  { id: 'TP-260524-0005', date: '2026-05-24T13:55:00', items: 4, total: 23.00, method: 'InnBucks', status: 'refunded', customer: 'Walk-in' },
-  { id: 'TP-260524-0006', date: '2026-05-24T13:40:00', items: 8, total: 55.25, method: 'Mastercard', status: 'completed', customer: 'Sarah M.' },
-  { id: 'TP-260524-0007', date: '2026-05-24T13:25:00', items: 1, total: 5.99, method: 'Cash', status: 'completed', customer: 'Walk-in' },
-]
-
-const DEMO_RESTAURANT_ORDERS = [
-  { id: '#047', items: ['Zinger Burger x2', 'Large Fries', 'Coke 500ml'], status: 'cooking',  orderType: 'counter',       total: 18.50, time: '14:28', elapsed: 14 },
-  { id: '#048', items: ['Streetwise 2', 'Coleslaw'],                       status: 'cooking',  orderType: 'drive_through', total: 14.00, time: '14:20', elapsed: 22 },
-  { id: '#049', items: ['Grilled Chicken Wrap', 'Water 500ml'],            status: 'waiting',  orderType: 'counter',       total: 12.00, time: '14:25', elapsed: 17 },
-  { id: '#050', items: ['Family Bucket', 'Chips x3', 'Fanta x3'],         status: 'ready',    orderType: 'drive_through', total: 41.00, time: '14:17', elapsed: 25 },
-  { id: '#051', items: ['Double Smash Burger'],                            status: 'received', orderType: 'counter',       total: 8.50,  time: '14:41', elapsed: 1  },
-]
-
 const ORDER_STATUS = {
   received: { label: 'Received', icon: Clock, bg: 'bg-blue-50 dark:bg-blue-950/40', text: 'text-blue-700 dark:text-blue-400', dot: 'bg-blue-500' },
   waiting:  { label: 'Waiting',  icon: Timer, bg: 'bg-yellow-50 dark:bg-yellow-950/40', text: 'text-yellow-700 dark:text-yellow-400', dot: 'bg-yellow-500' },
@@ -162,15 +144,15 @@ function RestaurantOrders({ orders }) {
 
 export default function Orders() {
   const { posMode } = useThemeStore()
-  const { isDemo, tenant } = useAuthStore()
-  const { orders: liveOrders, seedDemo } = useOrderStore()
+  const { tenant } = useAuthStore()
+  const { orders: liveOrders } = useOrderStore()
   const isRestaurant = posMode === 'restaurant'
   const [dbOrders, setDbOrders] = useState([])
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
 
   useEffect(() => {
-    if (isDemo || !tenant?.id) return
+    if (!tenant?.id) return
     fetchOrders(tenant.id)
       .then(rows => setDbOrders(rows.map(o => ({
         id: o.order_no || o.id,
@@ -182,10 +164,7 @@ export default function Orders() {
         status: o.status,
       }))))
       .catch(() => {})
-  }, [isDemo, tenant?.id])
-
-  // Seed demo orders for the shared store on first render in restaurant mode
-  if (isDemo && isRestaurant && liveOrders.length === 0) seedDemo()
+  }, [tenant?.id])
 
   const restaurantOrders = liveOrders.map((o) => ({
     id: `#${o.number}`,
@@ -197,7 +176,7 @@ export default function Orders() {
     elapsed: Math.floor((Date.now() - o.startedAt) / 60000),
   }))
 
-  const allOrders = isDemo ? DEMO_ORDERS : dbOrders
+  const allOrders = dbOrders
 
   const orders = useMemo(() => {
     if (!dateFrom && !dateTo) return allOrders

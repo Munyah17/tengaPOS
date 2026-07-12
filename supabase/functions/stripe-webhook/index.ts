@@ -53,6 +53,8 @@ serve(async (req) => {
     const tenantId = session.metadata?.tenant_id
     const planType = session.metadata?.plan_type
     const reference = session.metadata?.reference
+    const kind = session.metadata?.kind || 'plan'
+    const metaMonths = Number(session.metadata?.months) || null
     if (!tenantId || !planType) return new Response('Missing metadata', { status: 400 })
 
     const admin = createClient(
@@ -60,19 +62,28 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
     )
 
-    const months = PLAN_MONTHS[planType] || 6
+    const months = metaMonths || PLAN_MONTHS[planType] || 6
     const now = new Date()
     const renewal = new Date(now)
     renewal.setMonth(renewal.getMonth() + months)
 
-    // Activate the tenant on the paid plan (clears any trial lock)
-    await admin.from('tenants').update({
-      status: 'active',
-      plan_type: planType,
-      plan_start_date: now.toISOString(),
-      next_renewal_date: renewal.toISOString(),
-      approved_at: now.toISOString(),
-    }).eq('id', tenantId)
+    if (kind === 'fiscalisation') {
+      // Unlock the ZIMRA Fiscalisation add-on for the paid period
+      const { data: t } = await admin.from('tenants').select('features').eq('id', tenantId).maybeSingle()
+      await admin.from('tenants').update({
+        features: { ...(t?.features || {}), fiscalisation: true },
+        fiscal_expires_at: renewal.toISOString(),
+      }).eq('id', tenantId)
+    } else {
+      // Activate the tenant on the paid plan (clears any trial lock)
+      await admin.from('tenants').update({
+        status: 'active',
+        plan_type: planType,
+        plan_start_date: now.toISOString(),
+        next_renewal_date: renewal.toISOString(),
+        approved_at: now.toISOString(),
+      }).eq('id', tenantId)
+    }
 
     // Mark checkout + record the payment
     const { data: checkout } = await admin

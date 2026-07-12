@@ -12,6 +12,10 @@ import { useFiscalStore } from '@/stores/fiscalStore'
 import { pingDevice } from '@/lib/fiscalApi'
 import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/stores/authStore'
+import { useFiscalPricing } from '@/lib/platformSettings'
+import { CURRENCIES, PAYMENT_PROVIDERS } from '@/utils/constants'
+import { fetchAllTenantData } from '@/lib/db'
+import { Download, Clock } from 'lucide-react'
 import toast from 'react-hot-toast'
 
 const sections = [
@@ -29,8 +33,76 @@ const sections = [
 export default function Settings() {
   const [activeSection, setActiveSection] = useState('general')
   const { posMode, setPosMode } = useThemeStore()
-  const { isDemo, tenant } = useAuthStore()
+  const { tenant, initAuth } = useAuthStore()
   const fiscal = useFiscalStore()
+
+  // ─── Fiscalisation add-on subscription ───
+  const fiscalPricing = useFiscalPricing()
+  const fiscalUnlocked = tenant?.features?.fiscalisation === true
+  const [fiscalPeriod, setFiscalPeriod] = useState('monthly')
+  const [fiscalPayMethod, setFiscalPayMethod] = useState('paynow')
+  const [fiscalRequesting, setFiscalRequesting] = useState(false)
+  const [pendingFiscalRequest, setPendingFiscalRequest] = useState(null)
+
+  useEffect(() => {
+    if (!tenant?.id) return
+    supabase
+      .from('fiscalisation_requests')
+      .select('*')
+      .eq('tenant_id', tenant.id)
+      .eq('status', 'pending')
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+      .then(({ data }) => setPendingFiscalRequest(data))
+  }, [tenant?.id])
+
+  const requestFiscalisation = async () => {
+    setFiscalRequesting(true)
+    try {
+      const price = fiscalPricing[fiscalPeriod]?.price
+      if (fiscalPayMethod === 'cash') {
+        // Cash: goes to the operations team for approval
+        const { error } = await supabase.from('fiscalisation_requests').insert({
+          tenant_id: tenant.id,
+          period: fiscalPeriod,
+          method: 'cash',
+          amount: price,
+        })
+        if (error) throw error
+        toast.success('Request sent! Our team will confirm your cash payment and activate fiscalisation.')
+        setPendingFiscalRequest({ status: 'pending', period: fiscalPeriod, method: 'cash' })
+      } else {
+        // Online: hosted checkout (Stripe or Paynow), webhook unlocks the feature
+        const { data: { session } } = await supabase.auth.getSession()
+        const { data, error } = await supabase.functions.invoke('signup-checkout', {
+          body: {
+            type: 'fiscalisation',
+            period: fiscalPeriod,
+            provider: fiscalPayMethod,
+            return_url: `${window.location.origin}/app/settings`,
+          },
+          headers: { Authorization: `Bearer ${session?.access_token}` },
+        })
+        if (error) {
+          let msg = error.message
+          try {
+            const ctx = await error.context?.json()
+            if (ctx?.error) msg = ctx.error
+          } catch { /* keep default */ }
+          throw new Error(msg)
+        }
+        if (data?.error) throw new Error(data.error)
+        if (!data?.url) throw new Error('No checkout URL returned')
+        window.location.href = data.url
+        return
+      }
+    } catch (err) {
+      toast.error(err.message || 'Could not submit request')
+    } finally {
+      setFiscalRequesting(false)
+    }
+  }
 
   // Paynow integration state
   const [paynowId, setPaynowId] = useState('')
@@ -40,7 +112,7 @@ export default function Settings() {
   const [paynowConfigured, setPaynowConfigured] = useState(false)
 
   useEffect(() => {
-    if (isDemo || !tenant?.id) return
+    if (!tenant?.id) return
     supabase
       .from('tenants')
       .select('paynow_integration_id, paynow_integration_key')
@@ -53,16 +125,11 @@ export default function Settings() {
           setPaynowConfigured(true)
         }
       })
-  }, [isDemo, tenant?.id])
+  }, [tenant?.id])
 
   const handleSavePaynow = async () => {
     if (!paynowId.trim() || !paynowKey.trim()) {
       toast.error('Both Integration ID and Integration Key are required')
-      return
-    }
-    if (isDemo) {
-      toast.success('Demo mode — settings not persisted. In production these save to your account.')
-      setPaynowConfigured(true)
       return
     }
     setPaynowSaving(true)
@@ -78,6 +145,104 @@ export default function Settings() {
       toast.error(err.message || 'Failed to save Paynow settings')
     } finally {
       setPaynowSaving(false)
+    }
+  }
+
+  // Stripe integration state — tenant's own keys, mirrors the Paynow card
+  const [stripePubKey, setStripePubKey] = useState('')
+  const [stripeSecretKey, setStripeSecretKey] = useState('')
+  const [showStripeKey, setShowStripeKey] = useState(false)
+  const [stripeSaving, setStripeSaving] = useState(false)
+  const [stripeConfigured, setStripeConfigured] = useState(false)
+
+  useEffect(() => {
+    if (!tenant?.id) return
+    supabase
+      .from('tenants')
+      .select('stripe_publishable_key, stripe_secret_key')
+      .eq('id', tenant.id)
+      .single()
+      .then(({ data }) => {
+        if (data?.stripe_publishable_key) {
+          setStripePubKey(data.stripe_publishable_key)
+          setStripeSecretKey(data.stripe_secret_key || '')
+          setStripeConfigured(true)
+        }
+      })
+  }, [tenant?.id])
+
+  const handleSaveStripe = async () => {
+    if (!stripePubKey.trim() || !stripeSecretKey.trim()) {
+      toast.error('Both Publishable Key and Secret Key are required')
+      return
+    }
+    setStripeSaving(true)
+    try {
+      const { error } = await supabase
+        .from('tenants')
+        .update({ stripe_publishable_key: stripePubKey.trim(), stripe_secret_key: stripeSecretKey.trim() })
+        .eq('id', tenant.id)
+      if (error) throw error
+      setStripeConfigured(true)
+      toast.success('Stripe credentials saved')
+    } catch (err) {
+      toast.error(err.message || 'Failed to save Stripe settings')
+    } finally {
+      setStripeSaving(false)
+    }
+  }
+
+  // ─── General: business name, currency, VAT ───
+  const [businessName, setBusinessName] = useState(tenant?.name || '')
+  const [currency, setCurrency] = useState(tenant?.currency || 'USD')
+  const [vatEnabled, setVatEnabledLocal] = useState(tenant?.vat_enabled !== false)
+  const [vatRate, setVatRate] = useState(tenant?.vat_rate ?? 15.5)
+  const [generalSaving, setGeneralSaving] = useState(false)
+
+  useEffect(() => {
+    if (tenant) {
+      setBusinessName(tenant.name || '')
+      setCurrency(tenant.currency || 'USD')
+      setVatEnabledLocal(tenant.vat_enabled !== false)
+      setVatRate(tenant.vat_rate ?? 15.5)
+    }
+  }, [tenant])
+
+  const handleSaveGeneral = async () => {
+    setGeneralSaving(true)
+    try {
+      const { error } = await supabase
+        .from('tenants')
+        .update({ name: businessName.trim(), currency, vat_enabled: vatEnabled, vat_rate: Number(vatRate) || 15.5 })
+        .eq('id', tenant.id)
+      if (error) throw error
+      toast.success('Settings saved')
+      await initAuth()
+    } catch (err) {
+      toast.error(err.message || 'Failed to save settings')
+    } finally {
+      setGeneralSaving(false)
+    }
+  }
+
+  // ─── Download all data ───
+  const [downloadingData, setDownloadingData] = useState(false)
+  const handleDownloadData = async () => {
+    setDownloadingData(true)
+    try {
+      const data = await fetchAllTenantData(tenant.id)
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `tengapos-data-${tenant.name?.replace(/\s+/g, '-') || 'export'}-${new Date().toISOString().slice(0, 10)}.json`
+      a.click()
+      URL.revokeObjectURL(url)
+      toast.success('Your data has been downloaded')
+    } catch (err) {
+      toast.error(err.message || 'Failed to export data')
+    } finally {
+      setDownloadingData(false)
     }
   }
 
@@ -100,7 +265,7 @@ export default function Settings() {
 
   // Load fiscal config from DB on mount (multi-tenant: each vendor has their own row)
   useEffect(() => {
-    if (isDemo || !tenant?.id) return
+    if (!tenant?.id) return
     setFiscalLoading(true)
     supabase
       .from('tenant_fiscal_configs')
@@ -127,14 +292,9 @@ export default function Settings() {
         }
       })
       .finally(() => setFiscalLoading(false))
-  }, [isDemo, tenant?.id])
+  }, [tenant?.id])
 
   const handleFiscalSave = async () => {
-    if (isDemo) {
-      fiscal.setConfig({ ...fiscalForm })
-      toast.success('Demo mode — fiscal settings applied to session only')
-      return
-    }
     if (!tenant?.id) return
     setFiscalSaving(true)
     try {
@@ -276,27 +436,63 @@ export default function Settings() {
                   <label className="mb-1.5 block text-sm font-medium text-slate-700 dark:text-slate-300">Business Name</label>
                   <input
                     type="text"
-                    defaultValue="Demo Store"
+                    value={businessName}
+                    onChange={(e) => setBusinessName(e.target.value)}
                     className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
                   />
                 </div>
                 <div>
                   <label className="mb-1.5 block text-sm font-medium text-slate-700 dark:text-slate-300">Currency</label>
-                  <select className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white">
-                    <option>USD - US Dollar</option>
-                    <option>ZWL - Zimbabwe Dollar</option>
-                    <option>ZAR - South African Rand</option>
+                  <select
+                    value={currency}
+                    onChange={(e) => setCurrency(e.target.value)}
+                    className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                  >
+                    {CURRENCIES.map((c) => (
+                      <option key={c.code} value={c.code}>{c.label}</option>
+                    ))}
                   </select>
                 </div>
-                <div>
-                  <label className="mb-1.5 block text-sm font-medium text-slate-700 dark:text-slate-300">Tax Rate (%)</label>
-                  <input
-                    type="number"
-                    defaultValue="15"
-                    className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
-                  />
+
+                {/* VAT — inclusive pricing, tenant can switch off entirely */}
+                <div className="rounded-xl border border-slate-200 p-4 dark:border-slate-700">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <span className="text-sm font-semibold text-slate-900 dark:text-white">VAT (Value Added Tax)</span>
+                      <p className="text-xs text-slate-500">Shelf prices already include VAT — nothing is added at checkout.</p>
+                    </div>
+                    <label className="relative inline-flex cursor-pointer items-center">
+                      <input
+                        type="checkbox"
+                        checked={vatEnabled}
+                        onChange={(e) => setVatEnabledLocal(e.target.checked)}
+                        className="peer sr-only"
+                      />
+                      <div className="peer h-5 w-9 rounded-full bg-slate-300 after:absolute after:left-[2px] after:top-[2px] after:h-4 after:w-4 after:rounded-full after:bg-white after:transition-all peer-checked:bg-brand-600 peer-checked:after:translate-x-full dark:bg-slate-600" />
+                    </label>
+                  </div>
+                  {vatEnabled && (
+                    <div className="mt-3">
+                      <label className="mb-1 block text-xs font-medium text-slate-500">VAT Rate (%)</label>
+                      <input
+                        type="number"
+                        step="0.1"
+                        value={vatRate}
+                        onChange={(e) => setVatRate(e.target.value)}
+                        className="w-32 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                      />
+                    </div>
+                  )}
+                  {!vatEnabled && (
+                    <p className="mt-2 text-xs text-amber-600 dark:text-amber-400">
+                      VAT will not appear on checkout or receipts while disabled.
+                    </p>
+                  )}
                 </div>
-                <Button>Save Changes</Button>
+
+                <Button onClick={handleSaveGeneral} disabled={generalSaving}>
+                  {generalSaving ? 'Saving…' : 'Save Changes'}
+                </Button>
               </div>
             )}
 
@@ -340,16 +536,96 @@ export default function Settings() {
             {activeSection === 'payments' && (
               <div className="space-y-6">
                 <h3 className="text-lg font-bold text-slate-900 dark:text-white">Payment Methods</h3>
-                <p className="text-sm text-slate-500">Enable or disable payment methods for your store.</p>
-                {['Cash', 'EcoCash', 'InnBucks', 'Omari', 'OneMoney', 'ZIPIT', 'Visa', 'Mastercard', 'POS Terminal'].map((method) => (
-                  <div key={method} className="flex items-center justify-between rounded-xl bg-slate-50 p-3 dark:bg-slate-800">
-                    <span className="text-sm font-medium text-slate-900 dark:text-white">{method}</span>
-                    <label className="relative inline-flex cursor-pointer items-center">
-                      <input type="checkbox" defaultChecked className="peer sr-only" />
-                      <div className="peer h-5 w-9 rounded-full bg-slate-300 after:absolute after:left-[2px] after:top-[2px] after:h-4 after:w-4 after:rounded-full after:bg-white after:transition-all peer-checked:bg-brand-600 peer-checked:after:translate-x-full dark:bg-slate-600" />
-                    </label>
+                <p className="text-sm text-slate-500">Providers your store accepts payments through.</p>
+
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {PAYMENT_PROVIDERS.map((p) => (
+                    <div
+                      key={p.id}
+                      className={`rounded-xl border p-3.5 ${
+                        p.status === 'coming_soon'
+                          ? 'border-slate-100 bg-slate-50 opacity-70 dark:border-slate-800 dark:bg-slate-800/50'
+                          : 'border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-800'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm font-bold text-slate-900 dark:text-white">{p.name}</span>
+                        {p.status === 'coming_soon' && (
+                          <span className="flex items-center gap-1 rounded-full bg-slate-200 px-2 py-0.5 text-[10px] font-bold text-slate-600 dark:bg-slate-700 dark:text-slate-300">
+                            <Clock className="h-2.5 w-2.5" /> Coming Soon
+                          </span>
+                        )}
+                        {p.status === 'via_paynow' && (
+                          <span className="rounded-full bg-[#f7941d]/15 px-2 py-0.5 text-[10px] font-bold text-[#f7941d]">Via Paynow</span>
+                        )}
+                        {p.status === 'available' && (
+                          <span className="rounded-full bg-green-100 px-2 py-0.5 text-[10px] font-bold text-green-700 dark:bg-green-900/40 dark:text-green-400">Available</span>
+                        )}
+                      </div>
+                      <p className="mt-1 text-xs text-slate-500">{p.desc}</p>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Stripe Integration */}
+                <div className="rounded-2xl border border-indigo-500/30 bg-indigo-500/5 p-5 dark:border-indigo-500/20 dark:bg-indigo-500/10">
+                  <div className="mb-4 flex items-center gap-3">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-600 text-white font-extrabold text-sm">S</div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h4 className="text-sm font-bold text-slate-900 dark:text-white">Stripe Integration</h4>
+                        {stripeConfigured && (
+                          <span className="rounded-full bg-green-100 px-2 py-0.5 text-xs font-bold text-green-700 dark:bg-green-900/40 dark:text-green-400">
+                            Configured
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs text-slate-500">
+                        Accept card payments worldwide via Stripe hosted checkout. Your keys are stored securely and never exposed to the client.
+                      </p>
+                    </div>
                   </div>
-                ))}
+
+                  <div className="space-y-3">
+                    <div>
+                      <label className="mb-1.5 block text-xs font-semibold text-slate-700 dark:text-slate-300">Publishable Key</label>
+                      <input
+                        type="text"
+                        value={stripePubKey}
+                        onChange={(e) => setStripePubKey(e.target.value)}
+                        placeholder="pk_live_..."
+                        className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                      />
+                    </div>
+                    <div>
+                      <label className="mb-1.5 block text-xs font-semibold text-slate-700 dark:text-slate-300">Secret Key</label>
+                      <div className="relative">
+                        <input
+                          type={showStripeKey ? 'text' : 'password'}
+                          value={stripeSecretKey}
+                          onChange={(e) => setStripeSecretKey(e.target.value)}
+                          placeholder="sk_live_..."
+                          className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 pr-10 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowStripeKey(!showStripeKey)}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                        >
+                          {showStripeKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                        </button>
+                      </div>
+                    </div>
+                    <p className="text-xs text-slate-500">
+                      Get your keys from{' '}
+                      <span className="font-semibold text-indigo-600 dark:text-indigo-400">dashboard.stripe.com</span>
+                      {' → Developers → API keys.'}
+                    </p>
+                    <Button onClick={handleSaveStripe} disabled={stripeSaving}>
+                      {stripeSaving ? 'Saving…' : 'Save Stripe Settings'}
+                    </Button>
+                  </div>
+                </div>
 
                 {/* Paynow Integration */}
                 <div className="rounded-2xl border border-[#f7941d]/30 bg-[#f7941d]/5 p-5 dark:border-[#f7941d]/20 dark:bg-[#f7941d]/10">
@@ -444,16 +720,9 @@ export default function Settings() {
                     className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
                   />
                 </div>
-                <div className="flex items-center justify-between rounded-xl bg-slate-50 p-3 dark:bg-slate-800">
-                  <div>
-                    <span className="text-sm font-medium text-slate-900 dark:text-white">ZIMRA Fiscalisation</span>
-                    <p className="text-xs text-slate-500">$20/device/month</p>
-                  </div>
-                  <label className="relative inline-flex cursor-pointer items-center">
-                    <input type="checkbox" className="peer sr-only" />
-                    <div className="peer h-5 w-9 rounded-full bg-slate-300 after:absolute after:left-[2px] after:top-[2px] after:h-4 after:w-4 after:rounded-full after:bg-white after:transition-all peer-checked:bg-brand-600 peer-checked:after:translate-x-full dark:bg-slate-600" />
-                  </label>
-                </div>
+                <p className="text-xs text-slate-500">
+                  ZIMRA Fiscalisation is managed on its own tab — see <b>ZIMRA Fiscal</b> in the sidebar.
+                </p>
                 <Button>Save Changes</Button>
               </div>
             )}
@@ -463,7 +732,10 @@ export default function Settings() {
                 <div className="flex items-start justify-between">
                   <div>
                     <h3 className="text-lg font-bold text-slate-900 dark:text-white">ZIMRA Fiscalisation</h3>
-                    <p className="text-sm text-slate-500">Connect your ZIMRA fiscal device to issue compliant receipts. $20/device/month.</p>
+                    <p className="text-sm text-slate-500">
+                      Optional add-on — issue ZIMRA-compliant receipts and file fiscal day returns.
+                      From ${fiscalPricing.monthly?.price ?? 20}/month.
+                    </p>
                   </div>
                   {fiscal.isRegistered && (
                     <span className="flex items-center gap-1.5 rounded-full bg-green-100 px-3 py-1 text-xs font-semibold text-green-700 dark:bg-green-950 dark:text-green-400">
@@ -472,6 +744,78 @@ export default function Settings() {
                     </span>
                   )}
                 </div>
+
+                {/* Add-on subscription gate */}
+                {!fiscalUnlocked && (
+                  <div className="rounded-2xl border-2 border-amber-300 bg-amber-50 p-5 dark:border-amber-700/50 dark:bg-amber-900/20">
+                    <h4 className="font-bold text-amber-900 dark:text-amber-200">Activate ZIMRA Fiscalisation</h4>
+                    {pendingFiscalRequest ? (
+                      <p className="mt-2 text-sm text-amber-800 dark:text-amber-300">
+                        Your cash payment request is <b>awaiting confirmation</b> by our team.
+                        Fiscalisation unlocks as soon as it's approved.
+                      </p>
+                    ) : (
+                      <>
+                        <p className="mt-1 text-sm text-amber-800 dark:text-amber-300">
+                          Choose a period, pay online or by cash, and the module unlocks automatically.
+                        </p>
+                        <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+                          {Object.entries(fiscalPricing).map(([key, p]) => (
+                            <button
+                              key={key}
+                              onClick={() => setFiscalPeriod(key)}
+                              className={`rounded-xl border px-3 py-2.5 text-left transition-colors ${
+                                fiscalPeriod === key
+                                  ? 'border-amber-600 bg-white dark:bg-slate-900'
+                                  : 'border-amber-200 bg-white/60 hover:border-amber-400 dark:border-amber-800/40 dark:bg-white/5'
+                              }`}
+                            >
+                              <p className="text-lg font-extrabold text-slate-900 dark:text-white">${p.price}</p>
+                              <p className="text-xs text-slate-500">{p.label}</p>
+                            </button>
+                          ))}
+                        </div>
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          {[
+                            { key: 'paynow', label: 'Paynow · EcoCash' },
+                            { key: 'stripe', label: 'Card · Stripe' },
+                            { key: 'cash', label: 'Cash (approved by our team)' },
+                          ].map((m) => (
+                            <button
+                              key={m.key}
+                              onClick={() => setFiscalPayMethod(m.key)}
+                              className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${
+                                fiscalPayMethod === m.key
+                                  ? 'bg-amber-600 text-white'
+                                  : 'bg-white text-slate-600 hover:bg-amber-100 dark:bg-white/10 dark:text-slate-300'
+                              }`}
+                            >
+                              {m.label}
+                            </button>
+                          ))}
+                        </div>
+                        <button
+                          onClick={requestFiscalisation}
+                          disabled={fiscalRequesting}
+                          className="mt-4 w-full rounded-xl bg-amber-600 py-2.5 text-sm font-bold text-white hover:bg-amber-700 disabled:opacity-60 sm:w-auto sm:px-6"
+                        >
+                          {fiscalRequesting
+                            ? 'Processing…'
+                            : fiscalPayMethod === 'cash'
+                              ? `Request Fiscalisation — $${fiscalPricing[fiscalPeriod]?.price} cash`
+                              : `Request Fiscalisation — pay $${fiscalPricing[fiscalPeriod]?.price} now`}
+                        </button>
+                      </>
+                    )}
+                  </div>
+                )}
+
+                {fiscalUnlocked && tenant?.fiscal_expires_at && (
+                  <div className="flex items-center gap-2 rounded-xl border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800 dark:border-green-800/50 dark:bg-green-900/20 dark:text-green-300">
+                    <CheckCircle className="h-4 w-4 flex-shrink-0" />
+                    Fiscalisation add-on active until {new Date(tenant.fiscal_expires_at).toLocaleDateString('en-GB')}
+                  </div>
+                )}
 
                 {/* Enable toggle */}
                 <div className="flex items-center justify-between rounded-xl bg-slate-50 p-4 dark:bg-slate-800">
@@ -706,27 +1050,43 @@ export default function Settings() {
               </div>
             )}
 
-            {(activeSection === 'notifications' || activeSection === 'security') && (
+            {activeSection === 'notifications' && (
               <div className="space-y-6">
-                <h3 className="text-lg font-bold capitalize text-slate-900 dark:text-white">{activeSection}</h3>
-                <p className="text-sm text-slate-500">Configure {activeSection} settings for your store.</p>
-                <div className="space-y-3">
-                  {[
-                    { label: 'Low stock alerts', enabled: true },
-                    { label: 'Daily sales summary', enabled: true },
-                    { label: 'New staff activity', enabled: false },
-                    { label: 'Transaction alerts', enabled: true },
-                  ].map((item) => (
-                    <div key={item.label} className="flex items-center justify-between rounded-xl bg-slate-50 p-3 dark:bg-slate-800">
-                      <span className="text-sm font-medium text-slate-900 dark:text-white">{item.label}</span>
-                      <label className="relative inline-flex cursor-pointer items-center">
-                        <input type="checkbox" defaultChecked={item.enabled} className="peer sr-only" />
-                        <div className="peer h-5 w-9 rounded-full bg-slate-300 after:absolute after:left-[2px] after:top-[2px] after:h-4 after:w-4 after:rounded-full after:bg-white after:transition-all peer-checked:bg-brand-600 peer-checked:after:translate-x-full dark:bg-slate-600" />
-                      </label>
+                <h3 className="text-lg font-bold text-slate-900 dark:text-white">Notifications</h3>
+                <p className="text-sm text-slate-500">
+                  Low-stock alerts, kitchen order updates, and platform announcements appear automatically
+                  in the bell icon at the top of every page — no setup needed.
+                </p>
+              </div>
+            )}
+
+            {activeSection === 'security' && (
+              <div className="space-y-6">
+                <h3 className="text-lg font-bold text-slate-900 dark:text-white">Security &amp; Data</h3>
+
+                <div className="rounded-xl border border-slate-200 p-4 dark:border-slate-700">
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <span className="text-sm font-semibold text-slate-900 dark:text-white">Download Your Data</span>
+                      <p className="mt-0.5 text-xs text-slate-500">
+                        Export all your products, orders, transactions, staff, branches, and tasks as a single file —
+                        useful for backups or if you close your account.
+                      </p>
                     </div>
-                  ))}
+                    <Button variant="secondary" onClick={handleDownloadData} disabled={downloadingData}>
+                      <Download className="h-4 w-4" />
+                      {downloadingData ? 'Exporting…' : 'Download'}
+                    </Button>
+                  </div>
                 </div>
-                <Button>Save Changes</Button>
+
+                <div className="rounded-xl border border-slate-200 p-4 dark:border-slate-700">
+                  <span className="text-sm font-semibold text-slate-900 dark:text-white">Password</span>
+                  <p className="mt-0.5 text-xs text-slate-500">
+                    Change your password from the sign-in screen using "Forgot password?", or ask an
+                    Admin/Shop Manager to reset it for you.
+                  </p>
+                </div>
               </div>
             )}
           </motion.div>

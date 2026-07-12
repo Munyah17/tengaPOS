@@ -1,24 +1,31 @@
 export function formatCurrency(amount, currency = 'USD') {
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency,
-    minimumFractionDigits: 2,
-  }).format(amount)
+  try {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency,
+      minimumFractionDigits: 2,
+    }).format(amount)
+  } catch {
+    // Currency code not recognized by this browser's ICU data — fall back
+    // to a plain prefix rather than crashing the page.
+    return `${currency} ${Number(amount || 0).toFixed(2)}`
+  }
 }
 
+// dd/mm/yyyy is the platform-wide date format
 export function formatDate(date) {
-  return new Intl.DateTimeFormat('en-US', {
+  return new Intl.DateTimeFormat('en-GB', {
     year: 'numeric',
-    month: 'short',
-    day: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
   }).format(new Date(date))
 }
 
 export function formatDateTime(date) {
-  return new Intl.DateTimeFormat('en-US', {
+  return new Intl.DateTimeFormat('en-GB', {
     year: 'numeric',
-    month: 'short',
-    day: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
     hour: '2-digit',
     minute: '2-digit',
   }).format(new Date(date))

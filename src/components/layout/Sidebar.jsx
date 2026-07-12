@@ -31,7 +31,7 @@ const ALL_NAV_ITEMS = [
 export default function Sidebar({ open = false, onClose }) {
   const [collapsed, setCollapsed] = useState(false)
   const { posMode } = useThemeStore()
-  const { clearAuth, role, profile } = useAuthStore()
+  const { clearAuth, role, profile, tenant } = useAuthStore()
   const location = useLocation()
   const navigate = useNavigate()
   const isRestaurant = posMode === 'restaurant'
@@ -166,6 +166,26 @@ export default function Sidebar({ open = false, onClose }) {
           <div className="space-y-0.5">
             {visibleItems.map((item) => {
               const isActive = location.pathname === item.path
+              // Fiscalisation is a paid add-on: greyed out until unlocked
+              if (item.key === 'fiscalisation' && tenant?.features?.fiscalisation !== true) {
+                return (
+                  <NavLink
+                    key={item.path}
+                    to="/app/settings"
+                    onClick={handleNavClick}
+                    title="ZIMRA Fiscalisation is an optional add-on — request it in Settings"
+                    className="group flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-slate-400 opacity-60 hover:bg-slate-100 dark:text-slate-600 dark:hover:bg-slate-800"
+                  >
+                    <item.icon className="h-5 w-5 flex-shrink-0 text-slate-300 dark:text-slate-700" />
+                    {!collapsed && (
+                      <span className="flex items-center gap-1.5 truncate">
+                        {item.label}
+                        <span className="rounded-full bg-amber-500/15 px-1.5 py-0.5 text-[9px] font-bold text-amber-500">ADD-ON</span>
+                      </span>
+                    )}
+                  </NavLink>
+                )
+              }
               return (
                 <NavLink
                   key={item.path}

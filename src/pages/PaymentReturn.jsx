@@ -109,11 +109,11 @@ export default function PaymentReturn() {
 
           <div className="p-6">
             <h1 className="mb-1 text-center text-xl font-extrabold text-slate-900 dark:text-white">
-              {timedOut && status === 'pending' ? 'Still Waiting…' : ui.title}
+              {timedOut && status === 'pending' ? 'Payment Not Confirmed' : ui.title}
             </h1>
             <p className="mb-5 text-center text-sm text-slate-500">
               {timedOut && status === 'pending'
-                ? 'Could not confirm status within 30s. Check your Paynow account or try again.'
+                ? 'No confirmation within 30 seconds — treat this as failed for now. If money left your account, it will reflect once Paynow confirms; check Transactions shortly.'
                 : ui.sub}
             </p>
 
