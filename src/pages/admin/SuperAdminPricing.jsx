@@ -24,15 +24,23 @@ export default function SuperAdminPricing() {
   const { user, role } = useAuthStore()
   const [planPricing, setPlanPricing] = useState(DEFAULT_PLAN_PRICING)
   const [fiscalPricing, setFiscalPricing] = useState(DEFAULT_FISCAL_PRICING)
-  const [banner, setBanner] = useState({ enabled: false, text: '', type: 'info' })
+  const [banner, setBanner] = useState({ enabled: false, title: '', text: '', type: 'info', imageUrl: '', buttons: [] })
   const [saving, setSaving] = useState(false)
   const isSuperAdmin = role === 'super_admin'
+  const canEditBanner = role === 'super_admin' || role === 'admin'
 
   useEffect(() => {
     getSetting('plan_pricing', DEFAULT_PLAN_PRICING).then((v) => setPlanPricing({ ...DEFAULT_PLAN_PRICING, ...(v || {}) }))
     getSetting('fiscalisation_pricing', DEFAULT_FISCAL_PRICING).then((v) => setFiscalPricing({ ...DEFAULT_FISCAL_PRICING, ...(v || {}) }))
-    getSetting('site_banner', { enabled: false, text: '', type: 'info' }).then((v) => v && setBanner(v))
+    getSetting('site_banner', null).then((v) => v && setBanner((b) => ({ ...b, ...v, buttons: v.buttons || [] })))
   }, [])
+
+  const setBannerButton = (index, field, value) =>
+    setBanner((b) => {
+      const buttons = [...(b.buttons || [])]
+      buttons[index] = { ...(buttons[index] || { label: '', url: '' }), [field]: value }
+      return { ...b, buttons }
+    })
 
   const setPlanPrice = (key, price) =>
     setPlanPricing((p) => ({ ...p, [key]: { ...p[key], price: Number(price) || 0 } }))
@@ -42,17 +50,23 @@ export default function SuperAdminPricing() {
   const saveAll = async () => {
     setSaving(true)
     try {
-      await updateSetting('plan_pricing', planPricing, user?.id)
-      await updateSetting('fiscalisation_pricing', fiscalPricing, user?.id)
-      await updateSetting('site_banner', banner, user?.id)
+      if (isSuperAdmin) {
+        await updateSetting('plan_pricing', planPricing, user?.id)
+        await updateSetting('fiscalisation_pricing', fiscalPricing, user?.id)
+      }
+      if (canEditBanner) {
+        await updateSetting('site_banner', banner, user?.id)
+      }
       await supabase.from('audit_logs').insert({
         actor_id: user?.id,
         actor_email: user?.email,
-        action: 'pricing_updated',
+        action: isSuperAdmin ? 'pricing_updated' : 'banner_updated',
         target_type: 'platform_settings',
-        details: { plan_pricing: planPricing, fiscalisation_pricing: fiscalPricing, banner_enabled: banner.enabled },
+        details: isSuperAdmin
+          ? { plan_pricing: planPricing, fiscalisation_pricing: fiscalPricing, banner_enabled: banner.enabled }
+          : { banner_enabled: banner.enabled },
       })
-      toast.success('Pricing published — applies across the whole system')
+      toast.success(isSuperAdmin ? 'Pricing published — applies across the whole system' : 'Announcement banner saved')
     } catch (err) {
       toast.error(err.message)
     } finally {
@@ -68,17 +82,17 @@ export default function SuperAdminPricing() {
           <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
             {isSuperAdmin
               ? 'Edit prices here — checkout, landing page, and revenue reports all update instantly.'
-              : 'Plan pricing (read-only).'}
+              : 'Plan pricing is read-only here — you can still edit the announcement popup below.'}
           </p>
         </div>
-        {isSuperAdmin && (
+        {(isSuperAdmin || canEditBanner) && (
           <button
             onClick={saveAll}
             disabled={saving}
             className="flex items-center justify-center gap-2 rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-bold text-white hover:bg-indigo-700 disabled:opacity-60"
           >
             {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-            Publish Prices
+            {isSuperAdmin ? 'Publish Prices' : 'Save Banner'}
           </button>
         )}
       </div>
@@ -87,10 +101,10 @@ export default function SuperAdminPricing() {
       <div className="mb-6 rounded-2xl border border-slate-200 bg-white p-5 dark:border-white/10 dark:bg-white/5">
         <div className="mb-3 flex items-center gap-2">
           <Megaphone className="h-5 w-5 text-indigo-500" />
-          <h2 className="font-bold text-slate-900 dark:text-white">Website Announcement Banner</h2>
+          <h2 className="font-bold text-slate-900 dark:text-white">Website Announcement Popup</h2>
           <button
             onClick={() => setBanner((b) => ({ ...b, enabled: !b.enabled }))}
-            disabled={!isSuperAdmin}
+            disabled={!canEditBanner}
             className={`ml-auto relative flex h-6 w-11 items-center rounded-full transition-colors ${
               banner.enabled ? 'bg-green-600' : 'bg-slate-300 dark:bg-slate-700'
             }`}
@@ -98,28 +112,68 @@ export default function SuperAdminPricing() {
             <span className={`h-4 w-4 rounded-full bg-white shadow transition-transform ${banner.enabled ? 'translate-x-6' : 'translate-x-1'}`} />
           </button>
         </div>
-        <p className="mb-2 text-xs text-slate-500">
-          Shown across the top of the public website when enabled — promotions, notices, launches.
-          Remember to hit Publish Prices to save.
+        <p className="mb-3 text-xs text-slate-500">
+          Shows once per visitor session as a popup on the public website — promotions, notices, launches.
+          Remember to hit {isSuperAdmin ? 'Publish Prices' : 'Save Banner'} to save.
         </p>
-        <div className="flex flex-col gap-2 sm:flex-row">
+
+        <div className="grid gap-3 sm:grid-cols-2">
           <input
-            value={banner.text}
-            onChange={(e) => setBanner((b) => ({ ...b, text: e.target.value }))}
-            disabled={!isSuperAdmin}
-            placeholder="e.g. Launch promo: 20% off Pro Package hardware this month!"
-            className="flex-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 placeholder-slate-400 focus:border-indigo-500 focus:outline-none dark:border-white/10 dark:bg-white/5 dark:text-white"
+            value={banner.title}
+            onChange={(e) => setBanner((b) => ({ ...b, title: e.target.value }))}
+            disabled={!canEditBanner}
+            placeholder="Title (e.g. 20% Off Launch Week!)"
+            className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 placeholder-slate-400 focus:border-indigo-500 focus:outline-none dark:border-white/10 dark:bg-white/5 dark:text-white"
           />
           <select
             value={banner.type}
             onChange={(e) => setBanner((b) => ({ ...b, type: e.target.value }))}
-            disabled={!isSuperAdmin}
+            disabled={!canEditBanner}
             className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:outline-none dark:border-white/10 dark:bg-slate-800 dark:text-white"
           >
             <option value="info">Info (blue)</option>
             <option value="promo">Promo (green)</option>
             <option value="warning">Notice (amber)</option>
           </select>
+        </div>
+
+        <textarea
+          value={banner.text}
+          onChange={(e) => setBanner((b) => ({ ...b, text: e.target.value }))}
+          disabled={!canEditBanner}
+          rows={2}
+          placeholder="Description — e.g. Get 20% off the Pro Package hardware bundle, this month only."
+          className="mt-3 w-full resize-none rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 placeholder-slate-400 focus:border-indigo-500 focus:outline-none dark:border-white/10 dark:bg-white/5 dark:text-white"
+        />
+
+        <input
+          value={banner.imageUrl || ''}
+          onChange={(e) => setBanner((b) => ({ ...b, imageUrl: e.target.value }))}
+          disabled={!canEditBanner}
+          placeholder="Background image URL (optional)"
+          className="mt-3 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 placeholder-slate-400 focus:border-indigo-500 focus:outline-none dark:border-white/10 dark:bg-white/5 dark:text-white"
+        />
+
+        <p className="mb-1.5 mt-3 text-xs font-semibold text-slate-500">Buttons (optional, up to 2)</p>
+        <div className="grid gap-3 sm:grid-cols-2">
+          {[0, 1].map((i) => (
+            <div key={i} className="flex gap-2">
+              <input
+                value={banner.buttons?.[i]?.label || ''}
+                onChange={(e) => setBannerButton(i, 'label', e.target.value)}
+                disabled={!canEditBanner}
+                placeholder={`Button ${i + 1} label`}
+                className="w-1/2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 placeholder-slate-400 focus:border-indigo-500 focus:outline-none dark:border-white/10 dark:bg-white/5 dark:text-white"
+              />
+              <input
+                value={banner.buttons?.[i]?.url || ''}
+                onChange={(e) => setBannerButton(i, 'url', e.target.value)}
+                disabled={!canEditBanner}
+                placeholder="Link (/checkout or https://...)"
+                className="w-1/2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 placeholder-slate-400 focus:border-indigo-500 focus:outline-none dark:border-white/10 dark:bg-white/5 dark:text-white"
+              />
+            </div>
+          ))}
         </div>
       </div>
 

@@ -193,6 +193,7 @@ export default function App() {
             <Route path="fiscal-requests" element={<AdminFiscalRequests />} />
             <Route path="support" element={<AdminSupport />} />
             <Route path="announcements" element={<SuperAdminAnnouncements />} />
+            <Route path="pricing" element={<SuperAdminPricing />} />
             <Route path="reports" element={<AdminReports />} />
             <Route path="profile" element={<AdminSettings />} />
             <Route path="notifications" element={<AdminNotifications />} />

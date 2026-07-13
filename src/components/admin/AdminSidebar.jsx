@@ -131,6 +131,7 @@ const NAV_BY_ROLE = {
     { icon: LifeBuoy, label: 'Support Tickets', path: '/admin/support', group: 'OPERATIONS' },
     { icon: Bell, label: 'Notifications', path: '/admin/notifications', group: 'OPERATIONS', badge: true },
     { icon: Megaphone, label: 'Send Announcement', path: '/admin/announcements', group: 'COMMS' },
+    { icon: Tag, label: 'Announcement Popup', path: '/admin/pricing', group: 'COMMS' },
     { icon: Eye, label: 'Reports (View Only)', path: '/admin/reports', group: 'REPORTS', readonly: true },
     { icon: Settings, label: 'Profile Settings', path: '/admin/profile', group: 'ACCOUNT' },
   ],
