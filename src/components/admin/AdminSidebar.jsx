@@ -1,4 +1,4 @@
-import { NavLink, useNavigate } from 'react-router-dom'
+import { NavLink, useNavigate, useLocation } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import {
   LayoutDashboard, Building2, Users, LifeBuoy, BarChart3,
@@ -147,14 +147,24 @@ export default function AdminSidebar({ open = false, onClose }) {
   const [unread, setUnread] = useState(0)
   const { clearAuth, role, profile } = useAuthStore()
   const navigate = useNavigate()
+  const location = useLocation()
 
   useEffect(() => {
-    supabase
-      .from('admin_notifications')
-      .select('id', { count: 'exact', head: true })
-      .eq('is_read', false)
-      .then(({ count }) => setUnread(count || 0))
-  }, [])
+    const fetchUnread = () => {
+      supabase
+        .from('admin_notifications')
+        .select('id', { count: 'exact', head: true })
+        .eq('is_read', false)
+        .then(({ count }) => setUnread(count || 0))
+    }
+    // Was fetched once on mount only, so the badge kept showing a stale
+    // count (e.g. still "1" after marking everything read on the
+    // Notifications page) for the rest of the session. Refetch on every
+    // navigation and poll so it stays in sync.
+    fetchUnread()
+    const interval = setInterval(fetchUnread, 60000)
+    return () => clearInterval(interval)
+  }, [location.pathname])
 
   const navItems = NAV_BY_ROLE[role] || NAV_BY_ROLE.tech_support
   const badge = ROLE_BADGE[role] || ROLE_BADGE.tech_support

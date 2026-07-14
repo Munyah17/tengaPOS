@@ -3,7 +3,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import ThemeToggle from '@/components/common/ThemeToggle'
 import { useThemeStore } from '@/stores/themeStore'
-import { useAuthStore, ROLE_COLORS, ROLE_LABELS } from '@/stores/authStore'
+import { useAuthStore, ROLE_COLORS, ROLE_LABELS, NAV_PERMISSIONS } from '@/stores/authStore'
 import { useFiscalStore } from '@/stores/fiscalStore'
 import { useTenantNotifications } from '@/hooks/useTenantNotifications'
 
@@ -28,7 +28,8 @@ export default function TopBar({ onMenuClick }) {
   const bellRef = useRef(null)
   const avatarRef = useRef(null)
 
-  const { notifications, markAllRead } = useTenantNotifications({ tenantId: tenant?.id, posMode })
+  const { notifications, markAllRead } = useTenantNotifications({ tenantId: tenant?.id, posMode, role })
+  const canSeeSettings = (NAV_PERMISSIONS[role] || NAV_PERMISSIONS.vendor).includes('settings')
 
   const isRestaurant = posMode === 'restaurant'
   const isReadOnly = role === 'tech_support'
@@ -218,20 +219,24 @@ export default function TopBar({ onMenuClick }) {
 
               {/* Links */}
               <div className="py-1">
-                <button
-                  onClick={() => { setAvatarOpen(false); navigate('/app/settings') }}
-                  className="flex w-full items-center gap-3 px-4 py-2.5 text-sm text-slate-700 transition-colors hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-800"
-                >
-                  <User className="h-4 w-4 text-slate-400" />
-                  Profile
-                </button>
-                <button
-                  onClick={() => { setAvatarOpen(false); navigate('/app/settings') }}
-                  className="flex w-full items-center gap-3 px-4 py-2.5 text-sm text-slate-700 transition-colors hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-800"
-                >
-                  <Settings className="h-4 w-4 text-slate-400" />
-                  Settings
-                </button>
+                {canSeeSettings && (
+                  <>
+                    <button
+                      onClick={() => { setAvatarOpen(false); navigate('/app/settings') }}
+                      className="flex w-full items-center gap-3 px-4 py-2.5 text-sm text-slate-700 transition-colors hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-800"
+                    >
+                      <User className="h-4 w-4 text-slate-400" />
+                      Profile
+                    </button>
+                    <button
+                      onClick={() => { setAvatarOpen(false); navigate('/app/settings') }}
+                      className="flex w-full items-center gap-3 px-4 py-2.5 text-sm text-slate-700 transition-colors hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-800"
+                    >
+                      <Settings className="h-4 w-4 text-slate-400" />
+                      Settings
+                    </button>
+                  </>
+                )}
               </div>
               <div className="border-t border-slate-100 py-1 dark:border-slate-800">
                 <button

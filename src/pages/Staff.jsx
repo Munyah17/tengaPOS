@@ -6,7 +6,7 @@ import Modal from '@/components/common/Modal'
 import ExportMenu from '@/components/common/ExportMenu'
 import { useThemeStore } from '@/stores/themeStore'
 import { useAuthStore } from '@/stores/authStore'
-import { fetchStaff, updateStaffStatus } from '@/lib/db'
+import { fetchStaff, updateStaffStatus, fetchBranches } from '@/lib/db'
 import { supabase } from '@/lib/supabase'
 import toast from 'react-hot-toast'
 
@@ -36,11 +36,13 @@ export default function Staff() {
   const { tenant } = useAuthStore()
   const isRestaurant = posMode === 'restaurant'
   const [staff, setStaff] = useState([])
+  const [branches, setBranches] = useState([])
   const [loading, setLoading] = useState(false)
   const [showAdd, setShowAdd] = useState(false)
-  const [form, setForm] = useState({ name: '', email: '', password: '', role: 'cashier' })
+  const [form, setForm] = useState({ name: '', email: '', password: '', role: 'cashier', branch_id: '' })
   const [showPassword, setShowPassword] = useState(false)
   const [creating, setCreating] = useState(false)
+  const canAddVendor = (tenant?.features?.max_vendors || 1) > 1
 
   const loadStaff = () => {
     if (!tenant?.id) return
@@ -52,6 +54,15 @@ export default function Staff() {
   }
 
   useEffect(() => { loadStaff() }, [tenant?.id])
+
+  useEffect(() => {
+    if (!tenant?.id) return
+    fetchBranches(tenant.id).then((rows) => {
+      setBranches(rows)
+      const main = rows.find((b) => b.is_main) || rows[0]
+      if (main) setForm((f) => ({ ...f, branch_id: f.branch_id || main.id }))
+    }).catch(() => {})
+  }, [tenant?.id])
 
   const toggleActive = async (member) => {
     const next = !member.is_active
@@ -82,7 +93,7 @@ export default function Staff() {
       }
       if (data?.error) throw new Error(data.error)
       toast.success(`${form.name} can now sign in as ${roleLabels[form.role]}`)
-      setForm({ name: '', email: '', password: '', role: 'cashier' })
+      setForm((f) => ({ name: '', email: '', password: '', role: 'cashier', branch_id: f.branch_id }))
       setShowAdd(false)
       loadStaff()
     } catch (err) {
@@ -227,11 +238,27 @@ export default function Staff() {
               onChange={(e) => setForm((f) => ({ ...f, role: e.target.value }))}
               className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
             >
-              {Object.entries(roleLabels).filter(([k]) => ['shop_manager', 'supervisor', 'cashier', 'shop_assistant'].includes(k)).map(([key, label]) => (
-                <option key={key} value={key}>{label}</option>
-              ))}
+              {Object.entries(roleLabels)
+                .filter(([k]) => ['shop_manager', 'supervisor', 'cashier', 'shop_assistant'].includes(k) || (k === 'vendor' && canAddVendor))
+                .map(([key, label]) => (
+                  <option key={key} value={key}>{key === 'vendor' ? 'Vendor (co-owner)' : label}</option>
+                ))}
             </select>
           </div>
+          {form.role !== 'vendor' && branches.length > 1 && (
+            <div>
+              <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">Branch</label>
+              <select
+                value={form.branch_id}
+                onChange={(e) => setForm((f) => ({ ...f, branch_id: e.target.value }))}
+                className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+              >
+                {branches.map((b) => (
+                  <option key={b.id} value={b.id}>{b.name}</option>
+                ))}
+              </select>
+            </div>
+          )}
           <div className="flex justify-end gap-2 pt-2">
             <Button variant="secondary" type="button" onClick={() => setShowAdd(false)}>Cancel</Button>
             <Button type="submit" disabled={creating}>

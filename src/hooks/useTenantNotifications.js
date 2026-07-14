@@ -21,18 +21,26 @@ function saveReadIds(ids) {
   localStorage.setItem(READ_KEY, JSON.stringify([...ids]))
 }
 
-export function useTenantNotifications({ tenantId, posMode, limit = 20, pollMs = 60000 } = {}) {
+// Platform-wide announcements (trial reminders, product updates, etc.) are
+// operator/management noise for front-of-house staff — cashiers and shop
+// assistants only need what affects the till: low stock and ready orders.
+const ANNOUNCEMENTS_HIDDEN_FOR = ['cashier', 'shop_assistant']
+
+export function useTenantNotifications({ tenantId, posMode, role, limit = 20, pollMs = 60000 } = {}) {
   const [notifications, setNotifications] = useState([])
 
   const load = useCallback(async () => {
     if (!tenantId) return
     const readIds = getReadIds()
+    const includeAnnouncements = !ANNOUNCEMENTS_HIDDEN_FOR.includes(role)
     const [{ data: products }, { data: readyOrders }, { data: announcements }] = await Promise.all([
       supabase.from('products').select('id, name, stock_qty, low_stock_threshold, updated_at').eq('tenant_id', tenantId).eq('is_active', true),
       posMode === 'restaurant'
         ? supabase.from('orders').select('id, order_no, updated_at').eq('tenant_id', tenantId).eq('status', 'ready').order('updated_at', { ascending: false }).limit(10)
         : Promise.resolve({ data: [] }),
-      supabase.from('announcements').select('id, title, body, created_at').eq('is_published', true).order('created_at', { ascending: false }).limit(5),
+      includeAnnouncements
+        ? supabase.from('announcements').select('id, title, body, created_at').eq('is_published', true).order('created_at', { ascending: false }).limit(5)
+        : Promise.resolve({ data: [] }),
     ])
 
     const lowStock = (products || [])
@@ -68,7 +76,7 @@ export function useTenantNotifications({ tenantId, posMode, limit = 20, pollMs =
       .map((n) => ({ ...n, unread: !readIds.has(n.id) }))
 
     setNotifications(all)
-  }, [tenantId, posMode, limit])
+  }, [tenantId, posMode, role, limit])
 
   useEffect(() => {
     load()

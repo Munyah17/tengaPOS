@@ -41,15 +41,51 @@ serve(async (req) => {
       return json({ error: 'Only the business owner or a shop manager can add staff' }, 403)
     }
 
-    const { name, email, password, role } = await req.json()
+    const { data: tenantRow } = await admin
+      .from('tenants')
+      .select('features')
+      .eq('id', callerRow.tenant_id)
+      .maybeSingle()
+    const features = tenantRow?.features || {}
+
+    const { name, email, password, role, branch_id } = await req.json()
     if (!name || !email || !password || !role) {
       return json({ error: 'Missing required fields: name, email, password, role' }, 400)
     }
-    if (!TENANT_ROLES.includes(role)) {
-      return json({ error: `Role must be one of ${TENANT_ROLES.join(', ')}` }, 400)
+    const allowedRoles = features.max_vendors > 1 ? [...TENANT_ROLES, 'vendor'] : TENANT_ROLES
+    if (!allowedRoles.includes(role)) {
+      return json({ error: `Role must be one of ${allowedRoles.join(', ')}` }, 400)
     }
     if (String(password).length < 8) {
       return json({ error: 'Password must be at least 8 characters' }, 400)
+    }
+
+    if (role === 'vendor') {
+      const { count } = await admin
+        .from('users')
+        .select('id', { count: 'exact', head: true })
+        .eq('tenant_id', callerRow.tenant_id)
+        .eq('role', 'vendor')
+      if ((count || 0) >= (features.max_vendors || 1)) {
+        return json({ error: `Your plan allows up to ${features.max_vendors || 1} vendor account(s)` }, 400)
+      }
+    } else if (features.max_users_per_branch != null) {
+      if (!branch_id) return json({ error: 'Select a branch for this staff member' }, 400)
+      const { data: branchRow } = await admin
+        .from('branches')
+        .select('id')
+        .eq('id', branch_id)
+        .eq('tenant_id', callerRow.tenant_id)
+        .maybeSingle()
+      if (!branchRow) return json({ error: 'Branch not found' }, 400)
+      const { count } = await admin
+        .from('users')
+        .select('id', { count: 'exact', head: true })
+        .eq('tenant_id', callerRow.tenant_id)
+        .eq('branch_id', branch_id)
+      if ((count || 0) >= features.max_users_per_branch) {
+        return json({ error: `Your plan allows up to ${features.max_users_per_branch} staff per branch` }, 400)
+      }
     }
 
     const { data: created, error: createErr } = await admin.auth.admin.createUser({
@@ -66,6 +102,7 @@ serve(async (req) => {
       name,
       email,
       role,
+      branch_id: role === 'vendor' ? null : (branch_id || null),
       is_active: true,
     })
     if (insertErr) {

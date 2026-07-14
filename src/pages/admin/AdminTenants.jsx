@@ -94,14 +94,14 @@ export const DEFAULT_FEATURES = {
     reports: 'basic', staff: true, tasks: true,
     kitchen: true, orders: true, dining_board: false,
     drive_through: false, fiscalisation: true,
-    branches: 1, max_users: 5, api_access: false,
+    branches: 3, max_vendors: 1, max_users_per_branch: 2, api_access: false,
   },
   pro_package: {
     pos: true, inventory: true, transactions: true,
     reports: 'advanced', staff: true, tasks: true,
     kitchen: true, orders: true, dining_board: true,
     drive_through: true, fiscalisation: true,
-    branches: 3, max_users: 10, api_access: false,
+    branches: 5, max_vendors: 2, max_users_per_branch: 4, api_access: false,
   },
   business: {
     pos: true, inventory: true, transactions: true,
@@ -251,12 +251,16 @@ export function TenantModal({ tenant, technicians, onClose, onSaved }) {
 
     if (newStatus) {
       updates.status = newStatus
-      if (newStatus === 'active' && isPending) {
-        updates.plan_start_date = now.toISOString()
-        updates.next_renewal_date = renewalDate.toISOString()
-        updates.approved_at = now.toISOString()
-        updates.approved_by = user?.id
-      }
+    }
+    // Assigning a plan ends the trial — whether that happens by approving a
+    // pending signup, or by picking a plan for a tenant already active on trial
+    // (isPending is false there, so the old check below never fired and the
+    // trial banner kept showing even after a real plan was assigned).
+    if ((newStatus === 'active' && isPending) || (onTrial && !isPending)) {
+      updates.plan_start_date = now.toISOString()
+      updates.next_renewal_date = renewalDate.toISOString()
+      updates.approved_at = now.toISOString()
+      updates.approved_by = user?.id
     }
 
     const { data: updated, error } = await supabase
@@ -417,7 +421,12 @@ export function TenantModal({ tenant, technicians, onClose, onSaved }) {
                 <div className="grid grid-cols-2 gap-3">
                   {[
                     { key: 'branches', label: 'Max Branches', hint: '-1 = unlimited' },
-                    { key: 'max_users', label: 'Max Users', hint: '-1 = unlimited' },
+                    features.max_vendors !== undefined
+                      ? { key: 'max_vendors', label: 'Max Vendor Accounts', hint: 'Owner-level accounts' }
+                      : { key: 'max_users', label: 'Max Users', hint: '-1 = unlimited' },
+                    ...(features.max_users_per_branch !== undefined
+                      ? [{ key: 'max_users_per_branch', label: 'Users per Branch', hint: 'Staff under each vendor/branch' }]
+                      : []),
                   ].map(({ key, label, hint }) => (
                     <div key={key} className="rounded-xl border border-white/10 p-3">
                       <label className="text-xs font-semibold text-slate-400">{label}</label>

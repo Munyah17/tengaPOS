@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react'
-import { Check, X, Save, Loader2, DollarSign, Megaphone } from 'lucide-react'
+import { Check, X, Save, Loader2, DollarSign, Megaphone, Image, Trash2 } from 'lucide-react'
 import { PLANS, DEFAULT_FEATURES } from '@/pages/admin/AdminTenants'
 import { getSetting, updateSetting, DEFAULT_PLAN_PRICING, DEFAULT_FISCAL_PRICING } from '@/lib/platformSettings'
 import { useAuthStore } from '@/stores/authStore'
 import { supabase } from '@/lib/supabase'
+import { uploadSiteAsset } from '@/lib/db'
 import toast from 'react-hot-toast'
 
 const FEATURE_LABELS = [
@@ -26,8 +27,24 @@ export default function SuperAdminPricing() {
   const [fiscalPricing, setFiscalPricing] = useState(DEFAULT_FISCAL_PRICING)
   const [banner, setBanner] = useState({ enabled: false, title: '', text: '', type: 'info', imageUrl: '', buttons: [] })
   const [saving, setSaving] = useState(false)
+  const [uploadingImage, setUploadingImage] = useState(false)
   const isSuperAdmin = role === 'super_admin'
   const canEditBanner = role === 'super_admin' || role === 'admin'
+
+  const handleImageUpload = async (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setUploadingImage(true)
+    try {
+      const url = await uploadSiteAsset(file)
+      setBanner((b) => ({ ...b, imageUrl: url }))
+    } catch (err) {
+      toast.error(err.message || 'Failed to upload image')
+    } finally {
+      setUploadingImage(false)
+      e.target.value = ''
+    }
+  }
 
   useEffect(() => {
     getSetting('plan_pricing', DEFAULT_PLAN_PRICING).then((v) => setPlanPricing({ ...DEFAULT_PLAN_PRICING, ...(v || {}) }))
@@ -146,13 +163,32 @@ export default function SuperAdminPricing() {
           className="mt-3 w-full resize-none rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 placeholder-slate-400 focus:border-indigo-500 focus:outline-none dark:border-white/10 dark:bg-white/5 dark:text-white"
         />
 
-        <input
-          value={banner.imageUrl || ''}
-          onChange={(e) => setBanner((b) => ({ ...b, imageUrl: e.target.value }))}
-          disabled={!canEditBanner}
-          placeholder="Background image URL (optional)"
-          className="mt-3 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 placeholder-slate-400 focus:border-indigo-500 focus:outline-none dark:border-white/10 dark:bg-white/5 dark:text-white"
-        />
+        <div className="mt-3">
+          <p className="mb-1.5 text-xs font-semibold text-slate-500">Background image (optional)</p>
+          {banner.imageUrl ? (
+            <div className="flex items-center gap-3">
+              <img src={banner.imageUrl} alt="" className="h-16 w-28 rounded-lg object-cover" />
+              {canEditBanner && (
+                <button
+                  type="button"
+                  onClick={() => setBanner((b) => ({ ...b, imageUrl: '' }))}
+                  className="flex items-center gap-1.5 rounded-xl border border-red-200 px-3 py-2 text-xs font-semibold text-red-600 hover:bg-red-50 dark:border-red-500/30 dark:text-red-400 dark:hover:bg-red-500/10"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                  Remove
+                </button>
+              )}
+            </div>
+          ) : (
+            canEditBanner && (
+              <label className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed border-slate-300 px-3 py-3 text-sm font-semibold text-slate-500 hover:border-indigo-400 hover:text-indigo-500 dark:border-white/15 dark:text-slate-400">
+                {uploadingImage ? <Loader2 className="h-4 w-4 animate-spin" /> : <Image className="h-4 w-4" />}
+                {uploadingImage ? 'Uploading…' : 'Upload image'}
+                <input type="file" accept="image/*" className="hidden" onChange={handleImageUpload} disabled={uploadingImage} />
+              </label>
+            )
+          )}
+        </div>
 
         <p className="mb-1.5 mt-3 text-xs font-semibold text-slate-500">Buttons (optional, up to 2)</p>
         <div className="grid gap-3 sm:grid-cols-2">
@@ -255,9 +291,22 @@ export default function SuperAdminPricing() {
                   )
                 })}
                 <div className="pt-2 text-xs text-slate-500">
-                  Branches: <b>{features?.branches === -1 ? 'Unlimited' : features?.branches}</b> ·
-                  Users: <b>{features?.max_users === -1 ? 'Unlimited' : features?.max_users}</b> ·
-                  Reports: <b className="capitalize">{features?.reports}</b>
+                  {['business', 'enterprise'].includes(key) ? (
+                    <>Branches, users & reports are <b>negotiated on a need basis</b></>
+                  ) : features?.max_vendors !== undefined ? (
+                    <>
+                      Vendors: <b>{features.max_vendors}</b> ·
+                      Branches: <b>{features.branches}</b> ·
+                      Users/Branch: <b>{features.max_users_per_branch}</b> ·
+                      Reports: <b className="capitalize">{features?.reports}</b>
+                    </>
+                  ) : (
+                    <>
+                      Branches: <b>{features?.branches === -1 ? 'Unlimited' : features?.branches}</b> ·
+                      Users: <b>{features?.max_users === -1 ? 'Unlimited' : features?.max_users}</b> ·
+                      Reports: <b className="capitalize">{features?.reports}</b>
+                    </>
+                  )}
                 </div>
               </div>
             </div>

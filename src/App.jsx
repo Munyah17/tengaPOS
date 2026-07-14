@@ -3,7 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { Toaster } from 'react-hot-toast'
 import { useEffect } from 'react'
 import { useThemeStore } from '@/stores/themeStore'
-import { useAuthStore } from '@/stores/authStore'
+import { useAuthStore, NAV_PERMISSIONS } from '@/stores/authStore'
 
 import Landing from '@/pages/Landing'
 import Login from '@/pages/Login'
@@ -81,6 +81,24 @@ function ProtectedRoute({ children }) {
   return children
 }
 
+function AppIndexRedirect() {
+  const { role } = useAuthStore()
+  const allowed = NAV_PERMISSIONS[role] || NAV_PERMISSIONS.vendor
+  return <Navigate to={allowed[0] || 'dashboard'} replace />
+}
+
+// Sidebar links already hide pages a role can't use, but that's cosmetic —
+// this is the actual access control: a cashier typing /app/settings in the
+// URL bar must not reach it just because ProtectedRoute passed.
+function RequireNav({ navKey, children }) {
+  const { role } = useAuthStore()
+  const allowed = NAV_PERMISSIONS[role] || NAV_PERMISSIONS.vendor
+  if (!allowed.includes(navKey)) {
+    return <Navigate to={`/app/${allowed[0] || 'dashboard'}`} replace />
+  }
+  return children
+}
+
 function AdminRoute({ children }) {
   const { isAuthenticated, userType, role } = useAuthStore()
   if (!isAuthenticated) return <Navigate to="/login" replace />
@@ -128,24 +146,24 @@ export default function App() {
               </ProtectedRoute>
             }
           >
-            <Route index element={<Navigate to="dashboard" replace />} />
-            <Route path="dashboard" element={<Dashboard />} />
-            <Route path="pos" element={<POS />} />
-            <Route path="inventory" element={<Inventory />} />
-            <Route path="orders" element={<Orders />} />
-            <Route path="kitchen" element={<Kitchen />} />
-            <Route path="transactions" element={<Transactions />} />
-            <Route path="reports" element={<Reports />} />
-            <Route path="insights" element={<Insights />} />
+            <Route index element={<AppIndexRedirect />} />
+            <Route path="dashboard" element={<RequireNav navKey="dashboard"><Dashboard /></RequireNav>} />
+            <Route path="pos" element={<RequireNav navKey="pos"><POS /></RequireNav>} />
+            <Route path="inventory" element={<RequireNav navKey="inventory"><Inventory /></RequireNav>} />
+            <Route path="orders" element={<RequireNav navKey="orders"><Orders /></RequireNav>} />
+            <Route path="kitchen" element={<RequireNav navKey="kitchen"><Kitchen /></RequireNav>} />
+            <Route path="transactions" element={<RequireNav navKey="transactions"><Transactions /></RequireNav>} />
+            <Route path="reports" element={<RequireNav navKey="reports"><Reports /></RequireNav>} />
+            <Route path="insights" element={<RequireNav navKey="insights"><Insights /></RequireNav>} />
             <Route path="payment/return" element={<PaymentReturn />} />
-            <Route path="staff" element={<Staff />} />
-            <Route path="tasks" element={<Tasks />} />
-            <Route path="branches" element={<Branches />} />
-            <Route path="fiscalisation" element={<Fiscalisation />} />
-            <Route path="payments" element={<Payments />} />
-            <Route path="hr" element={<HR />} />
+            <Route path="staff" element={<RequireNav navKey="staff"><Staff /></RequireNav>} />
+            <Route path="tasks" element={<RequireNav navKey="tasks"><Tasks /></RequireNav>} />
+            <Route path="branches" element={<RequireNav navKey="branches"><Branches /></RequireNav>} />
+            <Route path="fiscalisation" element={<RequireNav navKey="fiscalisation"><Fiscalisation /></RequireNav>} />
+            <Route path="payments" element={<RequireNav navKey="payments"><Payments /></RequireNav>} />
+            <Route path="hr" element={<RequireNav navKey="hr"><HR /></RequireNav>} />
             <Route path="notifications" element={<Notifications />} />
-            <Route path="settings" element={<Settings />} />
+            <Route path="settings" element={<RequireNav navKey="settings"><Settings /></RequireNav>} />
           </Route>
 
           {/* Super Admin Portal */}
