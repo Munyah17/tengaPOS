@@ -32,11 +32,19 @@ export default defineConfig({
         navigateFallbackDenylist: [/^\/api\//],
         runtimeCaching: [
           {
+            // GET only — the Cache Storage API can't store a POST/PATCH/DELETE
+            // response at all. Without this, Workbox tried to cache.put() the
+            // response to every auth token exchange and mutation (which are
+            // POST), threw, and the rejected promise surfaced to the app as a
+            // bare "Failed to fetch" on login and on every write.
             urlPattern: /^https:\/\/.*supabase\.co\/.*/i,
+            method: 'GET',
             handler: 'NetworkFirst',
             options: {
               cacheName: 'supabase-api',
               expiration: { maxEntries: 100, maxAgeSeconds: 60 * 60 },
+              networkTimeoutSeconds: 10,
+              cacheableResponse: { statuses: [0, 200] },
             },
           },
         ],
