@@ -110,22 +110,61 @@ export const useAuthStore = create(
 
       signIn: async (email, password) => {
         set({ isLoading: true })
-        const { data, error } = await supabase.auth.signInWithPassword({ email, password })
-        if (error) { set({ isLoading: false }); throw error }
-        const profileData = await loadProfile(data.user.id)
-        set({
-          user: data.user,
-          session: data.session,
-          profile: profileData,
-          tenant: profileData.tenants || null,
-          role: profileData.role,
-          branch: profileData.branch || null,
-          userType: profileData.userType,
-          tenantStatus: profileData.tenantStatus || null,
-          isAuthenticated: true,
-          isLoading: false,
-        })
-        return profileData.userType
+        
+        try {
+          const { data, error } = await supabase.auth.signInWithPassword({ email, password })
+          
+          if (error) {
+            set({ isLoading: false })
+            throw error
+          }
+          
+          const profileData = await loadProfile(data.user.id)
+          
+          set({
+            user: data.user,
+            session: data.session,
+            profile: profileData,
+            tenant: profileData.tenants || null,
+            role: profileData.role,
+            branch: profileData.branch || null,
+            userType: profileData.userType,
+            tenantStatus: profileData.tenantStatus || null,
+            isAuthenticated: true,
+            isLoading: false,
+          })
+          
+          return profileData.userType
+        } catch (err) {
+          // Fallback: Check if we have a cached session that matches
+          try {
+            const { data: { session } } = await supabase.auth.getSession()
+            
+            if (session?.user && session.user.email === email) {
+              const profileData = await loadProfile(session.user.id)
+              
+              set({
+                user: session.user,
+                session,
+                profile: profileData,
+                tenant: profileData.tenants || null,
+                role: profileData.role,
+                branch: profileData.branch || null,
+                userType: profileData.userType,
+                tenantStatus: profileData.tenantStatus || null,
+                isAuthenticated: true,
+                isLoading: false,
+              })
+              
+              return profileData.userType
+            }
+          } catch (cacheErr) {
+            // Cache fallback failed, continue to throw original error
+          }
+          
+          set({ isLoading: false })
+          throw err
+        }
       },
 
       signUp: async (email, password, name, businessName, businessType) => {
