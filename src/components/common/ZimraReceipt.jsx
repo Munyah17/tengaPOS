@@ -72,6 +72,9 @@ export default function ZimraReceipt({ receipt, onClose }) {
       </div>
     `).join('')
 
+    // Fiscalisation is an optional add-on — if the tenant hasn't activated it,
+    // the receipt shouldn't mention ZIMRA at all rather than flag itself as
+    // "not yet fiscalised" to every customer.
     const fiscalHtml = isFiscalised ? `
       <div class="center">
         <div class="fiscal-badge">ZIMRA FISCAL RECEIPT</div>
@@ -82,12 +85,7 @@ export default function ZimraReceipt({ receipt, onClose }) {
           : `<div class="qr-placeholder">QR pending<br/>FDMS sync</div>`}
         <div class="tiny">Verify: fdms.zimra.co.zw</div>
       </div>
-    ` : `
-      <div class="not-fiscal">
-        <div class="tiny bold">NOT YET FISCALISED</div>
-        <div class="tiny">Configure ZIMRA in Settings</div>
-      </div>
-    `
+    ` : ''
 
     const html = `
       <!DOCTYPE html>
@@ -115,6 +113,7 @@ export default function ZimraReceipt({ receipt, onClose }) {
           .not-fiscal { border: 2px dashed #999; padding: 6px; text-align: center; }
           .qr-placeholder { border: 2px dashed #000; width: 80px; height: 80px; margin: 8px auto; display: flex; align-items: center; justify-content: center; font-size: 8px; text-align: center; }
           .qr-url-box { border: 1px solid #000; padding: 3px; margin: 6px 0; text-align: center; }
+          @page { size: 80mm auto; margin: 0; }
           @media print { body { width: 72mm; } }
         </style>
       </head>
@@ -127,7 +126,7 @@ export default function ZimraReceipt({ receipt, onClose }) {
           <div>VAT Reg: ${esc(vatNo)}</div>
         </div>
         <div class="sep"></div>
-        <div class="center bold">FISCAL TAX INVOICE</div>
+        <div class="center bold">${isFiscalised ? 'FISCAL TAX INVOICE' : 'RECEIPT'}</div>
         ${row('Receipt No:', receipt.receiptNumber)}
         ${row('Date:', dateStr)}
         ${row('Time:', timeStr)}
@@ -136,6 +135,7 @@ export default function ZimraReceipt({ receipt, onClose }) {
         <div class="bold upper">Items</div>
         ${itemsHtml}
         <div class="sep"></div>
+        ${receipt.discountAmount > 0 ? row('Discount', `-${fmt(receipt.discountAmount)}`) : ''}
         ${vatEnabled ? row('Net (ex VAT)', fmt(receipt.subtotal)) : ''}
         ${vatEnabled ? row(`VAT ${vatRate}% (included)`, fmt(receipt.tax)) : ''}
         <div class="sep-solid bold">${row('TOTAL', fmt(receipt.total))}</div>
@@ -149,8 +149,7 @@ export default function ZimraReceipt({ receipt, onClose }) {
         <div class="row-4"><span>Code</span><span>Rate</span><span>Taxable</span><span>VAT</span></div>
         <div class="row-4"><span>D</span><span>${esc(vatRate)}%</span><span>${esc(fmt(taxableAmt))}</span><span>${esc(fmt(vatAmt))}</span></div>
         ` : ''}
-        <div class="sep"></div>
-        ${fiscalHtml}
+        ${isFiscalised ? `<div class="sep"></div>${fiscalHtml}` : ''}
         <div class="sep"></div>
         <div class="center tiny">
           <div>Thank you for your business!</div>
@@ -215,7 +214,7 @@ export default function ZimraReceipt({ receipt, onClose }) {
             <div className="my-2 border-t border-dashed border-black" />
 
             {/* Receipt info */}
-            <div className="text-center font-bold">FISCAL TAX INVOICE</div>
+            <div className="text-center font-bold">{isFiscalised ? 'FISCAL TAX INVOICE' : 'RECEIPT'}</div>
             <div className="mt-1 flex justify-between">
               <span>Receipt No:</span>
               <span>{receipt.receiptNumber}</span>
@@ -251,6 +250,12 @@ export default function ZimraReceipt({ receipt, onClose }) {
             <div className="my-2 border-t border-dashed border-black" />
 
             {/* Totals */}
+            {receipt.discountAmount > 0 && (
+              <div className="flex justify-between">
+                <span>Discount</span>
+                <span>-{fmt(receipt.discountAmount)}</span>
+              </div>
+            )}
             {vatEnabled && (
               <>
                 <div className="flex justify-between">
@@ -299,34 +304,31 @@ export default function ZimraReceipt({ receipt, onClose }) {
               </>
             )}
 
-            <div className="my-2 border-t border-dashed border-black" />
-
-            {/* ZIMRA fiscal section */}
-            {isFiscalised ? (
-              <div className="text-center">
-                <div className="border-2 border-black p-1 font-bold uppercase">
-                  ZIMRA Fiscal Receipt
+            {/* Fiscalisation is an optional add-on — if it isn't active for this
+                tenant, the receipt shouldn't mention ZIMRA at all. */}
+            {isFiscalised && (
+              <>
+                <div className="my-2 border-t border-dashed border-black" />
+                <div className="text-center">
+                  <div className="border-2 border-black p-1 font-bold uppercase">
+                    ZIMRA Fiscal Receipt
+                  </div>
+                  <div className="mt-1 text-[9px]">Device ID: {deviceID}</div>
+                  <div className="text-[9px]">Receipt Global No: {receiptGlobalNo}</div>
+                  {fdmsQrUrl ? (
+                    /* Real FDMS verification URL — print as scannable QR via thermal printer driver */
+                    <div className="mx-auto my-2 border border-black p-1">
+                      <div className="text-[8px] font-bold">SCAN TO VERIFY</div>
+                      <div className="mt-0.5 break-all text-[7px] leading-tight">{fdmsQrUrl}</div>
+                    </div>
+                  ) : (
+                    <div className="mx-auto my-2 flex h-20 w-20 items-center justify-center border-2 border-dashed border-black text-[8px] leading-tight text-slate-400">
+                      QR pending<br />FDMS sync
+                    </div>
+                  )}
+                  <div className="text-[9px]">Verify: fdms.zimra.co.zw</div>
                 </div>
-                <div className="mt-1 text-[9px]">Device ID: {deviceID}</div>
-                <div className="text-[9px]">Receipt Global No: {receiptGlobalNo}</div>
-                {fdmsQrUrl ? (
-                  /* Real FDMS verification URL — print as scannable QR via thermal printer driver */
-                  <div className="mx-auto my-2 border border-black p-1">
-                    <div className="text-[8px] font-bold">SCAN TO VERIFY</div>
-                    <div className="mt-0.5 break-all text-[7px] leading-tight">{fdmsQrUrl}</div>
-                  </div>
-                ) : (
-                  <div className="mx-auto my-2 flex h-20 w-20 items-center justify-center border-2 border-dashed border-black text-[8px] leading-tight text-slate-400">
-                    QR pending<br />FDMS sync
-                  </div>
-                )}
-                <div className="text-[9px]">Verify: fdms.zimra.co.zw</div>
-              </div>
-            ) : (
-              <div className="border border-dashed border-amber-500 p-2 text-center">
-                <div className="text-[9px] font-bold text-amber-700">NOT YET FISCALISED</div>
-                <div className="text-[9px] text-amber-600">Configure ZIMRA in Settings</div>
-              </div>
+              </>
             )}
 
             <div className="my-2 border-t border-dashed border-black" />

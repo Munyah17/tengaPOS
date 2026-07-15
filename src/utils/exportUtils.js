@@ -61,7 +61,7 @@ export function parseCSV(file) {
 }
 
 export function generateTemplate() {
-  // Mass-inventory upload template (downloadable CSV). price is VAT-INCLUSIVE.
+  // Mass-inventory upload template. price is VAT-INCLUSIVE.
   // landing_price = what the product cost you (feeds margins & AI insights).
   const template = [
     {
@@ -75,5 +75,5 @@ export function generateTemplate() {
       low_stock_threshold: '', brand: '', description: '',
     },
   ]
-  exportToCSV(template, 'tengaPOS_inventory_template')
+  exportToExcel(template, 'tengaPOS_inventory_template')
 }

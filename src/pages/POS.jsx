@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import {
   Search, Barcode, Plus, Minus, Trash2, ShoppingCart,
   CreditCard, Banknote, Smartphone, Receipt, X, Car, Store, Package as PackageIcon,
-  RefreshCw, ExternalLink, Camera,
+  RefreshCw, ExternalLink, Camera, Percent,
 } from 'lucide-react'
 import Button from '@/components/common/Button'
 import ZimraReceipt from '@/components/common/ZimraReceipt'
@@ -254,12 +254,14 @@ export default function POS() {
       }
     }
 
+    const grossTotal = cart.items.reduce((s, i) => s + i.price * i.quantity, 0)
     const receipt = {
       receiptNumber,
       items: cart.items,
       subtotal,
       tax,
       total,
+      discountAmount: Math.max(0, grossTotal - total),
       paymentMethod: cart.paymentMethod,
       date: new Date().toISOString(),
       cashier: useAuthStore.getState().profile?.name || 'Cashier',
@@ -589,7 +591,37 @@ export default function POS() {
 
         {/* Totals + Checkout */}
         <div className="border-t border-slate-200 p-4 dark:border-slate-800">
+          <div className="mb-3 flex items-center gap-2">
+            <Percent className="h-4 w-4 flex-shrink-0 text-slate-400" />
+            <span className="text-sm text-slate-500">Discount</span>
+            <input
+              type="number"
+              min="0"
+              max="100"
+              value={cart.discount || ''}
+              onChange={(e) => cart.setDiscount(Math.min(100, Math.max(0, Number(e.target.value) || 0)))}
+              placeholder="0"
+              className="w-16 rounded-lg border border-slate-200 bg-white px-2 py-1 text-right text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+            />
+            <span className="text-sm text-slate-500">%</span>
+            {cart.discount > 0 && (
+              <button
+                onClick={() => cart.setDiscount(0)}
+                className="ml-auto text-xs font-semibold text-red-500 hover:underline"
+              >
+                Clear
+              </button>
+            )}
+          </div>
           <div className="space-y-2">
+            {cart.discount > 0 && (
+              <div className="flex justify-between text-sm">
+                <span className="text-slate-500">Discount ({cart.discount}%)</span>
+                <span className="font-medium text-red-500">
+                  -{fmt(cart.items.reduce((s, i) => s + i.price * i.quantity * (1 - (i.itemDiscount || 0) / 100), 0) - cart.getTotal())}
+                </span>
+              </div>
+            )}
             {cart.vatEnabled ? (
               <>
                 <div className="flex justify-between text-sm">

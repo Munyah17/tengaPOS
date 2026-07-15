@@ -135,6 +135,12 @@ export async function saveCheckout({ tenantId, branchId, userId, cartItems, paym
     }
   }
 
+  // Discount actually applied (item-level + cart-level combined), derived by
+  // comparing the pre-discount gross to the post-discount total the cart
+  // already computed — no need to re-derive the cart-level percent here.
+  const grossTotal = cartItems.reduce((sum, item) => sum + item.price * item.quantity, 0)
+  const discountAmount = Math.max(0, grossTotal - total)
+
   // 1. Create order
   const { data: order, error: orderError } = await supabase
     .from('orders')
@@ -148,6 +154,7 @@ export async function saveCheckout({ tenantId, branchId, userId, cartItems, paym
       pos_mode: posMode || 'retail',
       subtotal,
       tax_amount: tax,
+      discount_amount: discountAmount,
       total,
     })
     .select()
@@ -162,7 +169,8 @@ export async function saveCheckout({ tenantId, branchId, userId, cartItems, paym
     sku: item.sku || null,
     qty: item.quantity,
     unit_price: item.price,
-    total: item.price * item.quantity,
+    discount: item.itemDiscount || 0,
+    total: item.price * item.quantity * (1 - (item.itemDiscount || 0) / 100),
   }))
   const { error: itemsError } = await supabase.from('order_items').insert(items)
   if (itemsError) throw itemsError

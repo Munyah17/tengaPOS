@@ -3,7 +3,7 @@ import {
   Building2, Search, Calendar, CheckCircle, Clock, XCircle,
   Smartphone, Star, Zap, Briefcase, Crown,
   ToggleLeft, ToggleRight, Palette, HardDrive, Users, ChevronRight,
-  Save, AlertCircle,
+  Save, AlertCircle, Trash2, ShieldAlert,
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/stores/authStore'
@@ -132,6 +132,7 @@ const STATUS_BADGE = {
   pending:   { bg: 'bg-amber-500/20', text: 'text-amber-400',  label: 'Pending',   icon: Clock },
   active:    { bg: 'bg-green-500/20', text: 'text-green-400',  label: 'Active',    icon: CheckCircle },
   suspended: { bg: 'bg-red-500/20',   text: 'text-red-400',    label: 'Suspended', icon: XCircle },
+  deleted:   { bg: 'bg-slate-500/20', text: 'text-slate-400',  label: 'Deleted',   icon: Trash2 },
 }
 
 const BOOL_FEATURES = [
@@ -180,9 +181,13 @@ function Toggle({ value, onChange, disabled }) {
 const TABS = ['Plan', 'Features', 'Branding', 'Backups', 'Team']
 
 export function TenantModal({ tenant, technicians, onClose, onSaved }) {
-  const { user } = useAuthStore()
+  const { user, role } = useAuthStore()
+  const isSuperAdminUser = role === 'super_admin'
   const [tab, setTab] = useState('Plan')
   const [saving, setSaving] = useState(false)
+  const [dangerAction, setDangerAction] = useState(null) // 'terminate' | 'delete' | null
+  const [dangerInput, setDangerInput] = useState('')
+  const [dangerBusy, setDangerBusy] = useState(false)
 
   const isPending = tenant.status === 'pending'
   const isHighTier = ['business', 'enterprise'].includes(tenant.plan_type)
@@ -292,6 +297,54 @@ export function TenantModal({ tenant, technicians, onClose, onSaved }) {
       onSaved()
     }
     setSaving(false)
+  }
+
+  const terminateTenant = async () => {
+    if (!dangerInput.trim()) { toast.error('A reason is required'); return }
+    setDangerBusy(true)
+    const { error } = await supabase.from('tenants').update({
+      status: 'deleted',
+      terminated_at: new Date().toISOString(),
+      termination_reason: dangerInput.trim(),
+    }).eq('id', tenant.id)
+    if (error) {
+      toast.error(error.message)
+      setDangerBusy(false)
+      return
+    }
+    await supabase.from('audit_logs').insert({
+      actor_id: user?.id,
+      actor_email: user?.email,
+      action: 'tenant_terminated',
+      target_type: 'tenant',
+      target_id: tenant.id,
+      details: { tenant_name: tenant.name, reason: dangerInput.trim() },
+    })
+    toast.success(`${tenant.name} terminated`)
+    setDangerBusy(false)
+    onSaved()
+  }
+
+  const deleteTenantPermanently = async () => {
+    if (dangerInput.trim() !== tenant.name) { toast.error('Type the exact business name to confirm'); return }
+    setDangerBusy(true)
+    await supabase.from('audit_logs').insert({
+      actor_id: user?.id,
+      actor_email: user?.email,
+      action: 'tenant_deleted_permanently',
+      target_type: 'tenant',
+      target_id: tenant.id,
+      details: { tenant_name: tenant.name },
+    })
+    const { error } = await supabase.from('tenants').delete().eq('id', tenant.id)
+    if (error) {
+      toast.error(error.message)
+      setDangerBusy(false)
+      return
+    }
+    toast.success(`${tenant.name} permanently deleted`)
+    setDangerBusy(false)
+    onSaved()
   }
 
   return (
@@ -651,8 +704,86 @@ export function TenantModal({ tenant, technicians, onClose, onSaved }) {
               Reinstate Access
             </button>
           )}
+
+          {/* Danger zone — Super Admin only */}
+          {isSuperAdminUser && tenant.status !== 'deleted' && (
+            <div className="mt-1 flex gap-2 border-t border-white/10 pt-3">
+              <button
+                onClick={() => { setDangerAction('terminate'); setDangerInput('') }}
+                className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-amber-600/10 py-2 text-xs font-semibold text-amber-400 hover:bg-amber-600/20"
+              >
+                <ShieldAlert className="h-3.5 w-3.5" />
+                Terminate Tenant
+              </button>
+              <button
+                onClick={() => { setDangerAction('delete'); setDangerInput('') }}
+                className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-red-600/10 py-2 text-xs font-semibold text-red-400 hover:bg-red-600/20"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                Delete Permanently
+              </button>
+            </div>
+          )}
         </div>
       </div>
+
+      {/* Danger action confirmation */}
+      {dangerAction && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 px-4" onClick={() => !dangerBusy && setDangerAction(null)}>
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-sm rounded-2xl border border-white/10 bg-white p-5 shadow-2xl dark:bg-slate-900"
+          >
+            {dangerAction === 'terminate' ? (
+              <>
+                <h3 className="mb-1 font-bold text-slate-900 dark:text-white">Terminate {tenant.name}</h3>
+                <p className="mb-3 text-xs text-slate-500">
+                  Ends access and moves this tenant to the Deleted log. Data is kept, not erased. Requires a reason.
+                </p>
+                <textarea
+                  value={dangerInput}
+                  onChange={(e) => setDangerInput(e.target.value)}
+                  placeholder="Reason for termination…"
+                  rows={3}
+                  className="w-full resize-none rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 placeholder-slate-400 focus:border-amber-500 focus:outline-none dark:border-white/10 dark:bg-white/5 dark:text-white"
+                />
+              </>
+            ) : (
+              <>
+                <h3 className="mb-1 font-bold text-slate-900 dark:text-white">Permanently delete {tenant.name}</h3>
+                <p className="mb-3 text-xs text-red-400">
+                  This erases the tenant and every product, order, transaction, and staff account tied to it — it cannot be undone.
+                  Type <b>{tenant.name}</b> to confirm.
+                </p>
+                <input
+                  value={dangerInput}
+                  onChange={(e) => setDangerInput(e.target.value)}
+                  placeholder={tenant.name}
+                  className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 placeholder-slate-400 focus:border-red-500 focus:outline-none dark:border-white/10 dark:bg-white/5 dark:text-white"
+                />
+              </>
+            )}
+            <div className="mt-4 flex gap-2">
+              <button
+                onClick={() => setDangerAction(null)}
+                disabled={dangerBusy}
+                className="flex-1 rounded-xl border border-slate-200 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-60 dark:border-white/10 dark:text-slate-300 dark:hover:bg-white/5"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={dangerAction === 'terminate' ? terminateTenant : deleteTenantPermanently}
+                disabled={dangerBusy}
+                className={`flex-1 rounded-xl py-2 text-sm font-bold text-white disabled:opacity-60 ${
+                  dangerAction === 'terminate' ? 'bg-amber-600 hover:bg-amber-700' : 'bg-red-600 hover:bg-red-700'
+                }`}
+              >
+                {dangerBusy ? 'Working…' : dangerAction === 'terminate' ? 'Terminate' : 'Delete Permanently'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -665,7 +796,7 @@ export default function AdminTenants() {
   const [technicians, setTechnicians] = useState([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
-  const [tab, setTab] = useState('pending')
+  const [tab, setTab] = useState('all')
   const [selected, setSelected] = useState(null)
   const canManage = role === 'super_admin' || role === 'admin'
 
@@ -683,22 +814,27 @@ export default function AdminTenants() {
   useEffect(() => { load() }, [])
 
   const byTab = {
-    pending:   tenants.filter((t) => t.status === 'pending'),
+    all:       tenants.filter((t) => t.status !== 'deleted'),
     active:    tenants.filter((t) => t.status === 'active'),
+    pending:   tenants.filter((t) => t.status === 'pending'),
     suspended: tenants.filter((t) => t.status === 'suspended'),
-    all:       tenants,
+    deleted:   tenants.filter((t) => t.status === 'deleted'),
   }
-  const counts = { pending: byTab.pending.length, active: byTab.active.length, suspended: byTab.suspended.length, all: tenants.length }
+  const counts = {
+    all: byTab.all.length, active: byTab.active.length, pending: byTab.pending.length,
+    suspended: byTab.suspended.length, deleted: byTab.deleted.length,
+  }
 
   const filtered = (byTab[tab] || []).filter(
     (t) => t.name?.toLowerCase().includes(search.toLowerCase()) || t.slug?.toLowerCase().includes(search.toLowerCase()),
   )
 
   const tabs = [
-    { id: 'pending',   label: 'Pending',   urgent: true },
-    { id: 'active',    label: 'Active' },
-    { id: 'suspended', label: 'Suspended' },
     { id: 'all',       label: 'All' },
+    { id: 'active',    label: 'Active' },
+    { id: 'pending',   label: 'Pending',   urgent: true },
+    { id: 'suspended', label: 'Suspended' },
+    { id: 'deleted',   label: 'Deleted' },
   ]
 
   return (
@@ -746,6 +882,38 @@ export default function AdminTenants() {
         <div className="flex h-40 flex-col items-center justify-center gap-2 text-slate-500">
           <Building2 className="h-8 w-8 opacity-30" />
           <span className="text-sm">No {tab} tenants</span>
+        </div>
+      ) : tab === 'deleted' ? (
+        <div className="overflow-x-auto rounded-2xl border border-white/10">
+          <table className="w-full min-w-[900px] text-left text-sm">
+            <thead className="bg-slate-50 text-xs font-bold uppercase tracking-wide text-slate-500 dark:bg-white/5">
+              <tr>
+                <th className="px-4 py-3">Name</th>
+                <th className="px-4 py-3">Slug</th>
+                <th className="px-4 py-3">Registered</th>
+                <th className="px-4 py-3">Activated</th>
+                <th className="px-4 py-3">Suspended</th>
+                <th className="px-4 py-3">Terminated</th>
+                <th className="px-4 py-3">Reason</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100 dark:divide-white/5">
+              {filtered.map((tenant) => {
+                const fmt = (d) => d ? new Date(d).toLocaleDateString('en-ZW', { year: 'numeric', month: 'short', day: 'numeric' }) : '—'
+                return (
+                  <tr key={tenant.id} className="text-slate-700 dark:text-slate-300">
+                    <td className="px-4 py-3 font-semibold text-slate-900 dark:text-white">{tenant.name}</td>
+                    <td className="px-4 py-3 font-mono text-xs">{tenant.slug}</td>
+                    <td className="px-4 py-3">{fmt(tenant.created_at)}</td>
+                    <td className="px-4 py-3">{fmt(tenant.approved_at || tenant.plan_start_date)}</td>
+                    <td className="px-4 py-3">{fmt(tenant.suspended_at)}</td>
+                    <td className="px-4 py-3">{fmt(tenant.terminated_at)}</td>
+                    <td className="px-4 py-3 max-w-xs truncate" title={tenant.termination_reason || ''}>{tenant.termination_reason || '—'}</td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
         </div>
       ) : (
         <div className="overflow-hidden rounded-2xl border border-white/10">
