@@ -109,7 +109,7 @@ export default function Reports() {
         </div>
         <div className="relative flex gap-2">
           <button
-            onClick={load}
+            onClick={() => metricsQuery.refetch()}
             className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300"
           >
             <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
