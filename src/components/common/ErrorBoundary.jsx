@@ -9,11 +9,11 @@ import { RefreshCw, AlertTriangle } from 'lucide-react'
 export default class ErrorBoundary extends Component {
   constructor(props) {
     super(props)
-    this.state = { hasError: false }
+    this.state = { hasError: false, error: null }
   }
 
-  static getDerivedStateFromError() {
-    return { hasError: true }
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error }
   }
 
   componentDidCatch(error, info) {
@@ -33,6 +33,11 @@ export default class ErrorBoundary extends Component {
               Your data is safe. Reloading usually fixes this.
             </p>
           </div>
+          {this.state.error?.message && (
+            <p className="max-w-md break-words rounded-lg bg-slate-100 px-3 py-2 font-mono text-xs text-slate-500 dark:bg-slate-900 dark:text-slate-400">
+              {this.state.error.message}
+            </p>
+          )}
           <button
             onClick={() => window.location.reload()}
             className="flex items-center gap-2 rounded-xl bg-brand-600 px-5 py-2.5 text-sm font-bold text-white hover:bg-brand-700"
