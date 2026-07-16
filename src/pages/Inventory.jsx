@@ -16,6 +16,7 @@ import {
   fetchProducts, insertProduct, updateProduct, deleteProduct, uploadProductImage,
   fetchBranches, fetchProductBranches, assignProductBranch, unassignProductBranch,
 } from '@/lib/db'
+import { getOfflineProducts } from '@/lib/offlineSync'
 import toast from 'react-hot-toast'
 
 const BLANK = {
@@ -60,12 +61,37 @@ export default function Inventory() {
   // from scratch just because the other one changed something.
   const productsQuery = useQuery({
     queryKey: ['products', tenant?.id],
-    queryFn: () => fetchProducts(tenant.id),
+    queryFn: async () => {
+      try {
+        return await fetchProducts(tenant.id)
+      } catch {
+        // Same offline-cache fallback POS already uses — AppLayout keeps this
+        // cache warm in the background, so it's rarely more than a minute stale.
+        const cached = await getOfflineProducts(tenant.id)
+        if (cached.length > 0) {
+          toast('Offline — showing cached inventory', { icon: '📴' })
+          return cached
+        }
+        throw new Error('Failed to load products')
+      }
+    },
     enabled: !!tenant?.id,
     staleTime: 30000,
   })
   const products = productsQuery.data || []
   const loading = productsQuery.isLoading
+
+  // Paint instantly from the local cache (already kept warm by AppLayout's
+  // background sync) instead of a blank loading state, while the query above
+  // fetches a fresh copy in the background and replaces it when it lands.
+  useEffect(() => {
+    if (!tenant?.id) return
+    if (queryClient.getQueryData(['products', tenant.id])) return
+    getOfflineProducts(tenant.id).then((cached) => {
+      if (cached.length > 0) queryClient.setQueryData(['products', tenant.id], cached)
+    }).catch(() => {})
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tenant?.id])
 
   useEffect(() => {
     if (productsQuery.isError) toast.error('Failed to load products')
