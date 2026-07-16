@@ -442,9 +442,13 @@ export async function updateStaffUsername(userId, username) {
 // ─── Tasks ────────────────────────────────────────────────────────────────────
 
 export async function fetchTasks(tenantId) {
+  // Explicit aliases are required here — embedding `users` twice via two
+  // different FK hints with no alias makes PostgREST error on every single
+  // call ("table name ... specified more than once"), which was silently
+  // swallowed client-side and made every assigned task disappear.
   const { data, error } = await supabase
     .from('tasks')
-    .select('*, users!tasks_assigned_to_fkey(name, role), users!tasks_created_by_fkey(name)')
+    .select('*, assignee:users!tasks_assigned_to_fkey(name, role), assignor:users!tasks_created_by_fkey(name)')
     .eq('tenant_id', tenantId)
     .order('created_at', { ascending: false })
   if (error) throw error
@@ -464,7 +468,7 @@ export async function insertTask(tenantId, creatorId, task) {
       status: 'pending',
       due_date: task.dueDate || null,
     })
-    .select('*, users!tasks_assigned_to_fkey(name, role)')
+    .select('*, assignee:users!tasks_assigned_to_fkey(name, role)')
     .single()
   if (error) throw error
   return data
