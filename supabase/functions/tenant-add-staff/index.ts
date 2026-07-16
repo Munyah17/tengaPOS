@@ -48,9 +48,13 @@ serve(async (req) => {
       .maybeSingle()
     const features = tenantRow?.features || {}
 
-    const { name, email, password, role, branch_id } = await req.json()
+    const { name, email, password, role, branch_id, username } = await req.json()
     if (!name || !email || !password || !role) {
       return json({ error: 'Missing required fields: name, email, password, role' }, 400)
+    }
+    const cleanUsername = username ? String(username).trim().toLowerCase() : null
+    if (cleanUsername && !/^[a-z0-9._-]{3,30}$/.test(cleanUsername)) {
+      return json({ error: 'Username must be 3-30 characters: letters, numbers, dots, underscores, or hyphens only' }, 400)
     }
     const allowedRoles = features.max_vendors > 1 ? [...TENANT_ROLES, 'vendor'] : TENANT_ROLES
     if (!allowedRoles.includes(role)) {
@@ -103,11 +107,15 @@ serve(async (req) => {
       email,
       role,
       branch_id: role === 'vendor' ? null : (branch_id || null),
+      username: cleanUsername,
       is_active: true,
     })
     if (insertErr) {
       await admin.auth.admin.deleteUser(created.user.id)
-      return json({ error: insertErr.message }, 400)
+      const msg = insertErr.message?.includes('users_username_key') || insertErr.code === '23505'
+        ? 'That username is already taken'
+        : insertErr.message
+      return json({ error: msg }, 400)
     }
 
     return json({ ok: true, id: created.user.id })

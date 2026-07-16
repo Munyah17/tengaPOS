@@ -427,6 +427,14 @@ export async function updateStaffStatus(userId, isActive) {
   if (error) throw error
 }
 
+export async function updateStaffUsername(userId, username) {
+  const { error } = await supabase
+    .from('users')
+    .update({ username, updated_at: new Date().toISOString() })
+    .eq('id', userId)
+  if (error) throw error
+}
+
 // ─── Tasks ────────────────────────────────────────────────────────────────────
 
 export async function fetchTasks(tenantId) {

@@ -38,7 +38,7 @@ export default function Login() {
 
   const handleSubmit = async (e) => {
     e.preventDefault()
-    if (!email || !password) { toast.error('Please enter email and password'); return }
+    if (!email || !password) { toast.error('Please enter your email/username and password'); return }
     setLoading(true)
     try {
       const userType = await signIn(email, password)
@@ -129,13 +129,15 @@ export default function Login() {
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label className="mb-1.5 block text-sm font-medium text-slate-300">Email</label>
+              <label className="mb-1.5 block text-sm font-medium text-slate-300">Email or Username</label>
               <input
-                type="email"
+                type="text"
+                autoCapitalize="none"
+                autoCorrect="off"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white placeholder-slate-500 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
-                placeholder="you@example.com"
+                placeholder="you@example.com or username"
               />
             </div>
 

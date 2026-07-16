@@ -1,7 +1,9 @@
-import { useRef } from 'react'
-import { Printer, X, CheckCircle } from 'lucide-react'
+import { useRef, useState } from 'react'
+import { Printer, X, CheckCircle, Usb } from 'lucide-react'
 import { useFiscalStore } from '@/stores/fiscalStore'
 import { formatCurrency } from '@/utils/formatters'
+import { isPosPrinterSupported, printRawToPosPrinter } from '@/lib/posPrinter'
+import toast from 'react-hot-toast'
 
 // ZIMRA payment method mapping per FDMS spec v7.2
 const ZIMRA_PAYMENT_MAP = {
@@ -31,6 +33,7 @@ const PAYMENT_DISPLAY = {
 export default function ZimraReceipt({ receipt, onClose }) {
   const fdmsQrUrl = receipt.fdmsQrUrl || null
   const receiptRef = useRef(null)
+  const [posPrinting, setPosPrinting] = useState(false)
   const fiscal = useFiscalStore()
   const vatEnabled = receipt.vatEnabled !== false
   const vatRate = receipt.vatRate ?? 15.5
@@ -165,6 +168,71 @@ export default function ZimraReceipt({ receipt, onClose }) {
     printWindow.focus()
     printWindow.print()
     printWindow.close()
+  }
+
+  const handlePosPrint = async () => {
+    setPosPrinting(true)
+    try {
+      const lines = []
+      const dash = () => lines.push('-'.repeat(32))
+      const rowLine = (left, right) => {
+        const l = String(left ?? '')
+        const r = String(right ?? '')
+        const pad = Math.max(1, 32 - l.length - r.length)
+        lines.push(l + ' '.repeat(pad) + r)
+      }
+
+      lines.push({ text: storeName, bold: true, center: true })
+      lines.push({ text: storeAddress, center: true })
+      lines.push({ text: storeContacts, center: true })
+      lines.push({ text: `TIN: ${tin}`, center: true })
+      lines.push({ text: `VAT Reg: ${vatNo}`, center: true })
+      dash()
+      lines.push({ text: isFiscalised ? 'FISCAL TAX INVOICE' : 'RECEIPT', bold: true, center: true })
+      rowLine('Receipt No:', receipt.receiptNumber)
+      rowLine('Date:', dateStr)
+      rowLine('Time:', timeStr)
+      rowLine('Cashier:', receipt.cashier)
+      dash()
+      lines.push({ text: 'ITEMS', bold: true })
+      for (const item of receipt.items) {
+        lines.push({ text: item.name, bold: true })
+        rowLine(`  ${item.quantity} x ${fmt(item.price)}`, fmt(item.price * item.quantity))
+      }
+      dash()
+      if (receipt.discountAmount > 0) rowLine('Discount', `-${fmt(receipt.discountAmount)}`)
+      if (vatEnabled) {
+        rowLine('Net (ex VAT)', fmt(receipt.subtotal))
+        rowLine(`VAT ${vatRate}% (included)`, fmt(receipt.tax))
+      }
+      rowLine('TOTAL', fmt(receipt.total))
+      dash()
+      lines.push({ text: 'PAYMENT', bold: true })
+      rowLine(PAYMENT_DISPLAY[receipt.paymentMethod] || receipt.paymentMethod, fmt(receipt.total))
+      lines.push(`Type: ${zimraPaymentType}`)
+      if (vatEnabled) {
+        dash()
+        lines.push({ text: 'TAX BREAKDOWN', bold: true })
+        rowLine(`Code D  ${vatRate}%`, `${fmt(taxableAmt)} / ${fmt(vatAmt)}`)
+      }
+      if (isFiscalised) {
+        dash()
+        lines.push({ text: 'ZIMRA FISCAL RECEIPT', bold: true, center: true })
+        lines.push({ text: `Device ID: ${deviceID}`, center: true })
+        lines.push({ text: `Receipt Global No: ${receiptGlobalNo}`, center: true })
+        lines.push({ text: 'Verify: fdms.zimra.co.zw', center: true })
+      }
+      dash()
+      lines.push({ text: 'Thank you for your business!', center: true })
+      lines.push({ text: 'Powered by tengaPOS', center: true })
+
+      await printRawToPosPrinter(lines)
+      toast.success('Sent to POS printer')
+    } catch (err) {
+      toast.error(err.message || 'Failed to print to POS printer')
+    } finally {
+      setPosPrinting(false)
+    }
   }
 
   return (
@@ -356,6 +424,16 @@ export default function ZimraReceipt({ receipt, onClose }) {
             <Printer className="h-4 w-4" />
             Print Receipt
           </button>
+          {isPosPrinterSupported() && (
+            <button
+              onClick={handlePosPrint}
+              disabled={posPrinting}
+              className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-brand-600 py-2.5 text-sm font-semibold text-brand-600 hover:bg-brand-50 disabled:opacity-60 dark:text-brand-400 dark:hover:bg-slate-800"
+            >
+              <Usb className="h-4 w-4" />
+              {posPrinting ? 'Printing…' : 'POS Printer'}
+            </button>
+          )}
         </div>
       </div>
     </div>

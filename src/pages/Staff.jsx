@@ -1,12 +1,12 @@
 import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
-import { Plus, RefreshCw, ToggleLeft, ToggleRight, Eye, EyeOff, X, Loader2 } from 'lucide-react'
+import { Plus, RefreshCw, ToggleLeft, ToggleRight, Eye, EyeOff, X, Loader2, Pencil } from 'lucide-react'
 import Button from '@/components/common/Button'
 import Modal from '@/components/common/Modal'
 import ExportMenu from '@/components/common/ExportMenu'
 import { useThemeStore } from '@/stores/themeStore'
 import { useAuthStore } from '@/stores/authStore'
-import { fetchStaff, updateStaffStatus, fetchBranches } from '@/lib/db'
+import { fetchStaff, updateStaffStatus, fetchBranches, updateStaffUsername } from '@/lib/db'
 import { supabase } from '@/lib/supabase'
 import toast from 'react-hot-toast'
 
@@ -39,9 +39,11 @@ export default function Staff() {
   const [branches, setBranches] = useState([])
   const [loading, setLoading] = useState(false)
   const [showAdd, setShowAdd] = useState(false)
-  const [form, setForm] = useState({ name: '', email: '', password: '', role: 'cashier', branch_id: '' })
+  const [form, setForm] = useState({ name: '', email: '', password: '', role: 'cashier', branch_id: '', username: '' })
   const [showPassword, setShowPassword] = useState(false)
   const [creating, setCreating] = useState(false)
+  const [usernameEdit, setUsernameEdit] = useState(null) // { id, name, username } while editing
+  const [savingUsername, setSavingUsername] = useState(false)
   const canAddVendor = (tenant?.features?.max_vendors || 1) > 1
 
   const loadStaff = () => {
@@ -93,13 +95,29 @@ export default function Staff() {
       }
       if (data?.error) throw new Error(data.error)
       toast.success(`${form.name} can now sign in as ${roleLabels[form.role]}`)
-      setForm((f) => ({ name: '', email: '', password: '', role: 'cashier', branch_id: f.branch_id }))
+      setForm((f) => ({ name: '', email: '', password: '', role: 'cashier', branch_id: f.branch_id, username: '' }))
       setShowAdd(false)
       loadStaff()
     } catch (err) {
       toast.error(err.message || 'Failed to add staff member')
     } finally {
       setCreating(false)
+    }
+  }
+
+  const handleSaveUsername = async (e) => {
+    e.preventDefault()
+    setSavingUsername(true)
+    try {
+      const clean = usernameEdit.username.trim().toLowerCase()
+      await updateStaffUsername(usernameEdit.id, clean || null)
+      setStaff((prev) => prev.map((s) => s.id === usernameEdit.id ? { ...s, username: clean || null } : s))
+      toast.success(clean ? `Username set to "${clean}"` : 'Username removed')
+      setUsernameEdit(null)
+    } catch (err) {
+      toast.error(err.message?.includes('duplicate') || err.code === '23505' ? 'That username is already taken' : (err.message || 'Failed to save username'))
+    } finally {
+      setSavingUsername(false)
     }
   }
 
@@ -131,14 +149,14 @@ export default function Staff() {
             <table className="w-full">
               <thead>
                 <tr className="border-b border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-900">
-                  {['Name', 'Email', 'Role', 'Status', 'Actions'].map(h => (
+                  {['Name', 'Email', 'Username', 'Role', 'Status', 'Actions'].map(h => (
                     <th key={h} className="px-4 py-3 text-left text-xs font-semibold uppercase text-slate-500">{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
                 {staff.length === 0 ? (
-                  <tr><td colSpan={5} className="py-12 text-center text-sm text-slate-400">No staff yet — add your first team member.</td></tr>
+                  <tr><td colSpan={6} className="py-12 text-center text-sm text-slate-400">No staff yet — add your first team member.</td></tr>
                 ) : staff.map(member => (
                   <motion.tr
                     key={member.id}
@@ -155,6 +173,7 @@ export default function Staff() {
                       </div>
                     </td>
                     <td className="px-4 py-3 text-sm text-slate-600 dark:text-slate-400">{member.email}</td>
+                    <td className="px-4 py-3 text-sm text-slate-600 dark:text-slate-400">{member.username || '—'}</td>
                     <td className="px-4 py-3">
                       <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${roleColors[member.role] || roleColors.cashier}`}>
                         {roleLabels[member.role] || member.role}
@@ -166,17 +185,26 @@ export default function Staff() {
                       </span>
                     </td>
                     <td className="px-4 py-3">
-                      {member.role !== 'vendor' && (
+                      <div className="flex items-center gap-1">
                         <button
-                          onClick={() => toggleActive(member)}
+                          onClick={() => setUsernameEdit({ id: member.id, name: member.name, username: member.username || '' })}
                           className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800"
-                          title={member.is_active ? 'Deactivate' : 'Activate'}
+                          title="Set username"
                         >
-                          {member.is_active
-                            ? <ToggleRight className="h-5 w-5 text-green-500" />
-                            : <ToggleLeft className="h-5 w-5" />}
+                          <Pencil className="h-4 w-4" />
                         </button>
-                      )}
+                        {member.role !== 'vendor' && (
+                          <button
+                            onClick={() => toggleActive(member)}
+                            className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800"
+                            title={member.is_active ? 'Deactivate' : 'Activate'}
+                          >
+                            {member.is_active
+                              ? <ToggleRight className="h-5 w-5 text-green-500" />
+                              : <ToggleLeft className="h-5 w-5" />}
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </motion.tr>
                 ))}
@@ -212,6 +240,16 @@ export default function Staff() {
               className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
               required
               placeholder="staff@example.com"
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">Username (optional)</label>
+            <input
+              type="text"
+              value={form.username}
+              onChange={(e) => setForm((f) => ({ ...f, username: e.target.value }))}
+              className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+              placeholder="e.g. rudo.c — lets them sign in without typing an email"
             />
           </div>
           <div>
@@ -267,6 +305,34 @@ export default function Staff() {
             </Button>
           </div>
         </form>
+      </Modal>
+
+      {/* Set/change username — lets staff sign in without typing an email */}
+      <Modal isOpen={!!usernameEdit} onClose={() => setUsernameEdit(null)} title={`Username for ${usernameEdit?.name || ''}`}>
+        {usernameEdit && (
+          <form onSubmit={handleSaveUsername} className="space-y-4">
+            <p className="text-sm text-slate-500">
+              Optional. Lets this person sign in with a username instead of their email — either one works. Leave blank to remove it.
+            </p>
+            <div>
+              <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">Username</label>
+              <input
+                type="text"
+                value={usernameEdit.username}
+                onChange={(e) => setUsernameEdit((u) => ({ ...u, username: e.target.value }))}
+                className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                placeholder="e.g. rudo.c"
+              />
+            </div>
+            <div className="flex justify-end gap-2 pt-2">
+              <Button variant="secondary" type="button" onClick={() => setUsernameEdit(null)}>Cancel</Button>
+              <Button type="submit" disabled={savingUsername}>
+                {savingUsername && <Loader2 className="h-4 w-4 animate-spin" />}
+                {savingUsername ? 'Saving…' : 'Save'}
+              </Button>
+            </div>
+          </form>
+        )}
       </Modal>
     </div>
   )

@@ -127,10 +127,29 @@ export const useAuthStore = create(
         }
       },
 
-      signIn: async (email, password) => {
+      // Accepts either an email or a username — Supabase Auth itself only
+      // ever signs in by email, so a non-email-shaped identifier is
+      // resolved to its account's real email first via a DB lookup.
+      signIn: async (identifier, password) => {
         set({ isLoading: true })
-        
+
         try {
+          let email = identifier
+          if (!identifier.includes('@')) {
+            const { data: resolvedEmail, error: resolveErr } = await withTimeout(
+              supabase.rpc('resolve_login_email', { p_identifier: identifier }),
+              15000,
+              'Slow or no connection — check your network and try again',
+            )
+            if (resolveErr || !resolvedEmail) {
+              set({ isLoading: false })
+              // Same generic message a wrong password gets — never reveal
+              // whether it was the username or the password that was wrong.
+              throw new Error('Invalid email/username or password')
+            }
+            email = resolvedEmail
+          }
+
           const { data, error } = await withTimeout(
             supabase.auth.signInWithPassword({ email, password }),
             15000,
@@ -175,8 +194,12 @@ export const useAuthStore = create(
           // time — use that instead of re-fetching (which needs the network
           // that just failed). This only re-uses an existing valid session;
           // it never accepts a password without checking it when online.
+          // The username->email resolution above needs the network too, so
+          // if we're offline it never ran — match the cached profile by
+          // either identifier, not just the (possibly still-unresolved) email.
           const cached = get()
-          if (cached.profile?.email === email && cached.profile?.is_locked) {
+          const matchesCachedIdentity = (p) => p?.email === identifier || (p?.username && p.username === identifier)
+          if (matchesCachedIdentity(cached.profile) && cached.profile?.is_locked) {
             // Must escape the inner try/catch below undiluted — it exists
             // to swallow network errors and fall through to the original
             // message, but a lock is a real, user-facing reason to stop.
@@ -186,7 +209,7 @@ export const useAuthStore = create(
 
           try {
             const { data: { session } } = await supabase.auth.getSession()
-            if (session?.user && session.user.email === email && cached.profile?.email === email) {
+            if (session?.user && matchesCachedIdentity(cached.profile) && cached.profile?.email === session.user.email) {
               set({
                 user: session.user,
                 session,
@@ -312,6 +335,13 @@ export const useAuthStore = create(
 
       setAuth: ({ user, session, profile, tenant, role, branch }) =>
         set({ user, session, profile, tenant, role, branch, isAuthenticated: !!user, isLoading: false }),
+
+      // Merges a partial tenant row (e.g. from a realtime UPDATE payload) into
+      // the current tenant in place — so plan approvals, trial extensions, or
+      // status changes made elsewhere (Super Admin, payment webhook) reach an
+      // already-open session without waiting for the user to log out/in.
+      updateTenant: (partialTenant) =>
+        set((state) => ({ tenant: state.tenant ? { ...state.tenant, ...partialTenant } : state.tenant })),
 
       setLoading: (isLoading) => set({ isLoading }),
     }),
