@@ -40,6 +40,7 @@ export async function insertProduct(tenantId, product) {
       image_url: product.imageUrl || null,
       image_unavailable: product.imageUnavailable === true,
       vat_treatment: product.vatTreatment || 'standard',
+      attributes: product.attributes || {},
       is_active: true,
       pos_visible: true,
     })
@@ -64,6 +65,7 @@ export async function updateProduct(id, updates) {
       image_url: updates.imageUrl || null,
       image_unavailable: updates.imageUnavailable === true,
       vat_treatment: updates.vatTreatment || 'standard',
+      attributes: updates.attributes || {},
       updated_at: new Date().toISOString(),
     })
     .eq('id', id)

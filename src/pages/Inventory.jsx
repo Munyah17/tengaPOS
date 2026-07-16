@@ -18,8 +18,10 @@ import toast from 'react-hot-toast'
 const BLANK = {
   name: '', brand: '', sku: '', barcode: '', price: '', landingPrice: '',
   stock: '', lowStockThreshold: '10', imageUrl: '', imageUnavailable: false,
-  vatTreatment: 'standard',
+  vatTreatment: 'standard', attributePairs: [],
 }
+
+const ATTRIBUTE_PRESETS = ['Weight', 'Volume', 'Color', 'Size']
 
 const VAT_TREATMENTS = [
   { key: 'standard', label: 'Standard-rated', hint: 'VAT charged at the normal rate' },
@@ -96,6 +98,7 @@ export default function Inventory() {
       imageUrl: p.image_url || p.image || '',
       imageUnavailable: p.image_unavailable === true,
       vatTreatment: p.vat_treatment || 'standard',
+      attributePairs: Object.entries(p.attributes || {}).map(([key, value]) => ({ key, value })),
     })
     setEditTarget(p)
     resetImagePicker()
@@ -115,6 +118,19 @@ export default function Inventory() {
   const hasImage = !!(imagePreview || form.imageUrl)
   const canSave = form.name && form.price && form.stock !== '' && (hasImage || form.imageUnavailable)
 
+  const addAttributePreset = (preset) => {
+    setForm((f) => {
+      if (f.attributePairs.some((p) => p.key.toLowerCase() === preset.toLowerCase())) return f
+      return { ...f, attributePairs: [...f.attributePairs, { key: preset, value: '' }] }
+    })
+  }
+  const addAttributePair = () => setForm((f) => ({ ...f, attributePairs: [...f.attributePairs, { key: '', value: '' }] }))
+  const updateAttributePair = (i, field, val) => setForm((f) => ({
+    ...f,
+    attributePairs: f.attributePairs.map((p, idx) => (idx === i ? { ...p, [field]: val } : p)),
+  }))
+  const removeAttributePair = (i) => setForm((f) => ({ ...f, attributePairs: f.attributePairs.filter((_, idx) => idx !== i) }))
+
   const handleSave = async (e) => {
     e.preventDefault()
     if (!hasImage && !form.imageUnavailable) {
@@ -129,7 +145,11 @@ export default function Inventory() {
         imageUrl = await uploadProductImage(tenant.id, imageFile)
         setUploadingImage(false)
       }
-      const payload = { ...form, imageUrl: form.imageUnavailable ? '' : imageUrl }
+      const attributes = form.attributePairs.reduce((acc, p) => {
+        if (p.key.trim()) acc[p.key.trim()] = p.value
+        return acc
+      }, {})
+      const payload = { ...form, imageUrl: form.imageUnavailable ? '' : imageUrl, attributes }
 
       if (editTarget) {
         const updated = await updateProduct(editTarget.id, payload)
@@ -414,6 +434,57 @@ export default function Inventory() {
             <p className="mt-1 text-xs text-slate-500">
               {VAT_TREATMENTS.find(t => t.key === form.vatTreatment)?.hint}
             </p>
+          </div>
+          <div>
+            <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">Attributes</label>
+            <div className="mb-2 flex flex-wrap gap-1.5">
+              {ATTRIBUTE_PRESETS.map((preset) => (
+                <button
+                  key={preset}
+                  type="button"
+                  onClick={() => addAttributePreset(preset)}
+                  className="rounded-full border border-slate-200 px-2.5 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+                >
+                  + {preset}
+                </button>
+              ))}
+              <button
+                type="button"
+                onClick={addAttributePair}
+                className="rounded-full border border-dashed border-slate-300 px-2.5 py-1 text-xs font-medium text-slate-500 hover:bg-slate-50 dark:border-slate-600 dark:hover:bg-slate-800"
+              >
+                + Custom
+              </button>
+            </div>
+            {form.attributePairs.length > 0 && (
+              <div className="space-y-2">
+                {form.attributePairs.map((pair, i) => (
+                  <div key={i} className="flex gap-2">
+                    <input
+                      type="text"
+                      value={pair.key}
+                      onChange={(e) => updateAttributePair(i, 'key', e.target.value)}
+                      placeholder="Attribute (e.g. Weight)"
+                      className="w-1/3 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                    />
+                    <input
+                      type="text"
+                      value={pair.value}
+                      onChange={(e) => updateAttributePair(i, 'value', e.target.value)}
+                      placeholder="Value (e.g. 500g)"
+                      className="flex-1 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => removeAttributePair(i)}
+                      className="rounded-lg p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-950"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
           <div className="flex items-center gap-2 text-sm text-slate-500">
             <ExternalLink className="h-3.5 w-3.5" />
