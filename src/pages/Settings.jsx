@@ -31,11 +31,24 @@ const sections = [
   { id: 'whitelabel', label: 'White Label', icon: Globe },
 ]
 
+// Shop managers run day-to-day operations but don't own the business —
+// payment gateway credentials, ZIMRA fiscal device registration, and the
+// account-security/data-export tools stay Vendor-only.
+const SHOP_MANAGER_HIDDEN_SECTIONS = ['payments', 'fiscalisation', 'security']
+
 export default function Settings() {
   const [activeSection, setActiveSection] = useState('general')
   const { posMode, setPosMode } = useThemeStore()
-  const { tenant, initAuth } = useAuthStore()
+  const { tenant, role, initAuth } = useAuthStore()
   const fiscal = useFiscalStore()
+  const visibleSections = role === 'shop_manager'
+    ? sections.filter((s) => !SHOP_MANAGER_HIDDEN_SECTIONS.includes(s.id))
+    : sections
+
+  useEffect(() => {
+    if (!visibleSections.some((s) => s.id === activeSection)) setActiveSection('general')
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [role])
 
   // ─── Fiscalisation add-on subscription ───
   const fiscalPricing = useFiscalPricing()
@@ -411,7 +424,7 @@ export default function Settings() {
       {/* Mobile: horizontal scrolling tab strip */}
       <div className="mb-4 -mx-6 flex overflow-x-auto px-6 pb-2 md:hidden">
         <div className="flex gap-1.5">
-          {sections.map((section) => (
+          {visibleSections.map((section) => (
             <button
               key={section.id}
               onClick={() => setActiveSection(section.id)}
@@ -432,7 +445,7 @@ export default function Settings() {
         {/* Sidebar — desktop only */}
         <div className="hidden w-56 flex-shrink-0 md:block">
           <div className="space-y-1">
-            {sections.map((section) => (
+            {visibleSections.map((section) => (
               <button
                 key={section.id}
                 onClick={() => setActiveSection(section.id)}

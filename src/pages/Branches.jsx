@@ -130,8 +130,11 @@ function BranchDetail({ branch, onBack }) {
 }
 
 export default function Branches() {
-  const { role, tenant } = useAuthStore()
+  const { role, tenant, branch: homeBranch } = useAuthStore()
   const canManage = CAN_MANAGE.includes(role)
+  // Shop managers only see their own branch — full cross-branch visibility
+  // stays Vendor-only, matching how staff/products are branch-scoped too.
+  const isBranchScoped = role === 'shop_manager'
 
   const [branches, setBranches] = useState([])
   const [loading, setLoading] = useState(false)
@@ -203,15 +206,18 @@ export default function Branches() {
     setEditing(branch)
   }
 
-  const totalRevenue = branches.reduce((s, b) => s + (b.revenue || 0), 0)
-  const totalStaff = branches.reduce((s, b) => s + (b.staff || 0), 0)
+  const visibleBranches = isBranchScoped
+    ? branches.filter((b) => b.id === homeBranch?.id)
+    : branches
+  const totalRevenue = visibleBranches.reduce((s, b) => s + (b.revenue || 0), 0)
+  const totalStaff = visibleBranches.reduce((s, b) => s + (b.staff || 0), 0)
 
   return (
     <div className="p-4 sm:p-6">
       <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-extrabold text-slate-900 dark:text-white">Branches</h1>
-          <p className="text-sm text-slate-500">{branches.length} location{branches.length !== 1 ? 's' : ''} · {totalStaff} total staff · {formatCurrency(totalRevenue)} combined revenue</p>
+          <p className="text-sm text-slate-500">{visibleBranches.length} location{visibleBranches.length !== 1 ? 's' : ''} · {totalStaff} total staff · {formatCurrency(totalRevenue)} combined revenue</p>
         </div>
         {canManage && (
           <button
@@ -225,7 +231,7 @@ export default function Branches() {
       </div>
 
       {/* Summary row */}
-      {branches.length > 0 && (
+      {visibleBranches.length > 0 && (
         <div className="mb-6 grid gap-3 sm:grid-cols-3">
           <div className="rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
             <DollarSign className="mb-1.5 h-5 w-5 text-brand-500" />
@@ -239,13 +245,13 @@ export default function Branches() {
           </div>
           <div className="rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
             <Store className="mb-1.5 h-5 w-5 text-green-500" />
-            <div className="text-xl font-extrabold text-slate-900 dark:text-white">{branches.filter(b => b.status === 'active').length}</div>
+            <div className="text-xl font-extrabold text-slate-900 dark:text-white">{visibleBranches.filter(b => b.status === 'active').length}</div>
             <div className="text-xs text-slate-500">Active Branches</div>
           </div>
         </div>
       )}
 
-      {branches.length === 0 ? (
+      {visibleBranches.length === 0 ? (
         <div className="flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-slate-200 py-20 dark:border-slate-700">
           <Store className="mb-3 h-10 w-10 text-slate-300 dark:text-slate-700" />
           <p className="text-sm font-medium text-slate-500">No branches yet</p>
@@ -254,7 +260,7 @@ export default function Branches() {
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <AnimatePresence>
-            {branches.map((branch, i) => (
+            {visibleBranches.map((branch, i) => (
               <motion.div
                 key={branch.id}
                 layout

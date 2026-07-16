@@ -42,7 +42,9 @@ export const NAV_PERMISSIONS = {
   admin: ['dashboard', 'pos', 'inventory', 'orders', 'transactions', 'reports', 'insights', 'staff', 'tasks', 'branches', 'fiscalisation', 'payments', 'settings'],
   associate: ['dashboard', 'reports', 'branches'],
   vendor: ['dashboard', 'pos', 'inventory', 'orders', 'kitchen', 'transactions', 'reports', 'insights', 'staff', 'tasks', 'branches', 'fiscalisation', 'payments', 'hr', 'settings'],
-  shop_manager: ['dashboard', 'pos', 'inventory', 'orders', 'kitchen', 'transactions', 'reports', 'insights', 'staff', 'tasks', 'branches', 'fiscalisation', 'payments', 'hr', 'settings'],
+  // Shop managers run day-to-day operations for their own branch — payment
+  // gateway management and ZIMRA fiscal device registration stay Vendor-only.
+  shop_manager: ['dashboard', 'pos', 'inventory', 'orders', 'kitchen', 'transactions', 'reports', 'insights', 'staff', 'tasks', 'branches', 'hr', 'settings'],
   supervisor: ['dashboard', 'pos', 'inventory', 'orders', 'transactions', 'reports', 'tasks'],
   cashier: ['pos', 'orders', 'tasks'],
   shop_assistant: ['pos', 'tasks'],
