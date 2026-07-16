@@ -146,6 +146,8 @@ export default function ZimraReceipt({ receipt, onClose }) {
         <div class="bold upper">Payment</div>
         ${row(PAYMENT_DISPLAY[receipt.paymentMethod] || receipt.paymentMethod, fmt(receipt.total))}
         <div class="tiny">Type: ${esc(zimraPaymentType)}</div>
+        ${receipt.amountTendered != null ? row('Tendered', fmt(receipt.amountTendered)) : ''}
+        ${receipt.changeDue != null ? row('Change', fmt(receipt.changeDue)) : ''}
         ${vatEnabled ? `
         <div class="sep"></div>
         <div class="bold upper">Tax Breakdown</div>
@@ -210,6 +212,8 @@ export default function ZimraReceipt({ receipt, onClose }) {
       lines.push({ text: 'PAYMENT', bold: true })
       rowLine(PAYMENT_DISPLAY[receipt.paymentMethod] || receipt.paymentMethod, fmt(receipt.total))
       lines.push(`Type: ${zimraPaymentType}`)
+      if (receipt.amountTendered != null) rowLine('Tendered', fmt(receipt.amountTendered))
+      if (receipt.changeDue != null) rowLine('Change', fmt(receipt.changeDue))
       if (vatEnabled) {
         dash()
         lines.push({ text: 'TAX BREAKDOWN', bold: true })
@@ -350,6 +354,18 @@ export default function ZimraReceipt({ receipt, onClose }) {
               <span>{fmt(receipt.total)}</span>
             </div>
             <div className="text-[9px] text-slate-500">Type: {zimraPaymentType}</div>
+            {receipt.amountTendered != null && (
+              <div className="flex justify-between">
+                <span>Tendered</span>
+                <span>{fmt(receipt.amountTendered)}</span>
+              </div>
+            )}
+            {receipt.changeDue != null && (
+              <div className="flex justify-between">
+                <span>Change</span>
+                <span>{fmt(receipt.changeDue)}</span>
+              </div>
+            )}
 
             <div className="my-2 border-t border-dashed border-black" />
 

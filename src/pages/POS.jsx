@@ -43,6 +43,7 @@ export default function POS() {
   const [showScanner, setShowScanner] = useState(false)
   const [searchFocused, setSearchFocused] = useState(false)
   const [checkingOut, setCheckingOut] = useState(false)
+  const [amountTendered, setAmountTendered] = useState('')
   const videoRef = useRef(null)
   const scanStreamRef = useRef(null)
   const fmt = (n) => formatCurrency(n, tenant?.currency)
@@ -168,6 +169,9 @@ export default function POS() {
 
   // Mobile-money methods run through Paynow's hosted checkout, never manually
   const PAYNOW_METHODS = ['ecocash', 'innbucks', 'omari', 'onemoney', 'zipit']
+  const tenderedAmount = parseFloat(amountTendered) || 0
+  const changeDue = Math.max(0, tenderedAmount - cart.getGrandTotal())
+  const cashShortfall = cart.paymentMethod === 'cash' && amountTendered !== '' && tenderedAmount < cart.getGrandTotal()
 
   const handleCheckout = async () => {
     if (cart.items.length === 0) {
@@ -290,11 +294,14 @@ export default function POS() {
       vatEnabled: cart.vatEnabled,
       vatRate: cart.vatRate,
       currency: tenant?.currency,
+      amountTendered: cart.paymentMethod === 'cash' && tenderedAmount > 0 ? tenderedAmount : null,
+      changeDue: cart.paymentMethod === 'cash' && tenderedAmount > 0 ? changeDue : null,
     }
     setReceiptData(receipt)
     setShowReceipt(true)
     setShowMobileCart(false)
     cart.clearCart()
+    setAmountTendered('')
     setCheckingOut(false)
     toast.success(isRestaurant ? 'Order sent to kitchen!' : 'Transaction completed!')
   }
@@ -618,6 +625,40 @@ export default function POS() {
             ))}
           </div>
 
+          {/* Cash tendered / change — optional; only relevant for cash sales */}
+          {cart.paymentMethod === 'cash' && (
+            <div className="mt-2 rounded-xl border border-slate-200 p-2.5 dark:border-slate-700">
+              <div className="flex items-center justify-between gap-2">
+                <label className="text-xs font-semibold uppercase text-slate-500">Amount Tendered</label>
+                {amountTendered !== '' && (
+                  <button
+                    onClick={() => setAmountTendered('')}
+                    className="text-xs font-semibold text-red-500 hover:underline"
+                  >
+                    Clear
+                  </button>
+                )}
+              </div>
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                value={amountTendered}
+                onChange={(e) => setAmountTendered(e.target.value)}
+                placeholder={fmt(cart.getGrandTotal())}
+                className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-right text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+              />
+              {amountTendered !== '' && (
+                <div className="mt-1.5 flex justify-between text-sm">
+                  <span className="text-slate-500">{cashShortfall ? 'Short by' : 'Change'}</span>
+                  <span className={`font-bold ${cashShortfall ? 'text-red-500' : 'text-green-600 dark:text-green-400'}`}>
+                    {cashShortfall ? fmt(cart.getGrandTotal() - tenderedAmount) : fmt(changeDue)}
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
+
           <div className="mb-1.5 mt-3 flex items-center gap-2">
             <Percent className="h-4 w-4 flex-shrink-0 text-slate-400" />
             <span className="text-sm text-slate-500">Discount</span>
@@ -691,7 +732,7 @@ export default function POS() {
             size="lg"
             className="mt-3 w-full"
             onClick={handleCheckout}
-            disabled={cart.items.length === 0 || checkingOut}
+            disabled={cart.items.length === 0 || checkingOut || cashShortfall}
           >
             {checkingOut ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Receipt className="h-4 w-4" />}
             {checkingOut
