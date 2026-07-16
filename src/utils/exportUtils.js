@@ -63,16 +63,20 @@ export function parseCSV(file) {
 export function generateTemplate() {
   // Mass-inventory upload template. price is VAT-INCLUSIVE.
   // landing_price = what the product cost you (feeds margins & AI insights).
+  // vat_treatment: standard | zero_rated | exempt (leave blank for standard).
+  // weight/volume/color/size are optional — leave blank if not applicable.
   const template = [
     {
       name: 'Sugar 2kg', sku: 'SUG-2KG', barcode: '6001234567890',
       price: '2.20', landing_price: '1.80', stock: '50',
-      low_stock_threshold: '10', brand: 'Gold Star', description: 'White sugar 2kg packet',
+      low_stock_threshold: '10', brand: 'Gold Star', vat_treatment: 'standard',
+      weight: '2kg', volume: '', color: '', size: '',
     },
     {
       name: '', sku: '', barcode: '',
       price: '', landing_price: '', stock: '',
-      low_stock_threshold: '', brand: '', description: '',
+      low_stock_threshold: '', brand: '', vat_treatment: '',
+      weight: '', volume: '', color: '', size: '',
     },
   ]
   exportToExcel(template, 'tengaPOS_inventory_template')

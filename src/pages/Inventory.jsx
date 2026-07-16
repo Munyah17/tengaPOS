@@ -265,18 +265,27 @@ export default function Inventory() {
       }
       setSaving(true)
       const results = await Promise.allSettled(
-        rows.map(row => insertProduct(tenant.id, {
-          name: row.name,
-          brand: row.brand,
-          sku: row.sku,
-          barcode: row.barcode,
-          price: row.price,
-          landingPrice: row.landing_price,
-          stock: row.stock,
-          lowStockThreshold: row.low_stock_threshold,
-          // Bulk-imported rows are assumed to have no photo yet — flagged for follow-up
-          imageUnavailable: true,
-        }))
+        rows.map(row => {
+          const attributes = {}
+          if (row.weight) attributes.Weight = String(row.weight)
+          if (row.volume) attributes.Volume = String(row.volume)
+          if (row.color) attributes.Color = String(row.color)
+          if (row.size) attributes.Size = String(row.size)
+          return insertProduct(tenant.id, {
+            name: row.name,
+            brand: row.brand,
+            sku: row.sku,
+            barcode: row.barcode,
+            price: row.price,
+            landingPrice: row.landing_price,
+            stock: row.stock,
+            lowStockThreshold: row.low_stock_threshold,
+            vatTreatment: ['standard', 'zero_rated', 'exempt'].includes(row.vat_treatment) ? row.vat_treatment : 'standard',
+            attributes,
+            // Bulk-imported rows are assumed to have no photo yet — flagged for follow-up
+            imageUnavailable: true,
+          })
+        })
       )
       const succeeded = results.filter(r => r.status === 'fulfilled').length
       queryClient.invalidateQueries({ queryKey: ['products', tenant.id] })
