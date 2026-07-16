@@ -1,12 +1,15 @@
 import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
-import { Plus, RefreshCw, ToggleLeft, ToggleRight, Eye, EyeOff, X, Loader2, Pencil } from 'lucide-react'
+import { Plus, RefreshCw, ToggleLeft, ToggleRight, Eye, EyeOff, X, Loader2, Pencil, Building2 } from 'lucide-react'
 import Button from '@/components/common/Button'
 import Modal from '@/components/common/Modal'
 import ExportMenu from '@/components/common/ExportMenu'
 import { useThemeStore } from '@/stores/themeStore'
 import { useAuthStore } from '@/stores/authStore'
-import { fetchStaff, updateStaffStatus, fetchBranches, updateStaffUsername } from '@/lib/db'
+import {
+  fetchStaff, updateStaffStatus, fetchBranches, updateStaffUsername,
+  fetchUserBranches, assignUserBranch, unassignUserBranch,
+} from '@/lib/db'
 import { supabase } from '@/lib/supabase'
 import toast from 'react-hot-toast'
 
@@ -44,6 +47,8 @@ export default function Staff() {
   const [creating, setCreating] = useState(false)
   const [usernameEdit, setUsernameEdit] = useState(null) // { id, name, username } while editing
   const [savingUsername, setSavingUsername] = useState(false)
+  const [branchesEdit, setBranchesEdit] = useState(null) // { id, name, homeBranchId, extraIds } while editing
+  const [savingBranches, setSavingBranches] = useState(false)
   const canAddVendor = (tenant?.features?.max_vendors || 1) > 1
 
   const loadStaff = () => {
@@ -121,6 +126,33 @@ export default function Staff() {
     }
   }
 
+  const openBranchesEdit = async (member) => {
+    let extraIds = []
+    try {
+      extraIds = await fetchUserBranches(member.id)
+    } catch { /* non-fatal — starts with none pre-selected */ }
+    setBranchesEdit({ id: member.id, name: member.name, homeBranchId: member.branch_id, extraIds })
+  }
+
+  const toggleExtraBranch = async (branchId) => {
+    if (!branchesEdit || branchId === branchesEdit.homeBranchId) return
+    const has = branchesEdit.extraIds.includes(branchId)
+    setSavingBranches(true)
+    try {
+      if (has) {
+        await unassignUserBranch(branchesEdit.id, branchId)
+        setBranchesEdit((b) => ({ ...b, extraIds: b.extraIds.filter((id) => id !== branchId) }))
+      } else {
+        await assignUserBranch(branchesEdit.id, branchId)
+        setBranchesEdit((b) => ({ ...b, extraIds: [...b.extraIds, branchId] }))
+      }
+    } catch (err) {
+      toast.error(err.message || 'Failed to update branch assignment')
+    } finally {
+      setSavingBranches(false)
+    }
+  }
+
   return (
     <div className="p-4 sm:p-6">
       <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -193,6 +225,15 @@ export default function Staff() {
                         >
                           <Pencil className="h-4 w-4" />
                         </button>
+                        {member.role !== 'vendor' && branches.length > 1 && (
+                          <button
+                            onClick={() => openBranchesEdit(member)}
+                            className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800"
+                            title="Assign extra branches"
+                          >
+                            <Building2 className="h-4 w-4" />
+                          </button>
+                        )}
                         {member.role !== 'vendor' && (
                           <button
                             onClick={() => toggleActive(member)}
@@ -332,6 +373,40 @@ export default function Staff() {
               </Button>
             </div>
           </form>
+        )}
+      </Modal>
+
+      {/* Assign extra branches — beyond their one home branch */}
+      <Modal isOpen={!!branchesEdit} onClose={() => setBranchesEdit(null)} title={`Branches for ${branchesEdit?.name || ''}`}>
+        {branchesEdit && (
+          <div className="space-y-4">
+            <p className="text-sm text-slate-500">
+              Bound to their home branch by default. Check any extra branches they should also have access to.
+            </p>
+            <div className="space-y-1.5">
+              {branches.map((b) => {
+                const isHome = b.id === branchesEdit.homeBranchId
+                return (
+                  <label
+                    key={b.id}
+                    className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-sm ${isHome ? 'border-slate-200 bg-slate-50 text-slate-400 dark:border-slate-700 dark:bg-slate-800/50' : 'border-slate-200 text-slate-700 dark:border-slate-700 dark:text-slate-300'}`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={isHome || branchesEdit.extraIds.includes(b.id)}
+                      disabled={isHome || savingBranches}
+                      onChange={() => toggleExtraBranch(b.id)}
+                      className="h-3.5 w-3.5 rounded border-slate-300"
+                    />
+                    {b.name} {isHome && <span className="text-xs">(home branch)</span>}
+                  </label>
+                )
+              })}
+            </div>
+            <div className="flex justify-end pt-2">
+              <Button type="button" onClick={() => setBranchesEdit(null)}>Done</Button>
+            </div>
+          </div>
         )}
       </Modal>
     </div>

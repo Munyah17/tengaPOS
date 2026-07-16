@@ -12,13 +12,16 @@ import { formatCurrency } from '@/utils/formatters'
 import { generateTemplate, parseCSV } from '@/utils/exportUtils'
 import { useThemeStore } from '@/stores/themeStore'
 import { useAuthStore } from '@/stores/authStore'
-import { fetchProducts, insertProduct, updateProduct, deleteProduct, uploadProductImage } from '@/lib/db'
+import {
+  fetchProducts, insertProduct, updateProduct, deleteProduct, uploadProductImage,
+  fetchBranches, fetchProductBranches, assignProductBranch, unassignProductBranch,
+} from '@/lib/db'
 import toast from 'react-hot-toast'
 
 const BLANK = {
   name: '', brand: '', sku: '', barcode: '', price: '', landingPrice: '',
   stock: '', lowStockThreshold: '10', imageUrl: '', imageUnavailable: false,
-  vatTreatment: 'standard', attributePairs: [],
+  vatTreatment: 'standard', attributePairs: [], branchIds: [],
 }
 
 const ATTRIBUTE_PRESETS = ['Weight', 'Volume', 'Color', 'Size']
@@ -31,7 +34,7 @@ const VAT_TREATMENTS = [
 
 export default function Inventory() {
   const { posMode } = useThemeStore()
-  const { tenant } = useAuthStore()
+  const { tenant, branch } = useAuthStore()
   const isRestaurant = posMode === 'restaurant'
   const [search, setSearch] = useState('')
   const [showAdd, setShowAdd] = useState(false)
@@ -42,7 +45,14 @@ export default function Inventory() {
   const [imageFile, setImageFile] = useState(null)
   const [imagePreview, setImagePreview] = useState('')
   const [uploadingImage, setUploadingImage] = useState(false)
+  const [branches, setBranches] = useState([])
+  const [originalBranchIds, setOriginalBranchIds] = useState([])
   const fileInputRef = useRef(null)
+
+  useEffect(() => {
+    if (!tenant?.id) return
+    fetchBranches(tenant.id).then(setBranches).catch(() => {})
+  }, [tenant?.id])
 
   const queryClient = useQueryClient()
   // Same cache key as POS's product query — editing a product here makes
@@ -84,8 +94,22 @@ export default function Inventory() {
     if (fileInputRef.current) fileInputRef.current.value = ''
   }
 
-  const openAdd = () => { setForm(BLANK); setEditTarget(null); resetImagePicker(); setShowAdd(true) }
-  const openEdit = (p) => {
+  const openAdd = () => {
+    // Non-vendor staff default to their own branch — matches "1 branch
+    // unless manually assigned"; vendors default to unassigned (all branches).
+    const defaultBranchIds = branch?.id ? [branch.id] : []
+    setForm({ ...BLANK, branchIds: defaultBranchIds })
+    setOriginalBranchIds([])
+    setEditTarget(null)
+    resetImagePicker()
+    setShowAdd(true)
+  }
+  const openEdit = async (p) => {
+    let extraBranchIds = []
+    try {
+      extraBranchIds = await fetchProductBranches(p.id)
+    } catch { /* non-fatal — just starts with none pre-selected */ }
+    const branchIds = [...new Set([p.branch_id, ...extraBranchIds].filter(Boolean))]
     setForm({
       name: p.name,
       brand: p.brand || '',
@@ -99,11 +123,19 @@ export default function Inventory() {
       imageUnavailable: p.image_unavailable === true,
       vatTreatment: p.vat_treatment || 'standard',
       attributePairs: Object.entries(p.attributes || {}).map(([key, value]) => ({ key, value })),
+      branchIds,
     })
+    setOriginalBranchIds(branchIds)
     setEditTarget(p)
     resetImagePicker()
     setShowAdd(true)
   }
+  const toggleBranch = (branchId) => setForm((f) => ({
+    ...f,
+    branchIds: f.branchIds.includes(branchId)
+      ? f.branchIds.filter((id) => id !== branchId)
+      : [...f.branchIds, branchId],
+  }))
 
   const handleImagePick = (e) => {
     const file = e.target.files?.[0]
@@ -149,8 +181,12 @@ export default function Inventory() {
         if (p.key.trim()) acc[p.key.trim()] = p.value
         return acc
       }, {})
-      const payload = { ...form, imageUrl: form.imageUnavailable ? '' : imageUrl, attributes }
+      // First checked branch becomes the "home" branch_id; any further ones
+      // are extra grants recorded in product_branches.
+      const [primaryBranchId, ...extraBranchIds] = form.branchIds
+      const payload = { ...form, imageUrl: form.imageUnavailable ? '' : imageUrl, attributes, branchId: primaryBranchId || null }
 
+      let productId = editTarget?.id
       if (editTarget) {
         const updated = await updateProduct(editTarget.id, payload)
         queryClient.setQueryData(['products', tenant.id], (old) =>
@@ -158,9 +194,20 @@ export default function Inventory() {
         toast.success('Product updated')
       } else {
         const created = await insertProduct(tenant.id, payload)
+        productId = created.id
         queryClient.setQueryData(['products', tenant.id], (old) => [...(old || []), created])
         toast.success('Product added')
       }
+
+      // Reconcile extra branch grants against whatever was there before.
+      const previousExtra = originalBranchIds.filter((id) => id !== primaryBranchId)
+      const toAdd = extraBranchIds.filter((id) => !previousExtra.includes(id))
+      const toRemove = previousExtra.filter((id) => !extraBranchIds.includes(id))
+      await Promise.allSettled([
+        ...toAdd.map((id) => assignProductBranch(productId, id)),
+        ...toRemove.map((id) => unassignProductBranch(productId, id)),
+      ])
+
       setShowAdd(false)
     } catch (err) {
       toast.error(err.message || 'Failed to save product')
@@ -486,6 +533,29 @@ export default function Inventory() {
               </div>
             )}
           </div>
+          {branches.length > 1 && (
+            <div>
+              <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">Branches</label>
+              <p className="mb-1.5 text-xs text-slate-500">
+                {form.branchIds.length === 0
+                  ? 'Not attached to a branch — visible at every branch.'
+                  : 'Only visible/sellable at the branches checked below.'}
+              </p>
+              <div className="grid grid-cols-2 gap-1.5">
+                {branches.map((b) => (
+                  <label key={b.id} className="flex items-center gap-2 rounded-lg border border-slate-200 px-2.5 py-1.5 text-sm text-slate-700 dark:border-slate-700 dark:text-slate-300">
+                    <input
+                      type="checkbox"
+                      checked={form.branchIds.includes(b.id)}
+                      onChange={() => toggleBranch(b.id)}
+                      className="h-3.5 w-3.5 rounded border-slate-300"
+                    />
+                    {b.name}
+                  </label>
+                ))}
+              </div>
+            </div>
+          )}
           <div className="flex items-center gap-2 text-sm text-slate-500">
             <ExternalLink className="h-3.5 w-3.5" />
             <a href="http://scancode.co.zw" target="_blank" rel="noopener noreferrer" className="text-brand-600 hover:underline">Need barcodes? Visit scancode.co.zw</a>

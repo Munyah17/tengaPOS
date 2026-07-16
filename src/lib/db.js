@@ -41,6 +41,7 @@ export async function insertProduct(tenantId, product) {
       image_unavailable: product.imageUnavailable === true,
       vat_treatment: product.vatTreatment || 'standard',
       attributes: product.attributes || {},
+      branch_id: product.branchId || null,
       is_active: true,
       pos_visible: true,
     })
@@ -66,6 +67,7 @@ export async function updateProduct(id, updates) {
       image_unavailable: updates.imageUnavailable === true,
       vat_treatment: updates.vatTreatment || 'standard',
       attributes: updates.attributes || {},
+      branch_id: updates.branchId || null,
       updated_at: new Date().toISOString(),
     })
     .eq('id', id)
@@ -531,6 +533,40 @@ export async function deleteBranch(id) {
     .from('branches')
     .update({ is_active: false })
     .eq('id', id)
+  if (error) throw error
+}
+
+// ─── Branch assignment (extra branches beyond a user's/product's home branch) ─
+
+export async function fetchUserBranches(userId) {
+  const { data, error } = await supabase.from('user_branches').select('branch_id').eq('user_id', userId)
+  if (error) throw error
+  return (data || []).map((r) => r.branch_id)
+}
+
+export async function assignUserBranch(userId, branchId) {
+  const { error } = await supabase.rpc('assign_user_branch', { p_user_id: userId, p_branch_id: branchId })
+  if (error) throw error
+}
+
+export async function unassignUserBranch(userId, branchId) {
+  const { error } = await supabase.rpc('unassign_user_branch', { p_user_id: userId, p_branch_id: branchId })
+  if (error) throw error
+}
+
+export async function fetchProductBranches(productId) {
+  const { data, error } = await supabase.from('product_branches').select('branch_id').eq('product_id', productId)
+  if (error) throw error
+  return (data || []).map((r) => r.branch_id)
+}
+
+export async function assignProductBranch(productId, branchId) {
+  const { error } = await supabase.rpc('assign_product_branch', { p_product_id: productId, p_branch_id: branchId })
+  if (error) throw error
+}
+
+export async function unassignProductBranch(productId, branchId) {
+  const { error } = await supabase.rpc('unassign_product_branch', { p_product_id: productId, p_branch_id: branchId })
   if (error) throw error
 }
 
