@@ -4,6 +4,7 @@ export const useCartStore = create((set, get) => ({
   items: [],
   paymentMethod: 'cash',
   discount: 0,
+  discountType: 'percent', // 'percent' | 'fixed'
   customerId: null,
   orderType: 'counter',
   // VAT is INCLUSIVE: the shelf price already contains VAT.
@@ -59,24 +60,46 @@ export const useCartStore = create((set, get) => ({
   setPaymentMethod: (method) => set({ paymentMethod: method }),
   setOrderType: (orderType) => set({ orderType }),
   setDiscount: (discount) => set({ discount }),
+  setDiscountType: (discountType) => set({ discountType, discount: 0 }),
   setCustomerId: (customerId) => set({ customerId }),
 
   // Total of shelf prices (VAT-inclusive), after discounts
   getTotal: () => {
-    const { items, discount } = get()
+    const { items, discount, discountType } = get()
     const gross = items.reduce(
       (sum, item) => sum + item.price * item.quantity * (1 - (item.itemDiscount || 0) / 100),
       0
     )
+    if (discountType === 'fixed') return Math.max(0, gross - discount)
     return gross * (1 - discount / 100)
   },
 
-  // VAT portion INCLUDED in the total: total × r / (100 + r).
-  // e.g. $2.20 sugar at 15.5% → VAT $0.295, net $1.905. Nothing is added on top.
+  // VAT portion INCLUDED in the total: total × r / (100 + r) — but only for
+  // the share of the cart that's actually standard-rated. Zero-rated and
+  // exempt products (a per-product setting, not a blanket on/off) contribute
+  // no VAT at all, matching how VAT actually works (these are legally
+  // distinct from "standard-rated" under the VAT Act, not just "off").
   getTax: () => {
-    const { vatEnabled, vatRate } = get()
+    const { vatEnabled, vatRate, items, discount, discountType } = get()
     if (!vatEnabled) return 0
-    return get().getTotal() * (vatRate / (100 + vatRate))
+
+    const lineTotal = (item) => item.price * item.quantity * (1 - (item.itemDiscount || 0) / 100)
+    const grossAll = items.reduce((s, i) => s + lineTotal(i), 0)
+    if (grossAll === 0) return 0
+
+    const grossTaxable = items.reduce((s, i) => {
+      if (i.vat_treatment === 'zero_rated' || i.vat_treatment === 'exempt') return s
+      return s + lineTotal(i)
+    }, 0)
+    if (grossTaxable === 0) return 0
+
+    // A cart-level discount applies to the whole basket — prorate it across
+    // the taxable and non-taxable shares by their portion of the gross total.
+    const totalAfterDiscount = get().getTotal()
+    const taxableShare = grossTaxable / grossAll
+    const taxableAfterDiscount = totalAfterDiscount * taxableShare
+
+    return taxableAfterDiscount * (vatRate / (100 + vatRate))
   },
 
   // Net (ex-VAT) portion of the total
@@ -89,5 +112,5 @@ export const useCartStore = create((set, get) => ({
     return get().getTotal()
   },
 
-  clearCart: () => set({ items: [], discount: 0, customerId: null, orderType: 'counter' }),
+  clearCart: () => set({ items: [], discount: 0, discountType: 'percent', customerId: null, orderType: 'counter' }),
 }))

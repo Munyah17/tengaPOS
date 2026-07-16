@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion'
-import { useState, useEffect } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import {
   DollarSign, ShoppingCart, Package, Users, TrendingUp,
   AlertTriangle, ArrowUpRight, ArrowDownRight,
@@ -39,21 +39,30 @@ export default function Dashboard() {
   const { profile, tenant } = useAuthStore()
   const isRestaurant = posMode === 'restaurant'
   const accentColor = isRestaurant ? '#22c55e' : '#3b82f6'
-  const [metrics, setMetrics] = useState(null)
-  const [announcements, setAnnouncements] = useState([])
   const { notifications } = useTenantNotifications({ tenantId: tenant?.id, posMode, limit: 5 })
 
-  useEffect(() => {
-    if (!tenant?.id) return
-    fetchDashboardMetrics(tenant.id).then(setMetrics).catch(() => {})
-    supabase
-      .from('announcements')
-      .select('id, title, body, created_at')
-      .eq('is_published', true)
-      .order('created_at', { ascending: false })
-      .limit(3)
-      .then(({ data }) => setAnnouncements(data || []))
-  }, [tenant?.id])
+  // Cached instead of a hard fetch on every mount — revisiting the
+  // dashboard within a minute reuses what's already loaded.
+  const { data: metrics = null } = useQuery({
+    queryKey: ['dashboardMetrics', tenant?.id],
+    queryFn: () => fetchDashboardMetrics(tenant.id),
+    enabled: !!tenant?.id,
+    staleTime: 60000,
+  })
+
+  const { data: announcements = [] } = useQuery({
+    queryKey: ['announcements'],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('announcements')
+        .select('id, title, body, created_at')
+        .eq('is_published', true)
+        .order('created_at', { ascending: false })
+        .limit(3)
+      return data || []
+    },
+    staleTime: 5 * 60000,
+  })
 
   // 7-day free trial countdown
   const onTrial = tenant?.trial_ends_at && !tenant?.plan_start_date

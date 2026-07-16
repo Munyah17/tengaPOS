@@ -70,6 +70,17 @@ Deno.serve(async (req) => {
       })
     }
 
+    // Rate/currency were hardcoded to the pre-2026 15% and USD here, out of
+    // sync with the tenant's actual configured rate (rose to 15.5% on 1 Jan
+    // 2026) and with submitReceipt's taxID 2. Pull the real values instead.
+    const { data: tenantRow } = await supabase
+      .from('tenants')
+      .select('vat_rate, currency')
+      .eq('id', tenant_id)
+      .maybeSingle()
+    const vatRate  = tenantRow?.vat_rate ?? 15.5
+    const currency = tenantRow?.currency || 'USD'
+
     // ── Load today's completed transactions for fiscal counters ─────────────
     // Use fiscal_day_opened_at if available, else fall back to today midnight
     const dayStart = cfg.fiscal_day_opened_at
@@ -86,25 +97,26 @@ Deno.serve(async (req) => {
     const transactions = txData || []
     const receiptCounter = transactions.length
 
-    // ── Build fiscalDayCounters (grouped by moneyType, all at 15% VAT) ──────
+    // ── Build fiscalDayCounters (grouped by moneyType, at the tenant's actual
+    //    VAT rate) ─────────────────────────────────────────────────────────
     // FDMS spec: one counter per (currency × taxPercent × taxID × moneyType).
     // Zero-value counters must NOT be submitted.
     const groupMap: Record<string, number> = {}
     for (const tx of transactions) {
       const moneyType = MONEY_TYPE_MAP[tx.method] || 'Cash'
-      const key = `USD|15|${moneyType}`
+      const key = `${currency}|${moneyType}`
       groupMap[key] = (groupMap[key] || 0) + parseFloat(tx.amount)
     }
 
     const fiscalDayCounters = Object.entries(groupMap)
       .filter(([, value]) => value > 0)
       .map(([key, value]) => {
-        const [currency, , moneyType] = key.split('|')
+        const [ctrCurrency, moneyType] = key.split('|')
         return {
           fiscalCounterType:     'saleByTax',
-          fiscalCounterCurrency: currency,
-          fiscalCounterTaxPercent: 15,
-          fiscalCounterTaxID:    0,
+          fiscalCounterCurrency: ctrCurrency,
+          fiscalCounterTaxPercent: vatRate,
+          fiscalCounterTaxID:    2, // matches submitReceipt's verified standard-rate taxID
           fiscalCounterMoneyType: moneyType,
           fiscalCounterValue:    Math.round(value * 100) / 100,
         }

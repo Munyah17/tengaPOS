@@ -168,7 +168,9 @@ export default function Fiscalisation() {
       toast.error('Enable ZIMRA fiscalisation first')
       return
     }
-    if (!fiscal.deviceID) {
+    // Check the form field being typed into, not the last-saved store value
+    // — otherwise a Device ID entered but not yet saved reads as empty here.
+    if (!fiscalForm.deviceID) {
       toast.error('Enter a Device ID before testing')
       return
     }
@@ -178,7 +180,7 @@ export default function Fiscalisation() {
     }
     setPingLoading(true)
     try {
-      await pingDevice({ deviceID: fiscal.deviceID })
+      await pingDevice({ deviceID: fiscalForm.deviceID })
       toast.success('ZIMRA FDMS is reachable — device connected!')
     } catch (err) {
       const msg = err?.message || ''

@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect, useRef } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Search, Barcode, Plus, Minus, Trash2, ShoppingCart,
@@ -39,8 +40,6 @@ export default function POS() {
   const [receiptData, setReceiptData] = useState(null)
   const [paynowLoading, setPaynowLoading] = useState(false)
   const [showMobileCart, setShowMobileCart] = useState(false)
-  const [liveProducts, setLiveProducts] = useState([])
-  const [productsLoading, setProductsLoading] = useState(false)
   const [showScanner, setShowScanner] = useState(false)
   const [searchFocused, setSearchFocused] = useState(false)
   const [checkingOut, setCheckingOut] = useState(false)
@@ -48,23 +47,34 @@ export default function POS() {
   const scanStreamRef = useRef(null)
   const fmt = (n) => formatCurrency(n, tenant?.currency)
 
-  useEffect(() => {
-    if (!tenant?.id) return
-    setProductsLoading(true)
-    fetchProducts(tenant.id)
-      .then(setLiveProducts)
-      .catch(async () => {
-        // Offline or request failed — fall back to the locally cached copy
+  const queryClient = useQueryClient()
+  // Cached (staleTime) instead of a hard fetch-on-every-mount — a cashier
+  // bouncing between POS and another tab isn't re-downloading the whole
+  // catalogue every time on a slow connection.
+  const productsQuery = useQuery({
+    queryKey: ['products', tenant?.id],
+    queryFn: async () => {
+      try {
+        return await fetchProducts(tenant.id)
+      } catch {
         const cached = await getOfflineProducts(tenant.id)
         if (cached.length > 0) {
-          setLiveProducts(cached)
           toast('Offline — showing cached inventory', { icon: '📴' })
-        } else {
-          toast.error('Failed to load products')
+          return cached
         }
-      })
-      .finally(() => setProductsLoading(false))
-  }, [tenant?.id])
+        throw new Error('Failed to load products')
+      }
+    },
+    enabled: !!tenant?.id,
+    staleTime: 30000,
+  })
+  const liveProducts = productsQuery.data || []
+  const productsLoading = productsQuery.isLoading
+
+  useEffect(() => {
+    if (productsQuery.isError) toast.error('Failed to load products')
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [productsQuery.isError])
 
   // VAT config comes from the tenant's own settings (inclusive pricing)
   useEffect(() => {
@@ -148,9 +158,9 @@ export default function POS() {
   const filtered = useMemo(() => {
     return products.filter((p) => {
       const matchSearch =
-        p.name.toLowerCase().includes(search.toLowerCase()) ||
-        p.sku.toLowerCase().includes(search.toLowerCase()) ||
-        p.barcode.includes(search)
+        (p.name || '').toLowerCase().includes(search.toLowerCase()) ||
+        (p.sku || '').toLowerCase().includes(search.toLowerCase()) ||
+        (p.barcode || '').includes(search)
       const matchCategory = category === 'all' || p.category === category
       return matchSearch && matchCategory
     })
@@ -203,15 +213,24 @@ export default function POS() {
         try {
           const result = await saveCheckout(checkoutPayload)
           receiptNumber = result.receiptNo
-          // Refresh product list after sale to reflect updated stock
-          fetchProducts(tenant.id).then(setLiveProducts).catch(() => {})
+          // We already know exactly what was decremented — patch the cache
+          // locally instead of firing a whole new products query for data
+          // we can compute ourselves.
+          queryClient.setQueryData(['products', tenant.id], (old) =>
+            (old || []).map((p) => {
+              const line = cart.items.find((i) => i.id === p.id)
+              return line ? { ...p, stock: Math.max(0, (p.stock ?? 0) - line.quantity) } : p
+            })
+          )
         } catch (err) {
           const msg = err.message || 'unknown'
           if (msg.includes('Insufficient stock') || msg.includes('Stock check failed')) {
             // Hard stop — never sell what isn't in stock
             toast.error(msg)
             setCheckingOut(false)
-            fetchProducts(tenant.id).then(setLiveProducts).catch(() => {})
+            // Stock actually IS stale here (that's why the sale failed) —
+            // this one genuinely needs a fresh read, not an optimistic patch.
+            queryClient.invalidateQueries({ queryKey: ['products', tenant.id] })
             return
           }
           // Network/server error mid-sale — queue it rather than lose the sale
@@ -236,6 +255,8 @@ export default function POS() {
                   total,
                   paymentMethod: cart.paymentMethod,
                   date: new Date().toISOString(),
+                  vatRate: cart.vatEnabled ? cart.vatRate : 0,
+                  currency: tenant?.currency || 'USD',
                 },
               },
             },
@@ -444,11 +465,16 @@ export default function POS() {
         )}
       </button>
 
-      {/* Cart Panel — full-screen overlay on mobile, fixed sidebar on desktop */}
+      {/* Cart Panel — full-screen overlay on mobile, fixed sidebar on desktop.
+          Width is a clamp (proportional, not a rigid px value) so it doesn't
+          eat a disproportionate share of the screen on POS terminals whose
+          viewport sits right at the mobile/desktop breakpoint boundary, or
+          when zoomed — it scales with the available width instead of
+          staying fixed while the product grid squeezes down around it. */}
       <div className={`
         flex flex-col bg-white dark:bg-slate-950
         border-slate-200 dark:border-slate-800
-        md:w-96 md:flex-shrink-0 md:border-l
+        md:w-[clamp(280px,28vw,384px)] md:flex-shrink-0 md:border-l
         ${showMobileCart
           ? 'fixed inset-0 z-50 md:relative md:inset-auto md:z-auto'
           : 'hidden md:flex'}
@@ -594,16 +620,26 @@ export default function POS() {
           <div className="mb-3 flex items-center gap-2">
             <Percent className="h-4 w-4 flex-shrink-0 text-slate-400" />
             <span className="text-sm text-slate-500">Discount</span>
+            <select
+              value={cart.discountType}
+              onChange={(e) => cart.setDiscountType(e.target.value)}
+              className="rounded-lg border border-slate-200 bg-white px-1.5 py-1 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+            >
+              <option value="percent">%</option>
+              <option value="fixed">{tenant?.currency || '$'}</option>
+            </select>
             <input
               type="number"
               min="0"
-              max="100"
+              max={cart.discountType === 'percent' ? 100 : undefined}
               value={cart.discount || ''}
-              onChange={(e) => cart.setDiscount(Math.min(100, Math.max(0, Number(e.target.value) || 0)))}
+              onChange={(e) => {
+                const raw = Math.max(0, Number(e.target.value) || 0)
+                cart.setDiscount(cart.discountType === 'percent' ? Math.min(100, raw) : raw)
+              }}
               placeholder="0"
-              className="w-16 rounded-lg border border-slate-200 bg-white px-2 py-1 text-right text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+              className="w-20 rounded-lg border border-slate-200 bg-white px-2 py-1 text-right text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
             />
-            <span className="text-sm text-slate-500">%</span>
             {cart.discount > 0 && (
               <button
                 onClick={() => cart.setDiscount(0)}
@@ -616,7 +652,9 @@ export default function POS() {
           <div className="space-y-2">
             {cart.discount > 0 && (
               <div className="flex justify-between text-sm">
-                <span className="text-slate-500">Discount ({cart.discount}%)</span>
+                <span className="text-slate-500">
+                  Discount ({cart.discountType === 'percent' ? `${cart.discount}%` : fmt(cart.discount)})
+                </span>
                 <span className="font-medium text-red-500">
                   -{fmt(cart.items.reduce((s, i) => s + i.price * i.quantity * (1 - (i.itemDiscount || 0) / 100), 0) - cart.getTotal())}
                 </span>

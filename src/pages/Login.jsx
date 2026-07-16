@@ -59,7 +59,10 @@ export default function Login() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-slate-950 via-slate-900 to-[#040c1a] px-4 py-12">
+    <div
+      className="relative flex min-h-screen items-center justify-center overflow-y-auto bg-gradient-to-br from-slate-950 via-slate-900 to-[#040c1a] px-4 py-12"
+      style={{ minHeight: '100dvh' }}
+    >
       <div className="absolute inset-0 bg-[linear-gradient(rgba(59,130,246,0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(59,130,246,0.03)_1px,transparent_1px)] bg-[size:64px_64px]" />
       <div className="absolute left-1/2 top-1/3 h-[400px] w-[400px] -translate-x-1/2 rounded-full bg-brand-600/10 blur-[128px]" />
 

@@ -38,9 +38,15 @@ export default function Register() {
   const update = (field) => (e) => setForm({ ...form, [field]: e.target.value })
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-slate-950 via-slate-900 to-brand-950 px-4 py-10 sm:py-14">
-      <div className="pointer-events-none fixed inset-0 bg-[linear-gradient(rgba(59,130,246,0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(59,130,246,0.03)_1px,transparent_1px)] bg-[size:64px_64px]" />
-      <div className="pointer-events-none fixed top-1/3 left-1/2 h-[400px] w-[400px] -translate-x-1/2 rounded-full bg-brand-600/10 blur-[128px]" />
+    <div
+      className="relative flex min-h-screen items-center justify-center overflow-y-auto bg-gradient-to-br from-slate-950 via-slate-900 to-brand-950 px-4 py-10 sm:py-14"
+      style={{ minHeight: '100dvh' }}
+    >
+      {/* absolute (not fixed) — a fixed background stays pinned to the
+          viewport while a tall form scrolls past it, which on a short
+          screen visually crosses through the input fields */}
+      <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(rgba(59,130,246,0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(59,130,246,0.03)_1px,transparent_1px)] bg-[size:64px_64px]" />
+      <div className="pointer-events-none absolute top-1/3 left-1/2 h-[400px] w-[400px] -translate-x-1/2 rounded-full bg-brand-600/10 blur-[128px]" />
 
       <motion.div
         initial={{ opacity: 0, y: 20, scale: 0.98 }}
@@ -61,7 +67,7 @@ export default function Register() {
             <img src={posIcon} alt="tengaPOS" className="mx-auto mb-4 h-12 w-auto sm:h-14" />
             <h1 className="text-2xl font-extrabold text-white">Create your account</h1>
             <p className="mt-1 text-sm text-slate-400">
-              7-day free trial · Full access · <span className="font-semibold text-green-400">Due today — $0!</span>
+              Choose a <span className="font-semibold text-green-400">free 7-day trial</span> or a plan next — nothing is charged until you decide
             </p>
           </div>
 

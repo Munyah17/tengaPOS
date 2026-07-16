@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import {
   Users, Search, Plus, X, KeyRound, Trash2, Ban, CheckCircle,
-  Pencil, Building2, Eye, EyeOff, Loader2,
+  Pencil, Building2, Eye, EyeOff, Loader2, LockKeyholeOpen,
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/stores/authStore'
@@ -257,7 +257,8 @@ function EditUserModal({ user, onClose, onDone }) {
 }
 
 export default function AdminUsers() {
-  const { user: me } = useAuthStore()
+  const { user: me, role: myRole } = useAuthStore()
+  const isSuperAdmin = myRole === 'super_admin'
   const [users, setUsers] = useState([])
   const [tenants, setTenants] = useState([])
   const [loading, setLoading] = useState(true)
@@ -297,6 +298,29 @@ export default function AdminUsers() {
       setUsers((prev) => prev.map((u) => u.id === user.id ? { ...u, is_active: !user.is_active } : u))
       toast.success(user.is_active ? `${user.name || user.email} suspended` : `${user.name || user.email} reinstated`)
     }
+  }
+
+  const unlockUser = async (user) => {
+    // Enforced server-side too (a DB trigger blocks is_locked true->false
+    // unless the caller is genuinely Super Admin) — this button is just the UI.
+    const { error } = await supabase
+      .from('users')
+      .update({ is_locked: false, locked_reason: null, locked_at: null })
+      .eq('id', user.id)
+    if (error) {
+      toast.error(error.message)
+      return
+    }
+    await supabase.from('audit_logs').insert({
+      actor_id: me?.id,
+      actor_email: me?.email,
+      action: 'client_user_unlocked',
+      target_type: 'user',
+      target_id: user.id,
+      details: { email: user.email, tenant: user.tenants?.name, previous_reason: user.locked_reason },
+    })
+    setUsers((prev) => prev.map((u) => u.id === user.id ? { ...u, is_locked: false, locked_reason: null, locked_at: null } : u))
+    toast.success(`${user.name || user.email} unlocked`)
   }
 
   const filtered = users.filter((u) => {
@@ -376,6 +400,14 @@ export default function AdminUsers() {
                   {!user.is_active && (
                     <span className="rounded-full bg-red-500/15 px-2 py-0.5 text-xs font-semibold text-red-500">Suspended</span>
                   )}
+                  {user.is_locked && (
+                    <span
+                      className="rounded-full bg-amber-500/15 px-2 py-0.5 text-xs font-semibold text-amber-500"
+                      title={user.locked_reason || 'Locked'}
+                    >
+                      Locked
+                    </span>
+                  )}
                 </div>
                 <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-slate-500">
                   <span className="truncate">{user.email}</span>
@@ -383,9 +415,21 @@ export default function AdminUsers() {
                     <Building2 className="h-3 w-3" />
                     {user.tenants?.name || '—'}
                   </span>
+                  {user.is_locked && user.locked_reason && (
+                    <span className="truncate text-amber-500">{user.locked_reason}</span>
+                  )}
                 </div>
               </div>
               <div className="flex flex-shrink-0 items-center gap-1">
+                {user.is_locked && isSuperAdmin && (
+                  <button
+                    onClick={() => unlockUser(user)}
+                    title="Unlock account (Super Admin only)"
+                    className="rounded-lg p-2 text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-950/40"
+                  >
+                    <LockKeyholeOpen className="h-4 w-4" />
+                  </button>
+                )}
                 <button
                   onClick={() => setEditing(user)}
                   title="Edit user"

@@ -2,6 +2,17 @@ import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { supabase } from '@/lib/supabase'
 
+// On a weak/slow connection, signInWithPassword could otherwise hang for a
+// very long time with no feedback (the browser's own fetch timeout, if any,
+// is much longer than a cashier will wait). Fail fast with a clear message
+// instead so the login form can show "try again" rather than a dead spinner.
+function withTimeout(promise, ms, message) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => setTimeout(() => reject(new Error(message)), ms)),
+  ])
+}
+
 export const ROLE_COLORS = {
   vendor: { bg: 'bg-green-100 dark:bg-green-900/30', text: 'text-green-700 dark:text-green-400' },
   shop_manager: { bg: 'bg-blue-100 dark:bg-blue-900/30', text: 'text-blue-700 dark:text-blue-400' },
@@ -38,34 +49,15 @@ export const NAV_PERMISSIONS = {
   tech_support: ['dashboard', 'reports', 'insights', 'orders', 'transactions'],
 }
 
-async function loadProfile(userId) {
-  // Check app_users first (Super Admin / Admin / Tech Support)
-  const { data: appUser } = await supabase
-    .from('app_users')
-    .select('*')
-    .eq('id', userId)
-    .maybeSingle()
-
-  if (appUser) {
-    return { ...appUser, userType: 'app_owner' }
-  }
-
-  // Tenant user
-  const { data, error } = await supabase
-    .from('users')
-    .select('*, tenants(*)')
-    .eq('id', userId)
-    .single()
+async function loadProfile() {
+  // Single round trip via RPC instead of up to 3 sequential queries
+  // (app_users check, then users+tenants join, then a separate branches
+  // lookup) — meaningful latency savings on a slow connection, since this
+  // runs on every login and every app boot.
+  const { data, error } = await supabase.rpc('get_my_profile')
   if (error) throw error
-
-  const { data: branch } = await supabase
-    .from('branches')
-    .select('*')
-    .eq('tenant_id', data.tenant_id)
-    .eq('is_main', true)
-    .maybeSingle()
-
-  return { ...data, branch, userType: 'tenant', tenantStatus: data.tenants?.status || 'pending' }
+  if (!data) throw new Error('Profile not found')
+  return data
 }
 
 export const useAuthStore = create(
@@ -85,21 +77,48 @@ export const useAuthStore = create(
       initAuth: async () => {
         set({ isLoading: true })
         try {
+          // getSession() reads the persisted Supabase session locally — this
+          // succeeds offline as long as a prior login stored one.
           const { data: { session } } = await supabase.auth.getSession()
           if (session?.user) {
-            const profileData = await loadProfile(session.user.id)
-            set({
-              user: session.user,
-              session,
-              profile: profileData,
-              tenant: profileData.tenants || null,
-              role: profileData.role,
-              branch: profileData.branch || null,
-              userType: profileData.userType,
-              tenantStatus: profileData.tenantStatus || null,
-              isAuthenticated: true,
-              isLoading: false,
-            })
+            try {
+              // A slow (not fully offline) connection shouldn't hang the
+              // whole app boot indefinitely — fall through to the cached-
+              // profile branch below just like an outright failure would.
+              const profileData = await withTimeout(loadProfile(), 10000, 'timeout')
+              if (profileData.is_locked) {
+                await supabase.auth.signOut()
+                set({ isLoading: false, isAuthenticated: false })
+                return
+              }
+              set({
+                user: session.user,
+                session,
+                profile: profileData,
+                tenant: profileData.tenants || null,
+                role: profileData.role,
+                branch: profileData.branch || null,
+                userType: profileData.userType,
+                tenantStatus: profileData.tenantStatus || null,
+                isAuthenticated: true,
+                isLoading: false,
+              })
+            } catch {
+              // loadProfile() needs the network — if that's what's missing
+              // (not the session itself), keep the user logged in on the
+              // last-known persisted profile instead of signing them out.
+              // Previously this fell through to isAuthenticated: false,
+              // which logged out an offline cashier who had a perfectly
+              // valid cached session.
+              const cached = get()
+              if (cached.profile?.is_locked) {
+                set({ isLoading: false, isAuthenticated: false })
+              } else if (cached.profile && cached.user?.id === session.user.id) {
+                set({ user: session.user, session, isAuthenticated: true, isLoading: false })
+              } else {
+                set({ isLoading: false, isAuthenticated: false })
+              }
+            }
           } else {
             set({ isLoading: false, isAuthenticated: false })
           }
@@ -112,15 +131,29 @@ export const useAuthStore = create(
         set({ isLoading: true })
         
         try {
-          const { data, error } = await supabase.auth.signInWithPassword({ email, password })
-          
+          const { data, error } = await withTimeout(
+            supabase.auth.signInWithPassword({ email, password }),
+            15000,
+            'Slow or no connection — check your network and try again',
+          )
+
           if (error) {
             set({ isLoading: false })
             throw error
           }
-          
-          const profileData = await loadProfile(data.user.id)
-          
+
+          const profileData = await withTimeout(
+            loadProfile(),
+            15000,
+            'Slow or no connection — check your network and try again',
+          )
+
+          if (profileData.is_locked) {
+            await supabase.auth.signOut()
+            set({ isLoading: false })
+            throw new Error(`Account locked${profileData.locked_reason ? `: ${profileData.locked_reason}` : ''}. Contact your Super Admin to unlock it.`)
+          }
+
           set({
             user: data.user,
             session: data.session,
@@ -136,32 +169,42 @@ export const useAuthStore = create(
           
           return profileData.userType
         } catch (err) {
-          // Fallback: Check if we have a cached session that matches
+          // Offline fallback: if this is the same person who was already
+          // logged in on this device, getSession() still has their token
+          // locally and we already have their profile persisted from last
+          // time — use that instead of re-fetching (which needs the network
+          // that just failed). This only re-uses an existing valid session;
+          // it never accepts a password without checking it when online.
+          const cached = get()
+          if (cached.profile?.email === email && cached.profile?.is_locked) {
+            // Must escape the inner try/catch below undiluted — it exists
+            // to swallow network errors and fall through to the original
+            // message, but a lock is a real, user-facing reason to stop.
+            set({ isLoading: false })
+            throw new Error(`Account locked${cached.profile.locked_reason ? `: ${cached.profile.locked_reason}` : ''}. Contact your Super Admin to unlock it.`)
+          }
+
           try {
             const { data: { session } } = await supabase.auth.getSession()
-            
-            if (session?.user && session.user.email === email) {
-              const profileData = await loadProfile(session.user.id)
-              
+            if (session?.user && session.user.email === email && cached.profile?.email === email) {
               set({
                 user: session.user,
                 session,
-                profile: profileData,
-                tenant: profileData.tenants || null,
-                role: profileData.role,
-                branch: profileData.branch || null,
-                userType: profileData.userType,
-                tenantStatus: profileData.tenantStatus || null,
+                profile: cached.profile,
+                tenant: cached.tenant,
+                role: cached.role,
+                branch: cached.branch,
+                userType: cached.userType,
+                tenantStatus: cached.tenantStatus,
                 isAuthenticated: true,
                 isLoading: false,
               })
-              
-              return profileData.userType
+              return cached.userType
             }
           } catch (cacheErr) {
             // Cache fallback failed, continue to throw original error
           }
-          
+
           set({ isLoading: false })
           throw err
         }
@@ -180,7 +223,7 @@ export const useAuthStore = create(
         // and set full auth state so ProtectedRoute doesn't bounce the user.
         if (data.session && data.user) {
           try {
-            const profileData = await loadProfile(data.user.id)
+            const profileData = await loadProfile()
             set({
               user: data.user,
               session: data.session,
@@ -215,6 +258,56 @@ export const useAuthStore = create(
           isAuthenticated: false,
           isLoading: false,
         })
+      },
+
+      // The other half of offline-first auth: a cashier can keep working on
+      // a cached session while offline, but the moment connectivity returns
+      // this quietly confirms the server still agrees with what the device
+      // trusted locally. It only locks on a genuine mismatch (the session
+      // token now resolves to a different identity, or the server's own
+      // record disagrees with what's cached) — never for a plain network
+      // failure, and never for a routine admin action that already has its
+      // own handling (suspension already redirects via tenantStatus).
+      validateSession: async () => {
+        if (!navigator.onLine) return
+        const cached = get()
+        if (!cached.isAuthenticated || !cached.user) return
+
+        try {
+          const { data: { user: serverUser }, error: authErr } = await supabase.auth.getUser()
+          if (authErr || !serverUser) return // couldn't reach/validate — inconclusive, not a mismatch
+
+          if (serverUser.id !== cached.user.id) {
+            // The live session token no longer resolves to the identity this
+            // device has been operating as offline — a real mismatch.
+            try { await supabase.rpc('lock_my_account', { p_reason: 'Session identity mismatch on background revalidation' }) } catch { /* best-effort */ }
+            await get().clearAuth()
+            return
+          }
+
+          const freshProfile = await loadProfile()
+          if (!freshProfile) return
+
+          if (freshProfile.is_locked) {
+            // Already locked (by this check on another device, or by an
+            // admin) — just sign out locally, no need to lock again.
+            await get().clearAuth()
+            return
+          }
+
+          if (freshProfile.email !== cached.profile?.email) {
+            // The server's authoritative record for this session no longer
+            // matches what was cached while offline.
+            try { await supabase.rpc('lock_my_account', { p_reason: 'Account details no longer match this device\'s cached session' }) } catch { /* best-effort */ }
+            await get().clearAuth()
+            return
+          }
+
+          // Confirmed consistent — refresh the cached profile quietly.
+          set({ profile: freshProfile })
+        } catch {
+          // Network/timeout mid-check — inconclusive, try again next cycle
+        }
       },
 
       setAuth: ({ user, session, profile, tenant, role, branch }) =>

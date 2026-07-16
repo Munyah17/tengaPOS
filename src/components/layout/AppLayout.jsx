@@ -25,6 +25,21 @@ export default function AppLayout() {
     })
   }, [tenant?.id])
 
+  // Quietly reconfirm the offline-cached session against the server on the
+  // same rhythm as data sync — immediately once online, then every 5
+  // minutes. Locks the account only on a genuine identity mismatch; a
+  // network hiccup here does nothing (see validateSession).
+  useEffect(() => {
+    const tick = () => useAuthStore.getState().validateSession()
+    tick()
+    const interval = setInterval(tick, 5 * 60 * 1000)
+    window.addEventListener('online', tick)
+    return () => {
+      clearInterval(interval)
+      window.removeEventListener('online', tick)
+    }
+  }, [])
+
   return (
     <div className="flex h-screen max-h-screen overflow-hidden bg-slate-50 dark:bg-slate-950" style={{ height: '100dvh' }}>
       <Sidebar open={mobileSidebarOpen} onClose={() => setMobileSidebarOpen(false)} />

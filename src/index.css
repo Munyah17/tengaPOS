@@ -52,6 +52,16 @@ table {
   min-width: 0;
 }
 
+/* Touch-target sizing for touchscreen POS terminals — keyed on actual input
+   type (coarse pointer = finger/stylus), not screen width. A wide embedded
+   terminal can still land in the "desktop" width breakpoint while being
+   touch-only, so width alone isn't a reliable enough signal for tap size. */
+@media (pointer: coarse) {
+  button, a, input, select, [role="button"] {
+    min-height: 40px;
+  }
+}
+
 .glass {
   background: rgba(255, 255, 255, 0.05);
   backdrop-filter: blur(12px);

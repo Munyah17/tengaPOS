@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Car, Store, ChefHat, Clock } from 'lucide-react'
-import { useOrderStore } from '@/stores/orderStore'
+import { useAuthStore } from '@/stores/authStore'
+import { supabase } from '@/lib/supabase'
 
 function waitLabel(ms) {
   const s = Math.floor(ms / 1000)
@@ -43,13 +44,68 @@ function OrderTile({ order, now }) {
 }
 
 export default function Dining() {
-  const { orders } = useOrderStore()
+  // This is a public route (no /:tenantId in the path) meant for a
+  // second-screen display device — it relies on the persisted auth state
+  // from a prior login on this same browser, same as Kitchen/Orders.
+  // Previously it read from a Zustand store nothing ever populated for
+  // real tenants, so it never showed anything beyond dev-time seed data.
+  const { tenant } = useAuthStore()
+  const [rawOrders, setRawOrders] = useState([])
   const [now, setNow] = useState(Date.now())
 
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 1000)
     return () => clearInterval(t)
   }, [])
+
+  useEffect(() => {
+    if (!tenant?.id) return
+
+    supabase
+      .from('orders')
+      .select('id, order_no, status, type, created_at, updated_at')
+      .eq('tenant_id', tenant.id)
+      .eq('pos_mode', 'restaurant')
+      .not('status', 'in', '(completed,cancelled)')
+      .then(({ data }) => setRawOrders(data || []))
+
+    const channel = supabase
+      .channel(`dining-${tenant.id}`)
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'orders',
+        filter: `tenant_id=eq.${tenant.id}`,
+      }, (payload) => {
+        if (payload.eventType === 'INSERT') {
+          if (payload.new.pos_mode !== 'restaurant') return
+          setRawOrders(prev => [payload.new, ...prev])
+        } else if (payload.eventType === 'UPDATE') {
+          setRawOrders(prev => {
+            if (['completed', 'cancelled'].includes(payload.new.status)) {
+              return prev.filter(o => o.id !== payload.new.id)
+            }
+            return prev.map(o => o.id === payload.new.id ? { ...o, ...payload.new } : o)
+          })
+        } else if (payload.eventType === 'DELETE') {
+          setRawOrders(prev => prev.filter(o => o.id !== payload.old.id))
+        }
+      })
+      .subscribe()
+
+    return () => { supabase.removeChannel(channel) }
+  }, [tenant?.id])
+
+  const orders = rawOrders.map(o => ({
+    id: o.id,
+    number: o.order_no || o.id.slice(0, 6),
+    status: o.status,
+    type: o.type,
+    startedAt: new Date(o.created_at).getTime(),
+    // No dedicated ready_at column — updated_at is a reasonable proxy since
+    // the last write to a 'ready' order is normally the transition to it.
+    readyAt: o.status === 'ready' ? new Date(o.updated_at).getTime() : null,
+  }))
 
   const preparing = orders.filter((o) => o.status !== 'ready')
   const readyCounter = orders.filter((o) => o.status === 'ready' && o.type === 'counter')

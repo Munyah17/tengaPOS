@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect, useRef } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { motion } from 'framer-motion'
 import {
   Search, Plus, Upload, Download, ExternalLink, Edit, Trash2,
@@ -17,7 +18,14 @@ import toast from 'react-hot-toast'
 const BLANK = {
   name: '', brand: '', sku: '', barcode: '', price: '', landingPrice: '',
   stock: '', lowStockThreshold: '10', imageUrl: '', imageUnavailable: false,
+  vatTreatment: 'standard',
 }
+
+const VAT_TREATMENTS = [
+  { key: 'standard', label: 'Standard-rated', hint: 'VAT charged at the normal rate' },
+  { key: 'zero_rated', label: 'Zero-rated', hint: '0% VAT — still a taxable supply (e.g. basic foodstuffs, exports)' },
+  { key: 'exempt', label: 'Exempt', hint: 'Outside VAT entirely (e.g. medicines, education)' },
+]
 
 export default function Inventory() {
   const { posMode } = useThemeStore()
@@ -27,8 +35,6 @@ export default function Inventory() {
   const [showAdd, setShowAdd] = useState(false)
   const [showImport, setShowImport] = useState(false)
   const [editTarget, setEditTarget] = useState(null)
-  const [products, setProducts] = useState([])
-  const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [form, setForm] = useState(BLANK)
   const [imageFile, setImageFile] = useState(null)
@@ -36,22 +42,29 @@ export default function Inventory() {
   const [uploadingImage, setUploadingImage] = useState(false)
   const fileInputRef = useRef(null)
 
-  const loadProducts = () => {
-    if (!tenant?.id) return
-    setLoading(true)
-    fetchProducts(tenant.id)
-      .then(setProducts)
-      .catch(() => toast.error('Failed to load products'))
-      .finally(() => setLoading(false))
-  }
+  const queryClient = useQueryClient()
+  // Same cache key as POS's product query — editing a product here makes
+  // POS see the change immediately too, without either page re-fetching
+  // from scratch just because the other one changed something.
+  const productsQuery = useQuery({
+    queryKey: ['products', tenant?.id],
+    queryFn: () => fetchProducts(tenant.id),
+    enabled: !!tenant?.id,
+    staleTime: 30000,
+  })
+  const products = productsQuery.data || []
+  const loading = productsQuery.isLoading
 
-  useEffect(() => { loadProducts() }, [tenant?.id])
+  useEffect(() => {
+    if (productsQuery.isError) toast.error('Failed to load products')
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [productsQuery.isError])
 
   const filtered = useMemo(() => {
     if (!search) return products
     const q = search.toLowerCase()
     return products.filter(
-      p => p.name.toLowerCase().includes(q) ||
+      p => (p.name || '').toLowerCase().includes(q) ||
         (p.sku || '').toLowerCase().includes(q) ||
         (p.barcode || '').includes(q)
     )
@@ -82,6 +95,7 @@ export default function Inventory() {
       lowStockThreshold: p.low_stock_threshold ?? 10,
       imageUrl: p.image_url || p.image || '',
       imageUnavailable: p.image_unavailable === true,
+      vatTreatment: p.vat_treatment || 'standard',
     })
     setEditTarget(p)
     resetImagePicker()
@@ -119,11 +133,12 @@ export default function Inventory() {
 
       if (editTarget) {
         const updated = await updateProduct(editTarget.id, payload)
-        setProducts(prev => prev.map(p => p.id === editTarget.id ? { ...updated, stock: updated.stock_qty, category: p.category } : p))
+        queryClient.setQueryData(['products', tenant.id], (old) =>
+          (old || []).map(p => p.id === editTarget.id ? { ...updated, stock: updated.stock_qty, category: p.category } : p))
         toast.success('Product updated')
       } else {
         const created = await insertProduct(tenant.id, payload)
-        setProducts(prev => [...prev, created])
+        queryClient.setQueryData(['products', tenant.id], (old) => [...(old || []), created])
         toast.success('Product added')
       }
       setShowAdd(false)
@@ -138,7 +153,7 @@ export default function Inventory() {
   const handleDelete = async (id) => {
     try {
       await deleteProduct(id)
-      setProducts(prev => prev.filter(p => p.id !== id))
+      queryClient.setQueryData(['products', tenant.id], (old) => (old || []).filter(p => p.id !== id))
       toast.success('Product deleted')
     } catch (err) {
       toast.error(err.message || 'Failed to delete')
@@ -171,7 +186,7 @@ export default function Inventory() {
         }))
       )
       const succeeded = results.filter(r => r.status === 'fulfilled').length
-      loadProducts()
+      queryClient.invalidateQueries({ queryKey: ['products', tenant.id] })
       setShowImport(false)
       toast.success(`${succeeded} of ${rows.length} products imported — add photos from the product list when ready`)
     } catch {
@@ -387,6 +402,19 @@ export default function Inventory() {
               />
             </div>
           ))}
+          <div>
+            <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">VAT Treatment</label>
+            <select
+              value={form.vatTreatment}
+              onChange={e => setForm({ ...form, vatTreatment: e.target.value })}
+              className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+            >
+              {VAT_TREATMENTS.map(t => <option key={t.key} value={t.key}>{t.label}</option>)}
+            </select>
+            <p className="mt-1 text-xs text-slate-500">
+              {VAT_TREATMENTS.find(t => t.key === form.vatTreatment)?.hint}
+            </p>
+          </div>
           <div className="flex items-center gap-2 text-sm text-slate-500">
             <ExternalLink className="h-3.5 w-3.5" />
             <a href="http://scancode.co.zw" target="_blank" rel="noopener noreferrer" className="text-brand-600 hover:underline">Need barcodes? Visit scancode.co.zw</a>

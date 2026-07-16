@@ -2,10 +2,12 @@ import { useEffect, useState } from 'react'
 import { useNavigate, useSearchParams, Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import {
-  CreditCard, Smartphone, CheckCircle, Clock, ArrowRight,
+  CheckCircle, Clock, ArrowRight,
   Sparkles, ShieldCheck, Loader2, ArrowLeft,
 } from 'lucide-react'
 import posIcon from '@/assets/pos-icon.png'
+import paynowBanner from '@/assets/paynow-banner.svg'
+import stripeBanner from '@/assets/stripe-banner.png'
 import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/stores/authStore'
 import { usePlanPricing } from '@/lib/platformSettings'
@@ -257,25 +259,23 @@ export default function Checkout() {
           <div className="grid grid-cols-2 gap-3">
             <button
               onClick={() => setProvider('paynow')}
-              className={`flex items-center justify-center gap-2 rounded-xl border px-4 py-3 text-sm font-semibold transition-all ${
+              className={`flex items-center justify-center rounded-xl border px-4 py-3 transition-all ${
                 provider === 'paynow'
-                  ? 'border-green-500 bg-green-500/10 text-green-300'
-                  : 'border-white/10 bg-white/5 text-slate-400 hover:border-white/25'
+                  ? 'border-green-500 bg-white'
+                  : 'border-white/10 bg-white/90 hover:border-white/25'
               }`}
             >
-              <Smartphone className="h-4 w-4" />
-              Paynow · EcoCash
+              <img src={paynowBanner} alt="Paynow" className="h-6 w-auto" />
             </button>
             <button
               onClick={() => setProvider('stripe')}
-              className={`flex items-center justify-center gap-2 rounded-xl border px-4 py-3 text-sm font-semibold transition-all ${
+              className={`flex items-center justify-center rounded-xl border px-4 py-3 transition-all ${
                 provider === 'stripe'
-                  ? 'border-indigo-500 bg-indigo-500/10 text-indigo-300'
-                  : 'border-white/10 bg-white/5 text-slate-400 hover:border-white/25'
+                  ? 'border-indigo-500 bg-white'
+                  : 'border-white/10 bg-white/90 hover:border-white/25'
               }`}
             >
-              <CreditCard className="h-4 w-4" />
-              Card · Stripe
+              <img src={stripeBanner} alt="Stripe" className="h-6 w-auto" />
             </button>
           </div>
 
@@ -288,7 +288,7 @@ export default function Checkout() {
             {redirecting ? 'Redirecting to secure checkout…' : `Continue to secure checkout — $${planPrice(PLANS.find((p) => p.key === selectedPlan))}`}
           </button>
 
-          <p className="mt-3 text-center text-xs text-slate-500">
+          <p className="mt-3 text-center text-xs text-white">
             You'll be redirected to {provider === 'stripe' ? 'Stripe' : 'Paynow'}'s secure hosted page.
             tengaPOS never sees or stores your payment details.
           </p>
@@ -303,12 +303,12 @@ export default function Checkout() {
             </button>
           )}
 
-          <p className="mt-6 text-center text-xs text-slate-500">
+          <p className="mt-6 text-center text-xs text-white">
             Need Business or Enterprise?{' '}
             <a href="mailto:sales@tengapos.co.zw" className="text-brand-400 hover:text-brand-300">Contact sales</a>
           </p>
 
-          <Link to="/" className="mt-4 flex items-center justify-center gap-1.5 text-xs text-slate-500 hover:text-slate-300">
+          <Link to="/" className="mt-4 flex items-center justify-center gap-1.5 text-xs text-white hover:text-slate-300">
             <ArrowLeft className="h-3 w-3" />
             Back to home
           </Link>

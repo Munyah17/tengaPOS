@@ -39,6 +39,7 @@ export async function insertProduct(tenantId, product) {
       unit: product.unit || null,
       image_url: product.imageUrl || null,
       image_unavailable: product.imageUnavailable === true,
+      vat_treatment: product.vatTreatment || 'standard',
       is_active: true,
       pos_visible: true,
     })
@@ -62,6 +63,7 @@ export async function updateProduct(id, updates) {
       low_stock_threshold: parseInt(updates.lowStockThreshold) || 10,
       image_url: updates.imageUrl || null,
       image_unavailable: updates.imageUnavailable === true,
+      vat_treatment: updates.vatTreatment || 'standard',
       updated_at: new Date().toISOString(),
     })
     .eq('id', id)
@@ -288,6 +290,90 @@ export async function fetchTransactions(tenantId) {
     .limit(500)
   if (error) throw error
   return data
+}
+
+// ─── Void transactions ───────────────────────────────────────────────────────
+// Anyone can request; Shop Manager/Supervisor can approve; only Vendor can
+// give final validation, which is the step that actually restores stock.
+
+export async function fetchVoids(tenantId) {
+  const { data, error } = await supabase
+    .from('voids')
+    .select(`
+      *,
+      orders(order_no),
+      requester:users!voids_requested_by_fkey(name),
+      approver:users!voids_approved_by_fkey(name),
+      validator:users!voids_validated_by_fkey(name)
+    `)
+    .eq('tenant_id', tenantId)
+    .order('created_at', { ascending: false })
+  if (error) throw error
+  return data
+}
+
+export async function requestVoid(orderId, reason) {
+  const { data, error } = await supabase.rpc('request_void', { p_order_id: orderId, p_reason: reason })
+  if (error) throw error
+  return data
+}
+
+export async function approveVoid(voidId) {
+  const { error } = await supabase.rpc('approve_void', { p_void_id: voidId })
+  if (error) throw error
+}
+
+export async function validateVoid(voidId) {
+  const { error } = await supabase.rpc('validate_void', { p_void_id: voidId })
+  if (error) throw error
+}
+
+export async function rejectVoid(voidId, reason) {
+  const { error } = await supabase.rpc('reject_void', { p_void_id: voidId, p_reason: reason || null })
+  if (error) throw error
+}
+
+// ─── Returns / Refunds ────────────────────────────────────────────────────────
+// Same approval tiers as voids, but validating one restores stock AND
+// records an actual refund transaction (goods were sold and are coming back).
+
+export async function fetchReturns(tenantId) {
+  const { data, error } = await supabase
+    .from('returns')
+    .select(`
+      *,
+      orders(order_no),
+      requester:users!returns_requested_by_fkey(name),
+      approver:users!returns_approved_by_fkey(name),
+      validator:users!returns_validated_by_fkey(name)
+    `)
+    .eq('tenant_id', tenantId)
+    .order('created_at', { ascending: false })
+  if (error) throw error
+  return data
+}
+
+export async function requestReturn(orderId, reason, refundAmount) {
+  const { data, error } = await supabase.rpc('request_return', {
+    p_order_id: orderId, p_reason: reason, p_refund_amount: refundAmount,
+  })
+  if (error) throw error
+  return data
+}
+
+export async function approveReturn(returnId) {
+  const { error } = await supabase.rpc('approve_return', { p_return_id: returnId })
+  if (error) throw error
+}
+
+export async function validateReturn(returnId) {
+  const { error } = await supabase.rpc('validate_return', { p_return_id: returnId })
+  if (error) throw error
+}
+
+export async function rejectReturn(returnId, reason) {
+  const { error } = await supabase.rpc('reject_return', { p_return_id: returnId, p_reason: reason || null })
+  if (error) throw error
 }
 
 // ─── Kitchen / Restaurant orders ─────────────────────────────────────────────

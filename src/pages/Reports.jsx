@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { motion } from 'framer-motion'
 import { BarChart3, TrendingUp, DollarSign, Package, RefreshCw, Calendar, Download } from 'lucide-react'
 import {
@@ -29,8 +30,14 @@ export default function Reports() {
   const { tenant } = useAuthStore()
   const accent = posMode === 'restaurant' ? '#22c55e' : '#3b82f6'
 
-  const [metrics, setMetrics] = useState(null)
-  const [loading, setLoading] = useState(false)
+  const metricsQuery = useQuery({
+    queryKey: ['reportMetrics', tenant?.id],
+    queryFn: () => fetchReportMetrics(tenant.id),
+    enabled: !!tenant?.id,
+    staleTime: 60000,
+  })
+  const metrics = metricsQuery.data || null
+  const loading = metricsQuery.isLoading
 
   // ─── Formatted export: date presets + custom range ───
   const [exportOpen, setExportOpen] = useState(false)
@@ -73,17 +80,6 @@ export default function Reports() {
       setExporting(false)
     }
   }
-
-  const load = () => {
-    if (!tenant?.id) return
-    setLoading(true)
-    fetchReportMetrics(tenant.id)
-      .then(setMetrics)
-      .catch(() => {})
-      .finally(() => setLoading(false))
-  }
-
-  useEffect(() => { load() }, [tenant?.id])
 
   const monthlyData = metrics?.monthlyData ?? []
   const branchData  = metrics?.branchData  ?? []

@@ -1,5 +1,5 @@
 import { useRef } from 'react'
-import { Printer, X, CheckCircle, AlertTriangle } from 'lucide-react'
+import { Printer, X, CheckCircle } from 'lucide-react'
 import { useFiscalStore } from '@/stores/fiscalStore'
 import { formatCurrency } from '@/utils/formatters'
 
@@ -183,10 +183,10 @@ export default function ZimraReceipt({ receipt, onClose }) {
             {isFiscalised ? (
               <CheckCircle className="h-5 w-5 text-green-500" />
             ) : (
-              <AlertTriangle className="h-5 w-5 text-amber-500" />
+              <Printer className="h-5 w-5 text-slate-400" />
             )}
             <span className="font-bold text-slate-900 dark:text-white">
-              {isFiscalised ? 'Fiscal Receipt' : 'Receipt Preview'}
+              {isFiscalised ? 'Fiscal Receipt' : 'Receipt'}
             </span>
           </div>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">

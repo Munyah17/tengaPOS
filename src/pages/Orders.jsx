@@ -5,8 +5,8 @@ import ExportMenu from '@/components/common/ExportMenu'
 import { formatCurrency, formatDateTime } from '@/utils/formatters'
 import { useThemeStore } from '@/stores/themeStore'
 import { useAuthStore } from '@/stores/authStore'
-import { useOrderStore } from '@/stores/orderStore'
 import { fetchOrders } from '@/lib/db'
+import { supabase } from '@/lib/supabase'
 import toast from 'react-hot-toast'
 
 const ORDER_STATUS = {
@@ -145,36 +145,66 @@ function RestaurantOrders({ orders }) {
 export default function Orders() {
   const { posMode } = useThemeStore()
   const { tenant } = useAuthStore()
-  const { orders: liveOrders } = useOrderStore()
   const isRestaurant = posMode === 'restaurant'
-  const [dbOrders, setDbOrders] = useState([])
+  const [rawOrders, setRawOrders] = useState([])
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
+  // Re-render periodically so "elapsed minutes" on restaurant order cards
+  // keeps ticking even with no new realtime events
+  const [, setClockTick] = useState(0)
 
+  // Same live-sync pattern as Kitchen.jsx — previously this page only
+  // fetched once on mount, so an order advancing through the kitchen
+  // (received -> cooking -> ready) never reflected here without a manual
+  // reload. Now both boards subscribe to the same table and stay in sync.
   useEffect(() => {
     if (!tenant?.id) return
-    fetchOrders(tenant.id)
-      .then(rows => setDbOrders(rows.map(o => ({
-        id: o.order_no || o.id,
-        date: o.created_at,
-        customer: 'Walk-in',
-        items: o.order_items?.reduce((s, i) => s + i.qty, 0) ?? 0,
-        total: parseFloat(o.total),
-        method: o.payment_method || '—',
-        status: o.status,
-      }))))
-      .catch(() => {})
+    fetchOrders(tenant.id).then(setRawOrders).catch(() => {})
+
+    const channel = supabase
+      .channel(`orders-board-${tenant.id}`)
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'orders',
+        filter: `tenant_id=eq.${tenant.id}`,
+      }, (payload) => {
+        if (payload.eventType === 'INSERT') {
+          supabase.from('orders').select('*, order_items(*), users(name)').eq('id', payload.new.id).single()
+            .then(({ data }) => { if (data) setRawOrders(prev => [data, ...prev]) })
+        } else if (payload.eventType === 'UPDATE') {
+          setRawOrders(prev => prev.map(o => o.id === payload.new.id ? { ...o, ...payload.new } : o))
+        } else if (payload.eventType === 'DELETE') {
+          setRawOrders(prev => prev.filter(o => o.id !== payload.old.id))
+        }
+      })
+      .subscribe()
+
+    const clock = setInterval(() => setClockTick(t => t + 1), 30000)
+    return () => { supabase.removeChannel(channel); clearInterval(clock) }
   }, [tenant?.id])
 
-  const restaurantOrders = liveOrders.map((o) => ({
-    id: `#${o.number}`,
-    items: o.items.map((i) => `${i.name}${i.qty > 1 ? ` x${i.qty}` : ''}`),
+  const dbOrders = useMemo(() => rawOrders.map(o => ({
+    id: o.order_no || o.id,
+    date: o.created_at,
+    customer: 'Walk-in',
+    items: o.order_items?.reduce((s, i) => s + i.qty, 0) ?? 0,
+    total: parseFloat(o.total),
+    method: o.payment_method || '—',
     status: o.status,
-    orderType: o.type,
-    total: o.items.reduce((s, i) => s + i.price * i.qty, 0),
-    time: new Date(o.startedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-    elapsed: Math.floor((Date.now() - o.startedAt) / 60000),
-  }))
+  })), [rawOrders])
+
+  const restaurantOrders = useMemo(() => rawOrders
+    .filter(o => o.pos_mode === 'restaurant' && !['completed', 'cancelled'].includes(o.status))
+    .map(o => ({
+      id: o.order_no || `#${o.id.slice(0, 6)}`,
+      items: (o.order_items || []).map(i => `${i.name}${i.qty > 1 ? ` x${i.qty}` : ''}`),
+      status: o.status,
+      orderType: o.type,
+      total: parseFloat(o.total),
+      time: new Date(o.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      elapsed: Math.floor((Date.now() - new Date(o.created_at).getTime()) / 60000),
+    })), [rawOrders])
 
   const allOrders = dbOrders
 

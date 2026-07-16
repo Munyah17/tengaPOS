@@ -42,8 +42,8 @@ function StaffPicker({ value, onChange, staffList }) {
 
   const list = staffList || []
   const filtered = list.filter((s) =>
-    s.name.toLowerCase().includes(search.toLowerCase()) ||
-    s.role.toLowerCase().includes(search.toLowerCase())
+    (s.name || '').toLowerCase().includes(search.toLowerCase()) ||
+    (s.role || '').toLowerCase().includes(search.toLowerCase())
   )
   const selected = list.find((s) => s.id === value)
 

@@ -249,25 +249,27 @@ export default function HR() {
   const totalNet   = entries.reduce((s, e) => s + (parseFloat(e.net_pay)   || 0), 0)
   const totalDed   = totalGross - totalNet
 
-  const inp  = 'rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-brand-500 focus:outline-none dark:border-slate-700 dark:bg-slate-900 dark:text-white'
+  const inp  = 'w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-brand-500 focus:outline-none dark:border-slate-700 dark:bg-slate-900 dark:text-white'
   const cell = 'w-full rounded border border-slate-200 bg-transparent px-2 py-1 text-right text-sm text-slate-900 focus:border-brand-500 focus:outline-none dark:border-slate-700 dark:text-white'
 
   return (
-    <div className="p-6">
+    <div className="p-4 sm:p-6">
       <div className="mb-6">
         <h1 className="text-2xl font-extrabold text-slate-900 dark:text-white">HR & Payroll</h1>
         <p className="text-sm text-slate-500">Manage staff pay rates and process payroll runs</p>
       </div>
 
-      {/* Tabs */}
-      <div className="mb-6 flex w-fit gap-1 rounded-xl border border-slate-200 bg-slate-50 p-1 dark:border-slate-800 dark:bg-slate-900">
+      {/* Tabs — scrolls horizontally instead of clipping past the edge on
+          narrow screens (the page hides overflow-x globally, so without
+          this the History tab could be unreachable on mobile) */}
+      <div className="mb-6 flex w-fit max-w-full gap-1 overflow-x-auto rounded-xl border border-slate-200 bg-slate-50 p-1 dark:border-slate-800 dark:bg-slate-900">
         {[
           { key: 'rates',   label: 'Pay Rates',    Icon: Users },
           { key: 'run',     label: 'Run Payroll',  Icon: DollarSign },
           { key: 'history', label: 'History',       Icon: Calendar },
         ].map(({ key, label, Icon }) => (
           <button key={key} onClick={() => setTab(key)}
-            className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold transition-colors ${tab === key ? 'bg-white text-slate-900 shadow dark:bg-slate-800 dark:text-white' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}>
+            className={`flex flex-shrink-0 items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold transition-colors ${tab === key ? 'bg-white text-slate-900 shadow dark:bg-slate-800 dark:text-white' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}>
             <Icon className="h-4 w-4" />{label}
           </button>
         ))}
@@ -334,7 +336,7 @@ export default function HR() {
             </div>
             <div className="mt-4">
               <label className="mb-1.5 block text-xs font-medium text-slate-600 dark:text-slate-400">Notes (optional)</label>
-              <input type="text" value={run.notes} className={`${inp} w-full`} placeholder="e.g. Includes July bonus"
+              <input type="text" value={run.notes} className={inp} placeholder="e.g. Includes July bonus"
                 onChange={e => setRun(r => ({ ...r, notes: e.target.value }))} />
             </div>
           </div>
@@ -429,7 +431,7 @@ export default function HR() {
                     {STATUS_CFG[r.status]?.label || r.status}
                   </span>
                 </div>
-                <div className="flex items-center gap-4">
+                <div className="flex flex-wrap items-center gap-4">
                   <div className="text-right">
                     <p className="text-[10px] uppercase text-slate-500">Gross</p>
                     <p className="text-sm font-bold text-slate-900 dark:text-white">{formatCurrency(r.total_gross)}</p>

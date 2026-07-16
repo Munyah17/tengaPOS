@@ -1,56 +1,66 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { Toaster } from 'react-hot-toast'
-import { useEffect } from 'react'
+import { useEffect, lazy, Suspense } from 'react'
 import { useThemeStore } from '@/stores/themeStore'
 import { useAuthStore, NAV_PERMISSIONS } from '@/stores/authStore'
-
-import Landing from '@/pages/Landing'
-import Login from '@/pages/Login'
-import Register from '@/pages/Register'
-import Dashboard from '@/pages/Dashboard'
-import POS from '@/pages/POS'
-import Inventory from '@/pages/Inventory'
-import Orders from '@/pages/Orders'
-import Kitchen from '@/pages/Kitchen'
-import Transactions from '@/pages/Transactions'
-import Reports from '@/pages/Reports'
-import Staff from '@/pages/Staff'
-import Tasks from '@/pages/Tasks'
-import Branches from '@/pages/Branches'
-import Fiscalisation from '@/pages/Fiscalisation'
-import Settings from '@/pages/Settings'
-import Insights from '@/pages/Insights'
-import PaymentReturn from '@/pages/PaymentReturn'
-import Payments from '@/pages/Payments'
-import HR from '@/pages/HR'
-import Notifications from '@/pages/Notifications'
 import AppLayout from '@/components/layout/AppLayout'
-
-import Dining from '@/pages/Dining'
-import PendingApproval from '@/pages/PendingApproval'
 import AdminLayout from '@/components/admin/AdminLayout'
-import AdminDashboard from '@/pages/admin/AdminDashboard'
-import SuperAdminDashboard from '@/pages/admin/SuperAdminDashboard'
-import AdminTenants from '@/pages/admin/AdminTenants'
-import AdminStaff from '@/pages/admin/AdminStaff'
-import AdminSupport from '@/pages/admin/AdminSupport'
-import AdminReports from '@/pages/admin/AdminReports'
-import AdminSettings from '@/pages/admin/AdminSettings'
-import AdminNotifications from '@/pages/admin/AdminNotifications'
-import SuperAdminSubscriptions from '@/pages/admin/SuperAdminSubscriptions'
-import SuperAdminBilling from '@/pages/admin/SuperAdminBilling'
-import SuperAdminPricing from '@/pages/admin/SuperAdminPricing'
-import SuperAdminHealth from '@/pages/admin/SuperAdminHealth'
-import SuperAdminAudit from '@/pages/admin/SuperAdminAudit'
-import SuperAdminCompliance from '@/pages/admin/SuperAdminCompliance'
-import SuperAdminBackups from '@/pages/admin/SuperAdminBackups'
-import SuperAdminRoles from '@/pages/admin/SuperAdminRoles'
-import SuperAdminAnnouncements from '@/pages/admin/SuperAdminAnnouncements'
-import SuperAdminBroadcasts from '@/pages/admin/SuperAdminBroadcasts'
-import AdminUsers from '@/pages/admin/AdminUsers'
-import AdminFiscalRequests from '@/pages/admin/AdminFiscalRequests'
-import Checkout from '@/pages/Checkout'
+
+// Route-level code splitting — each page ships as its own chunk instead of
+// one ~2.5MB bundle everyone downloads before anything renders, regardless
+// of which single page they actually landed on.
+const Landing = lazy(() => import('@/pages/Landing'))
+const Login = lazy(() => import('@/pages/Login'))
+const Register = lazy(() => import('@/pages/Register'))
+const Dashboard = lazy(() => import('@/pages/Dashboard'))
+const POS = lazy(() => import('@/pages/POS'))
+const Inventory = lazy(() => import('@/pages/Inventory'))
+const Orders = lazy(() => import('@/pages/Orders'))
+const Kitchen = lazy(() => import('@/pages/Kitchen'))
+const Transactions = lazy(() => import('@/pages/Transactions'))
+const Reports = lazy(() => import('@/pages/Reports'))
+const Staff = lazy(() => import('@/pages/Staff'))
+const Tasks = lazy(() => import('@/pages/Tasks'))
+const Branches = lazy(() => import('@/pages/Branches'))
+const Fiscalisation = lazy(() => import('@/pages/Fiscalisation'))
+const Settings = lazy(() => import('@/pages/Settings'))
+const Insights = lazy(() => import('@/pages/Insights'))
+const PaymentReturn = lazy(() => import('@/pages/PaymentReturn'))
+const Payments = lazy(() => import('@/pages/Payments'))
+const HR = lazy(() => import('@/pages/HR'))
+const Notifications = lazy(() => import('@/pages/Notifications'))
+const Dining = lazy(() => import('@/pages/Dining'))
+const PendingApproval = lazy(() => import('@/pages/PendingApproval'))
+const AdminDashboard = lazy(() => import('@/pages/admin/AdminDashboard'))
+const SuperAdminDashboard = lazy(() => import('@/pages/admin/SuperAdminDashboard'))
+const AdminTenants = lazy(() => import('@/pages/admin/AdminTenants'))
+const AdminStaff = lazy(() => import('@/pages/admin/AdminStaff'))
+const AdminSupport = lazy(() => import('@/pages/admin/AdminSupport'))
+const AdminReports = lazy(() => import('@/pages/admin/AdminReports'))
+const AdminSettings = lazy(() => import('@/pages/admin/AdminSettings'))
+const AdminNotifications = lazy(() => import('@/pages/admin/AdminNotifications'))
+const SuperAdminSubscriptions = lazy(() => import('@/pages/admin/SuperAdminSubscriptions'))
+const SuperAdminBilling = lazy(() => import('@/pages/admin/SuperAdminBilling'))
+const SuperAdminPricing = lazy(() => import('@/pages/admin/SuperAdminPricing'))
+const SuperAdminHealth = lazy(() => import('@/pages/admin/SuperAdminHealth'))
+const SuperAdminAudit = lazy(() => import('@/pages/admin/SuperAdminAudit'))
+const SuperAdminCompliance = lazy(() => import('@/pages/admin/SuperAdminCompliance'))
+const SuperAdminBackups = lazy(() => import('@/pages/admin/SuperAdminBackups'))
+const SuperAdminRoles = lazy(() => import('@/pages/admin/SuperAdminRoles'))
+const SuperAdminAnnouncements = lazy(() => import('@/pages/admin/SuperAdminAnnouncements'))
+const SuperAdminBroadcasts = lazy(() => import('@/pages/admin/SuperAdminBroadcasts'))
+const AdminUsers = lazy(() => import('@/pages/admin/AdminUsers'))
+const AdminFiscalRequests = lazy(() => import('@/pages/admin/AdminFiscalRequests'))
+const Checkout = lazy(() => import('@/pages/Checkout'))
+
+function RouteLoading() {
+  return (
+    <div className="flex h-screen w-full items-center justify-center bg-white dark:bg-slate-950">
+      <div className="h-8 w-8 animate-spin rounded-full border-2 border-slate-200 border-t-brand-600 dark:border-slate-700" />
+    </div>
+  )
+}
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -129,6 +139,7 @@ export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
+        <Suspense fallback={<RouteLoading />}>
         <Routes>
           <Route path="/" element={<Landing />} />
           <Route path="/login" element={<Login />} />
@@ -219,6 +230,7 @@ export default function App() {
 
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
+        </Suspense>
       </BrowserRouter>
       <Toaster
         position="top-right"

@@ -95,8 +95,17 @@ Deno.serve(async (req) => {
     const deviceId = String(cfg.device_id)
 
     // ── Build receipt lines ─────────────────────────────────────────────────
-    // Prices in POS are tax-exclusive (subtotal × 1.15 = total), so
-    // receiptLinesTaxInclusive: false and we send pre-tax unit prices.
+    // Shelf prices in POS are VAT-INCLUSIVE (the customer-facing price already
+    // contains VAT — never added on top), so receiptLinesTaxInclusive must be
+    // true and taxPercent must match the tenant's actual current rate (VAT
+    // rose to 15.5% from 1 Jan 2026 — was previously hardcoded to the old 15%,
+    // which also disagreed with the tax-exclusive flag below it).
+    // Only taxID 2 / code D (standard-rated) is verified against this
+    // project's working FDMS integration. Zero-rated/exempt codes are NOT
+    // guessed here — if a tenant disables VAT, we still report under the
+    // same verified code at 0%, rather than fabricate an unverified one.
+    const vatRate = receiptInput.vatRate ?? 15.5
+
     const receiptLines = (receiptInput.items || []).map((item: {
       name: string; price: number; quantity: number; hsCode?: string
     }) => ({
@@ -105,19 +114,19 @@ Deno.serve(async (req) => {
       receiptLineHSCode:    item.hsCode || '000000',
       receiptLineQuantity:  item.quantity,
       receiptLineUnitPrice: Math.round(item.price * 100) / 100,
-      taxPercent:           15.00,
-      taxID:                2,        // FDMS v7.2 taxID 2 = standard 15% VAT (code D)
+      taxPercent:           vatRate,
+      taxID:                2,        // FDMS v7.2 taxID 2 = standard-rated VAT (code D)
       receiptLineTotal:     Math.round(item.price * item.quantity * 100) / 100,
     }))
 
-    // ── Tax summary (code D = 15% standard VAT) ─────────────────────────────
+    // ── Tax summary ──────────────────────────────────────────────────────────
     const taxableAmount = Math.round((receiptInput.subtotal || 0) * 100) / 100
     const taxAmount     = Math.round((receiptInput.tax     || 0) * 100) / 100
     const receiptTaxes  = [
       {
-        taxCode:       'D',
-        taxPercent:    15.00,
-        taxID:         2,
+        taxCode:    'D',
+        taxPercent: vatRate,
+        taxID:      2,
         taxAmount,
         taxableAmount,
       },
@@ -133,12 +142,12 @@ Deno.serve(async (req) => {
       receipt: {
         deviceID:               deviceId,
         receiptType:            'FISCALINVOICE',
-        receiptCurrency:        'USD',
+        receiptCurrency:        receiptInput.currency || 'USD',
         receiptCounter:         newGlobalNo,
         receiptGlobalNo:        newGlobalNo,
         invoiceNo:              receiptInput.receiptNumber || `RCP-${newGlobalNo}`,
         receiptDate,
-        receiptLinesTaxInclusive: false,
+        receiptLinesTaxInclusive: true,
         receiptNotes:           '',
         receiptLines,
         receiptTaxes,
