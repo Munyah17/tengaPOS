@@ -471,7 +471,7 @@ export default function Fiscalisation() {
                   <CheckCircle className="h-3.5 w-3.5 text-green-500" />
                   Cert valid till:{' '}
                   <span className="font-medium text-slate-900 dark:text-white">
-                    {new Date(fiscal.certificateValidTill).toLocaleDateString()}
+                    {new Date(fiscal.certificateValidTill).toLocaleDateString('en-GB')}
                   </span>
                 </div>
               )}

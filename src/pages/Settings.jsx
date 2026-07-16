@@ -879,7 +879,7 @@ export default function Settings() {
                   <div className="text-xs text-slate-500">Day No: {fiscal.fiscalDayNo} &nbsp;|&nbsp; Last Receipt No: {fiscal.lastReceiptGlobalNo}</div>
                   {fiscal.certificateValidTill && (
                     <div className="mt-1 text-xs text-slate-500">
-                      Certificate valid till: {new Date(fiscal.certificateValidTill).toLocaleDateString()}
+                      Certificate valid till: {new Date(fiscal.certificateValidTill).toLocaleDateString('en-GB')}
                     </div>
                   )}
                 </div>

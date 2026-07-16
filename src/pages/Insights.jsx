@@ -220,7 +220,7 @@ export default function Insights() {
     doc.setFontSize(16)
     doc.text(`${tenant?.name || 'Business'} — Sales Insights (${TIMELINES.find(t => t.key === timeline)?.label})`, 14, 20)
     doc.setFontSize(10)
-    doc.text(`Generated: ${new Date().toLocaleDateString()} | Location: ${location || 'Zimbabwe'}`, 14, 28)
+    doc.text(`Generated: ${new Date().toLocaleDateString('en-GB')} | Location: ${location || 'Zimbabwe'}`, 14, 28)
     autoTable(doc, {
       startY: 35,
       head: [['Product', 'Category', 'Units', 'Revenue', 'Cost', 'Profit', 'Margin']],

@@ -215,7 +215,7 @@ export default function SuperAdminDashboard() {
                       {PLANS[tenant.plan_type]?.label || '—'}
                     </td>
                     <td className="py-3 px-4 text-sm text-slate-600 dark:text-slate-400">
-                      {new Date(tenant.created_at).toLocaleDateString()}
+                      {new Date(tenant.created_at).toLocaleDateString('en-GB')}
                     </td>
                     <td className="py-3 px-4">
                       <button

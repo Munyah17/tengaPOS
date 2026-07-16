@@ -22,7 +22,7 @@ export function exportToPDF(data, columns, title, filename) {
   doc.setFontSize(16)
   doc.text(title, 14, 22)
   doc.setFontSize(10)
-  doc.text(`Generated: ${new Date().toLocaleDateString()}`, 14, 30)
+  doc.text(`Generated: ${new Date().toLocaleDateString('en-GB')}`, 14, 30)
 
   autoTable(doc, {
     head: [columns.map((c) => c.header)],

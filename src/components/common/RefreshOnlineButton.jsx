@@ -42,9 +42,9 @@ export default function RefreshOnlineButton() {
       onClick={handleRefresh}
       disabled={refreshing}
       title="Refresh Online Updates"
-      className="hidden items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-slate-500 hover:bg-slate-100 disabled:opacity-60 dark:text-slate-400 dark:hover:bg-slate-800 sm:flex"
+      className="flex flex-shrink-0 items-center gap-1.5 rounded-lg border border-slate-200 px-2 py-1.5 text-xs font-medium text-slate-500 hover:bg-slate-100 disabled:opacity-60 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-800"
     >
-      <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? 'animate-spin' : ''}`} />
+      <RefreshCw className={`h-3.5 w-3.5 flex-shrink-0 ${refreshing ? 'animate-spin' : ''}`} />
       <span className="hidden lg:inline">Refresh Online Updates</span>
       <span className="lg:hidden">Refresh</span>
     </button>
