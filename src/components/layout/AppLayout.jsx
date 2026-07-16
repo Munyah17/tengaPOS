@@ -4,6 +4,7 @@ import Sidebar from './Sidebar'
 import TopBar from './TopBar'
 import { useAuthStore } from '@/stores/authStore'
 import { startBackgroundSync } from '@/lib/offlineSync'
+import { supabase } from '@/lib/supabase'
 import toast from 'react-hot-toast'
 
 export default function AppLayout() {
@@ -39,6 +40,26 @@ export default function AppLayout() {
       window.removeEventListener('online', tick)
     }
   }, [])
+
+  // A plan approval or trial extension can happen while the tenant already
+  // has this tab open (Super Admin approving them, or a payment webhook
+  // firing) — without this, the trial banner and gated features would stay
+  // stuck on stale data until the user manually logs out and back in.
+  useEffect(() => {
+    if (!tenant?.id) return
+    const channel = supabase
+      .channel(`tenant-live-${tenant.id}`)
+      .on('postgres_changes', {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'tenants',
+        filter: `id=eq.${tenant.id}`,
+      }, (payload) => {
+        useAuthStore.getState().updateTenant(payload.new)
+      })
+      .subscribe()
+    return () => { supabase.removeChannel(channel) }
+  }, [tenant?.id])
 
   return (
     <div className="flex h-screen max-h-screen overflow-hidden bg-slate-50 dark:bg-slate-950" style={{ height: '100dvh' }}>

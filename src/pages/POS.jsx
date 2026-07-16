@@ -526,8 +526,10 @@ export default function POS() {
           )}
         </div>
 
-        {/* Cart Items */}
-        <div className="flex-1 overflow-auto p-4">
+        {/* Cart Items — min-h keeps at least a product or two visible even
+            when the footer below (payment methods, totals, buttons) is at
+            its tallest; overflow-auto scrolls the rest. */}
+        <div className="min-h-[120px] flex-1 overflow-auto p-4">
           <AnimatePresence>
             {cart.items.length === 0 ? (
               <div className="flex h-full flex-col items-center justify-center text-center">
@@ -593,15 +595,17 @@ export default function POS() {
           </AnimatePresence>
         </div>
 
-        {/* Payment Methods */}
-        <div className="border-t border-slate-200 p-4 dark:border-slate-800">
-          <h4 className="mb-2 text-xs font-semibold uppercase text-slate-500">Payment Method</h4>
-          <div className="grid grid-cols-3 gap-2">
+        {/* Payment Method + Totals + Checkout — one compact block (was two
+            separately-padded sections) so the cart items area above keeps
+            as much of the sidebar's height as possible. */}
+        <div className="max-h-[52%] flex-shrink-0 overflow-y-auto border-t border-slate-200 p-3 dark:border-slate-800">
+          <h4 className="mb-1.5 text-xs font-semibold uppercase text-slate-500">Payment Method</h4>
+          <div className="grid grid-cols-3 gap-1.5">
             {PAYMENT_METHODS.slice(0, 6).map((method) => (
               <button
                 key={method.id}
                 onClick={() => cart.setPaymentMethod(method.id)}
-                className={`rounded-lg border p-2 text-center text-xs font-medium transition-colors ${
+                className={`rounded-lg border py-1.5 text-center text-xs font-medium transition-colors ${
                   cart.paymentMethod === method.id
                     ? isRestaurant
                       ? 'border-restaurant-500 bg-restaurant-50 text-restaurant-700 dark:bg-restaurant-950 dark:text-restaurant-400'
@@ -613,11 +617,8 @@ export default function POS() {
               </button>
             ))}
           </div>
-        </div>
 
-        {/* Totals + Checkout */}
-        <div className="border-t border-slate-200 p-4 dark:border-slate-800">
-          <div className="mb-3 flex items-center gap-2">
+          <div className="mb-1.5 mt-3 flex items-center gap-2">
             <Percent className="h-4 w-4 flex-shrink-0 text-slate-400" />
             <span className="text-sm text-slate-500">Discount</span>
             <select
@@ -649,7 +650,7 @@ export default function POS() {
               </button>
             )}
           </div>
-          <div className="space-y-2">
+          <div className="space-y-1">
             {cart.discount > 0 && (
               <div className="flex justify-between text-sm">
                 <span className="text-slate-500">
@@ -676,7 +677,7 @@ export default function POS() {
                 </div>
               </>
             ) : null}
-            <div className="flex justify-between border-t border-slate-200 pt-2 dark:border-slate-700">
+            <div className="flex justify-between border-t border-slate-200 pt-1.5 dark:border-slate-700">
               <span className="text-base font-bold text-slate-900 dark:text-white">Total</span>
               <span className={`text-xl font-extrabold ${
                 isRestaurant ? 'text-restaurant-600 dark:text-restaurant-400' : 'text-brand-600 dark:text-brand-400'
@@ -688,7 +689,7 @@ export default function POS() {
           <Button
             variant={isRestaurant ? 'restaurant' : 'primary'}
             size="lg"
-            className="mt-4 w-full"
+            className="mt-3 w-full"
             onClick={handleCheckout}
             disabled={cart.items.length === 0 || checkingOut}
           >
@@ -704,14 +705,14 @@ export default function POS() {
           <button
             onClick={handlePaynowCheckout}
             disabled={cart.items.length === 0 || paynowLoading}
-            className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl border-2 border-[#f7941d] bg-white py-3.5 text-sm font-bold text-[#f7941d] transition-colors hover:bg-[#f7941d] hover:text-white disabled:cursor-not-allowed disabled:opacity-50 dark:bg-slate-900 dark:hover:bg-[#f7941d] dark:hover:text-white"
+            className="mt-1.5 flex w-full items-center justify-center gap-2 rounded-xl border-2 border-[#f7941d] bg-white py-2.5 text-sm font-bold text-[#f7941d] transition-colors hover:bg-[#f7941d] hover:text-white disabled:cursor-not-allowed disabled:opacity-50 dark:bg-slate-900 dark:hover:bg-[#f7941d] dark:hover:text-white"
           >
             {paynowLoading
               ? <RefreshCw className="h-4 w-4 animate-spin" />
               : <ExternalLink className="h-4 w-4" />}
             {paynowLoading ? 'Opening Paynow…' : 'Pay with Paynow'}
           </button>
-          <p className="mt-1.5 text-center text-[10px] text-slate-400">
+          <p className="mt-1 text-center text-[10px] text-slate-400">
             EcoCash · OneMoney · InnBucks · Omari and more
           </p>
         </div>

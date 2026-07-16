@@ -1,16 +1,20 @@
 // Direct printing to the built-in printer on all-in-one POS terminals,
-// bypassing the OS print dialog entirely. window.print() only works when
-// the printer is a properly-installed OS printer — many embedded
-// terminals (Windows or Android) expose their built-in thermal printer as
-// a raw USB device instead, which the standard print dialog never sees.
+// bypassing the OS print dialog entirely.
 //
-// Uses WebUSB (Chrome/Edge desktop, and Chrome on Android) to talk to the
-// printer directly with raw ESC/POS commands — the same protocol nearly
-// all thermal receipt printers understand. Not supported in Safari/Firefox
-// or on iOS at all; those must keep using the regular "Print Receipt" button.
+// Two transports, tried in order:
+// 1. TengaPOS Print Agent — a small local helper (see /print-agent) that
+//    runs on the till and forwards raw bytes to the Windows print spooler
+//    as a RAW job, so it works no matter which driver the printer has
+//    installed. This is the primary path on Windows tills.
+// 2. WebUSB — talks to the printer directly over USB with no agent needed.
+//    Works on some Android all-in-ones, but on Windows the printer's own
+//    driver usually claims the USB interface first and blocks this, which
+//    is exactly why the agent exists.
+// Neither works in Safari/Firefox or on iOS; those keep using "Print Receipt".
 
 const ESC = 0x1b
 const GS = 0x1d
+const PRINT_AGENT_URL = 'http://127.0.0.1:38471'
 
 function escPosInit() {
   return [ESC, 0x40] // ESC @ — initialize printer
@@ -28,14 +32,77 @@ function escPosFeed(lines = 3) {
   return Array(lines).fill(0x0a)
 }
 
-export function isPosPrinterSupported() {
+/**
+ * Builds raw ESC/POS bytes from `lines` — an array of { text, bold, center }
+ * objects (or plain strings, treated as normal left-aligned lines).
+ */
+function buildEscPosBytes(lines) {
+  const bytes = []
+  bytes.push(...escPosInit())
+  for (const line of lines) {
+    const { text, bold, center } = typeof line === 'string' ? { text: line } : line
+    bytes.push(...escPosAlign(!!center))
+    bytes.push(...escPosBold(!!bold))
+    bytes.push(...new TextEncoder().encode(text))
+    bytes.push(0x0a)
+  }
+  bytes.push(...escPosFeed(3))
+  bytes.push(...escPosCut())
+  return new Uint8Array(bytes)
+}
+
+function bytesToBase64(bytes) {
+  let binary = ''
+  for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i])
+  return btoa(binary)
+}
+
+async function fetchWithTimeout(url, options, ms) {
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), ms)
+  try {
+    return await fetch(url, { ...options, signal: controller.signal })
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+/** Whether the local Print Agent responds on this machine right now. */
+export async function isPrintAgentRunning() {
+  try {
+    const res = await fetchWithTimeout(`${PRINT_AGENT_URL}/status`, {}, 1500)
+    return res.ok
+  } catch {
+    return false
+  }
+}
+
+async function printViaAgent(bytes) {
+  const res = await fetchWithTimeout(`${PRINT_AGENT_URL}/print`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ data: bytesToBase64(bytes) }),
+  }, 8000)
+  const result = await res.json().catch(() => null)
+  if (!res.ok || !result?.ok) {
+    throw new Error(result?.error || 'Print Agent could not reach the printer')
+  }
+}
+
+export function isWebUsbSupported() {
   return typeof navigator !== 'undefined' && 'usb' in navigator
+}
+
+// Kept for compatibility with anything checking whether direct printing is
+// possible at all on this device — WebUSB is one of two transports now.
+export function isPosPrinterSupported() {
+  return true
 }
 
 /** A device the user already granted permission for, if any — checking
  *  this first avoids re-prompting the USB picker on every single receipt. */
 export async function getPairedPosPrinter() {
-  if (!isPosPrinterSupported()) return null
+  if (!isWebUsbSupported()) return null
   const devices = await navigator.usb.getDevices()
   return devices[0] || null
 }
@@ -43,8 +110,8 @@ export async function getPairedPosPrinter() {
 /** Opens the browser's USB device picker so the cashier can select the
  *  built-in printer once — the browser remembers the grant after that. */
 export async function pairPosPrinter() {
-  if (!isPosPrinterSupported()) {
-    throw new Error('This browser can\'t talk to the printer directly — use Chrome or Edge.')
+  if (!isWebUsbSupported()) {
+    throw new Error('This browser can\'t talk to USB devices directly — use Chrome or Edge.')
   }
   return navigator.usb.requestDevice({ filters: [] })
 }
@@ -67,37 +134,51 @@ async function findBulkOutEndpoint(device) {
   return null
 }
 
-/**
- * Prints plain receipt text directly to the paired USB thermal printer.
- * `lines` is an array of { text, bold, center } objects (or plain strings,
- * treated as normal left-aligned lines) — the caller builds these from the
- * same receipt data used for the regular print/preview.
- */
-export async function printRawToPosPrinter(lines) {
+async function printViaWebUsb(bytes) {
   let device = await getPairedPosPrinter()
   if (!device) device = await pairPosPrinter()
   if (!device) throw new Error('No printer selected')
 
   const endpoint = await findBulkOutEndpoint(device)
   if (!endpoint) {
-    throw new Error('Connected, but couldn\'t find a usable printer interface. It may already be claimed by a Windows driver — try uninstalling/disabling that driver, or use "Print Receipt" instead.')
+    throw new Error('Connected, but couldn\'t find a usable printer interface — it\'s likely claimed by a Windows driver. Install the TengaPOS Print Agent for reliable printing on this till instead.')
   }
-
-  const bytes = []
-  bytes.push(...escPosInit())
-  for (const line of lines) {
-    const { text, bold, center } = typeof line === 'string' ? { text: line } : line
-    bytes.push(...escPosAlign(!!center))
-    bytes.push(...escPosBold(!!bold))
-    bytes.push(...new TextEncoder().encode(text))
-    bytes.push(0x0a)
-  }
-  bytes.push(...escPosFeed(3))
-  bytes.push(...escPosCut())
 
   try {
-    await device.transferOut(endpoint.endpointNumber, new Uint8Array(bytes))
+    await device.transferOut(endpoint.endpointNumber, bytes)
   } finally {
     try { await device.close() } catch { /* best-effort */ }
   }
+}
+
+/**
+ * Prints plain receipt text to the built-in printer. Tries the local Print
+ * Agent first (works regardless of which driver Windows has installed),
+ * then falls back to WebUSB. `lines` is an array of { text, bold, center }
+ * objects (or plain strings) — the caller builds these from the same
+ * receipt data used for the regular print/preview.
+ */
+export async function printToPosPrinter(lines) {
+  const bytes = buildEscPosBytes(lines)
+
+  try {
+    await printViaAgent(bytes)
+    return
+  } catch (agentErr) {
+    if (!isWebUsbSupported()) {
+      throw new Error(`Couldn't reach the TengaPOS Print Agent on this device. Install it from /print-agent and make sure it's running, or use "Print Receipt" instead. (${agentErr.message})`)
+    }
+    // Fall through to WebUSB
+  }
+
+  try {
+    await printViaWebUsb(bytes)
+  } catch (usbErr) {
+    throw new Error(`Print Agent not running, and direct USB printing failed: ${usbErr.message}`)
+  }
+}
+
+// Retained for any existing callers — now just the WebUSB-only path.
+export async function printRawToPosPrinter(lines) {
+  await printViaWebUsb(buildEscPosBytes(lines))
 }

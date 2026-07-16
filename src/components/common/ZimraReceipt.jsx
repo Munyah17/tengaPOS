@@ -2,7 +2,7 @@ import { useRef, useState } from 'react'
 import { Printer, X, CheckCircle, Usb } from 'lucide-react'
 import { useFiscalStore } from '@/stores/fiscalStore'
 import { formatCurrency } from '@/utils/formatters'
-import { isPosPrinterSupported, printRawToPosPrinter } from '@/lib/posPrinter'
+import { printToPosPrinter } from '@/lib/posPrinter'
 import toast from 'react-hot-toast'
 
 // ZIMRA payment method mapping per FDMS spec v7.2
@@ -226,7 +226,7 @@ export default function ZimraReceipt({ receipt, onClose }) {
       lines.push({ text: 'Thank you for your business!', center: true })
       lines.push({ text: 'Powered by tengaPOS', center: true })
 
-      await printRawToPosPrinter(lines)
+      await printToPosPrinter(lines)
       toast.success('Sent to POS printer')
     } catch (err) {
       toast.error(err.message || 'Failed to print to POS printer')
@@ -410,30 +410,30 @@ export default function ZimraReceipt({ receipt, onClose }) {
         </div>
 
         {/* Actions */}
-        <div className="flex gap-3 border-t border-slate-200 p-4 dark:border-slate-800">
-          <button
-            onClick={onClose}
-            className="flex-1 rounded-xl border border-slate-200 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
-          >
-            Close
-          </button>
-          <button
-            onClick={handlePrint}
-            className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-brand-600 py-2.5 text-sm font-semibold text-white hover:bg-brand-700"
-          >
-            <Printer className="h-4 w-4" />
-            Print Receipt
-          </button>
-          {isPosPrinterSupported() && (
+        <div className="flex flex-col gap-2 border-t border-slate-200 p-4 dark:border-slate-800">
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              onClick={handlePrint}
+              className="flex items-center justify-center gap-1.5 rounded-xl bg-brand-600 px-2 py-2.5 text-sm font-semibold text-white hover:bg-brand-700"
+            >
+              <Printer className="h-4 w-4 flex-shrink-0" />
+              <span className="truncate">Print</span>
+            </button>
             <button
               onClick={handlePosPrint}
               disabled={posPrinting}
-              className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-brand-600 py-2.5 text-sm font-semibold text-brand-600 hover:bg-brand-50 disabled:opacity-60 dark:text-brand-400 dark:hover:bg-slate-800"
+              className="flex items-center justify-center gap-1.5 rounded-xl border border-brand-600 px-2 py-2.5 text-sm font-semibold text-brand-600 hover:bg-brand-50 disabled:opacity-60 dark:text-brand-400 dark:hover:bg-slate-800"
             >
-              <Usb className="h-4 w-4" />
-              {posPrinting ? 'Printing…' : 'POS Printer'}
+              <Usb className="h-4 w-4 flex-shrink-0" />
+              <span className="truncate">{posPrinting ? 'Printing…' : 'POS Printer'}</span>
             </button>
-          )}
+          </div>
+          <button
+            onClick={onClose}
+            className="w-full rounded-xl border border-slate-200 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+          >
+            Close
+          </button>
         </div>
       </div>
     </div>

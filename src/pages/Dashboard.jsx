@@ -1,5 +1,6 @@
 import { motion } from 'framer-motion'
-import { useQuery } from '@tanstack/react-query'
+import { useState } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   DollarSign, ShoppingCart, Package, Users, TrendingUp,
   AlertTriangle, ArrowUpRight, ArrowDownRight,
@@ -9,7 +10,7 @@ import {
   ResponsiveContainer, PieChart, Pie, Cell,
 } from 'recharts'
 import { Link } from 'react-router-dom'
-import { Megaphone, Sparkles, Bell, ChevronRight } from 'lucide-react'
+import { Megaphone, Sparkles, Bell, ChevronRight, X } from 'lucide-react'
 import { useThemeStore } from '@/stores/themeStore'
 import { useAuthStore } from '@/stores/authStore'
 import { fetchDashboardMetrics } from '@/lib/db'
@@ -17,6 +18,18 @@ import { formatCurrency } from '@/utils/formatters'
 import { supabase } from '@/lib/supabase'
 import { useTenantNotifications } from '@/hooks/useTenantNotifications'
 import OnboardingChecklist from '@/components/common/OnboardingChecklist'
+
+// Closing with 'x' only hides an announcement for this browser session —
+// it comes back next time. "Don't show again" persists the dismissal in the
+// DB so it never appears again for this user, on any device.
+const SESSION_DISMISS_KEY = 'tengapos_session_dismissed_announcements'
+function readSessionDismissed() {
+  try {
+    return new Set(JSON.parse(sessionStorage.getItem(SESSION_DISMISS_KEY) || '[]'))
+  } catch {
+    return new Set()
+  }
+}
 
 const EMPTY_STAT_CARDS = [
   { label: "Today's Revenue", value: '$0.00', change: null, up: null, icon: DollarSign, color: 'brand' },
@@ -36,10 +49,31 @@ const colorMap = {
 
 export default function Dashboard() {
   const { posMode } = useThemeStore()
-  const { profile, tenant } = useAuthStore()
+  const { profile, tenant, user } = useAuthStore()
   const isRestaurant = posMode === 'restaurant'
   const accentColor = isRestaurant ? '#22c55e' : '#3b82f6'
   const { notifications } = useTenantNotifications({ tenantId: tenant?.id, posMode, limit: 5 })
+  const queryClient = useQueryClient()
+  const [sessionDismissed, setSessionDismissed] = useState(readSessionDismissed)
+
+  const dismissForSession = (id) => {
+    setSessionDismissed((prev) => {
+      const next = new Set(prev)
+      next.add(id)
+      sessionStorage.setItem(SESSION_DISMISS_KEY, JSON.stringify([...next]))
+      return next
+    })
+  }
+
+  const dismissForever = async (id) => {
+    dismissForSession(id)
+    queryClient.setQueryData(['announcements', user?.id], (prev) => (prev || []).filter((a) => a.id !== id))
+    try {
+      await supabase.from('announcement_dismissals').insert({ user_id: user.id, announcement_id: id })
+    } catch {
+      // Best-effort — if this fails it just reappears next session, not a hard error
+    }
+  }
 
   // Cached instead of a hard fetch on every mount — revisiting the
   // dashboard within a minute reuses what's already loaded.
@@ -51,16 +85,21 @@ export default function Dashboard() {
   })
 
   const { data: announcements = [] } = useQuery({
-    queryKey: ['announcements'],
+    queryKey: ['announcements', user?.id],
     queryFn: async () => {
-      const { data } = await supabase
-        .from('announcements')
-        .select('id, title, body, created_at')
-        .eq('is_published', true)
-        .order('created_at', { ascending: false })
-        .limit(3)
-      return data || []
+      const [{ data: anns }, { data: dismissals }] = await Promise.all([
+        supabase
+          .from('announcements')
+          .select('id, title, body, created_at')
+          .eq('is_published', true)
+          .order('created_at', { ascending: false })
+          .limit(10),
+        supabase.from('announcement_dismissals').select('announcement_id').eq('user_id', user.id),
+      ])
+      const dismissedIds = new Set((dismissals || []).map((d) => d.announcement_id))
+      return (anns || []).filter((a) => !dismissedIds.has(a.id)).slice(0, 3)
     },
+    enabled: !!user?.id,
     staleTime: 5 * 60000,
   })
 
@@ -124,15 +163,28 @@ export default function Dashboard() {
       )}
 
       {/* Platform announcements */}
-      {announcements.length > 0 && (
+      {announcements.filter((a) => !sessionDismissed.has(a.id)).length > 0 && (
         <div className="mb-6 space-y-2">
-          {announcements.map((a) => (
-            <div key={a.id} className="flex items-start gap-3 rounded-2xl border border-indigo-200 bg-indigo-50 p-4 dark:border-indigo-800/50 dark:bg-indigo-900/20">
+          {announcements.filter((a) => !sessionDismissed.has(a.id)).map((a) => (
+            <div key={a.id} className="relative flex items-start gap-3 rounded-2xl border border-indigo-200 bg-indigo-50 p-4 pr-10 dark:border-indigo-800/50 dark:bg-indigo-900/20">
               <Megaphone className="mt-0.5 h-4 w-4 flex-shrink-0 text-indigo-600 dark:text-indigo-400" />
-              <div>
+              <div className="flex-1">
                 <p className="text-sm font-semibold text-indigo-900 dark:text-indigo-200">{a.title}</p>
                 <p className="text-sm text-indigo-800 dark:text-indigo-300">{a.body}</p>
+                <button
+                  onClick={() => dismissForever(a.id)}
+                  className="mt-1.5 text-xs font-semibold text-indigo-600 hover:text-indigo-800 dark:text-indigo-400 dark:hover:text-indigo-200"
+                >
+                  Don't show again
+                </button>
               </div>
+              <button
+                onClick={() => dismissForSession(a.id)}
+                aria-label="Close"
+                className="absolute right-3 top-3 text-indigo-400 hover:text-indigo-600 dark:hover:text-indigo-200"
+              >
+                <X className="h-4 w-4" />
+              </button>
             </div>
           ))}
         </div>
