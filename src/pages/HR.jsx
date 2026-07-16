@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import { Users, DollarSign, Calendar, ChevronDown, ChevronUp, Edit2, Trash2, Download } from 'lucide-react'
 import { useAuthStore } from '@/stores/authStore'
+import { loadWithOfflineCache } from '@/lib/offlineCache'
 import {
   fetchStaffPayroll, updateStaffPay,
   fetchPayrollRuns, fetchPayrollEntries,
@@ -144,9 +145,8 @@ export default function HR() {
 
   const loadStaff = () => {
     if (!tenant?.id) return
-    setStaffLoad(true)
-    fetchStaffPayroll(tenant.id)
-      .then(data => {
+    loadWithOfflineCache(['staffPayroll', tenant.id], () => fetchStaffPayroll(tenant.id), {
+      onData: (data) => {
         setStaff(data)
         setEntries(
           data
@@ -164,21 +164,29 @@ export default function HR() {
               notes:            '',
             }))
         )
-      })
-      .catch(() => toast.error('Failed to load staff'))
-      .finally(() => setStaffLoad(false))
+      },
+      onError: () => toast.error('Failed to load staff'),
+      onLoadingChange: setStaffLoad,
+    })
   }
 
   const loadHistory = () => {
     if (!tenant?.id) return
-    setHistLoad(true)
-    fetchPayrollRuns(tenant.id)
-      .then(setHistory)
-      .catch(() => toast.error('Failed to load payroll history'))
-      .finally(() => setHistLoad(false))
+    loadWithOfflineCache(['payrollRuns', tenant.id], () => fetchPayrollRuns(tenant.id), {
+      onData: setHistory,
+      onError: () => toast.error('Failed to load payroll history'),
+      onLoadingChange: setHistLoad,
+    })
   }
 
   useEffect(() => { loadStaff(); loadHistory() }, [tenant?.id])
+
+  useEffect(() => {
+    const handler = () => { loadStaff(); loadHistory() }
+    window.addEventListener('tengapos:force-refresh', handler)
+    return () => window.removeEventListener('tengapos:force-refresh', handler)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tenant?.id])
 
   const updateEntry = (idx, field, val) => {
     setEntries(prev => {

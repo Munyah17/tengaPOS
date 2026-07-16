@@ -16,8 +16,26 @@ const ESC = 0x1b
 const GS = 0x1d
 const PRINT_AGENT_URL = 'http://127.0.0.1:38471'
 
+// Standard 80mm thermal receipt width at the printer's normal Font A —
+// nearly universal across desktop all-in-one POS printers (58mm mobile
+// printers are the exception, at ~32 chars). Used to pad/align columns so
+// totals line up instead of drifting left with a big gap on the right.
+export const PAPER_WIDTH_CHARS = 48
+
 function escPosInit() {
   return [ESC, 0x40] // ESC @ — initialize printer
+}
+function escPosDensity() {
+  // ESC 7 n1 n2 n3 — heating dots / heating time / heating interval.
+  // Clone thermal printers often power on with a faint factory default;
+  // this pushes heating time up for darker, more legible print.
+  return [ESC, 0x37, 0x07, 0xc8, 0x02]
+}
+function escPosFont() {
+  return [ESC, 0x4d, 0x00] // ESC M 0 — Font A: the standard, clearer typeface (vs condensed Font B)
+}
+function escPosNormalSize() {
+  return [GS, 0x21, 0x00] // GS ! 0 — normal 1x1 size, not double width/height
 }
 function escPosAlign(center) {
   return [ESC, 0x61, center ? 0x01 : 0x00] // ESC a n
@@ -39,6 +57,9 @@ function escPosFeed(lines = 3) {
 function buildEscPosBytes(lines) {
   const bytes = []
   bytes.push(...escPosInit())
+  bytes.push(...escPosDensity())
+  bytes.push(...escPosFont())
+  bytes.push(...escPosNormalSize())
   for (const line of lines) {
     const { text, bold, center } = typeof line === 'string' ? { text: line } : line
     bytes.push(...escPosAlign(!!center))

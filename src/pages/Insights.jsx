@@ -10,6 +10,7 @@ import { useAuthStore } from '@/stores/authStore'
 import { useThemeStore } from '@/stores/themeStore'
 import { supabase } from '@/lib/supabase'
 import { fetchProductPerformance } from '@/lib/db'
+import { loadWithOfflineCache } from '@/lib/offlineCache'
 import { getPresetRange } from '@/utils/dateRanges'
 import toast from 'react-hot-toast'
 import jsPDF from 'jspdf'
@@ -149,12 +150,15 @@ export default function Insights() {
   // business and grows only from real transactions.
   useEffect(() => {
     if (!tenant?.id) return
-    setDataLoading(true)
     const { start } = getPresetRange(timeline)
-    fetchProductPerformance(tenant.id, start.toISOString())
-      .then(setProducts)
-      .catch(() => toast.error('Failed to load sales data'))
-      .finally(() => setDataLoading(false))
+    const load = () => loadWithOfflineCache(
+      ['productPerformance', tenant.id, timeline],
+      () => fetchProductPerformance(tenant.id, start.toISOString()),
+      { onData: setProducts, onError: () => toast.error('Failed to load sales data'), onLoadingChange: setDataLoading },
+    )
+    load()
+    window.addEventListener('tengapos:force-refresh', load)
+    return () => window.removeEventListener('tengapos:force-refresh', load)
   }, [tenant?.id, timeline])
 
   const totalRevenue = products.reduce((s, p) => s + p.revenue, 0)

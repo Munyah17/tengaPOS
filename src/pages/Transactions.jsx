@@ -1,6 +1,7 @@
 import { motion } from 'framer-motion'
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { withOfflineCache, seedFromOfflineCache } from '@/lib/offlineCache'
 import { RefreshCw, X, Ban, CheckCircle, ShieldCheck, XCircle, Undo2 } from 'lucide-react'
 import ExportMenu from '@/components/common/ExportMenu'
 import { formatCurrency, formatDateTime } from '@/utils/formatters'
@@ -137,9 +138,15 @@ export default function Transactions() {
   const canApprove = ['shop_manager', 'supervisor', 'vendor'].includes(role)
   const canValidate = role === 'vendor'
 
+  useEffect(() => {
+    if (!tenant?.id) return
+    seedFromOfflineCache(queryClient, ['transactions', tenant.id])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tenant?.id])
+
   const transactionsQuery = useQuery({
     queryKey: ['transactions', tenant?.id],
-    queryFn: async () => {
+    queryFn: withOfflineCache(['transactions', tenant?.id], async () => {
       const rows = await fetchTransactions(tenant.id)
       return rows.map(t => ({
         id: t.reference || t.id,
@@ -153,7 +160,7 @@ export default function Transactions() {
         method: t.method,
         branch: t.branches?.name || '—',
       }))
-    },
+    }),
     enabled: !!tenant?.id,
     staleTime: 30000,
   })

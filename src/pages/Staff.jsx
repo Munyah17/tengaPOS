@@ -10,6 +10,7 @@ import {
   fetchStaff, updateStaffStatus, fetchBranches, updateStaffUsername,
   fetchUserBranches, assignUserBranch, unassignUserBranch,
 } from '@/lib/db'
+import { loadWithOfflineCache } from '@/lib/offlineCache'
 import { supabase } from '@/lib/supabase'
 import toast from 'react-hot-toast'
 
@@ -53,14 +54,22 @@ export default function Staff() {
 
   const loadStaff = () => {
     if (!tenant?.id) return
-    setLoading(true)
-    fetchStaff(tenant.id)
-      .then(setStaff)
-      .catch((err) => toast.error(err.message || 'Failed to load staff'))
-      .finally(() => setLoading(false))
+    loadWithOfflineCache(['staff', tenant.id], () => fetchStaff(tenant.id), {
+      onData: setStaff,
+      onError: (err) => toast.error(err.message || 'Failed to load staff'),
+      onLoadingChange: setLoading,
+    })
   }
 
   useEffect(() => { loadStaff() }, [tenant?.id])
+
+  // "Refresh Online Updates" button — forces this page to reload from the
+  // network right now instead of waiting on its own cache.
+  useEffect(() => {
+    window.addEventListener('tengapos:force-refresh', loadStaff)
+    return () => window.removeEventListener('tengapos:force-refresh', loadStaff)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tenant?.id])
 
   useEffect(() => {
     if (!tenant?.id) return

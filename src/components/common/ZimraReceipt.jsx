@@ -2,7 +2,7 @@ import { useRef, useState } from 'react'
 import { Printer, X, CheckCircle, Usb } from 'lucide-react'
 import { useFiscalStore } from '@/stores/fiscalStore'
 import { formatCurrency } from '@/utils/formatters'
-import { printToPosPrinter } from '@/lib/posPrinter'
+import { printToPosPrinter, PAPER_WIDTH_CHARS } from '@/lib/posPrinter'
 import toast from 'react-hot-toast'
 
 // ZIMRA payment method mapping per FDMS spec v7.2
@@ -176,11 +176,11 @@ export default function ZimraReceipt({ receipt, onClose }) {
     setPosPrinting(true)
     try {
       const lines = []
-      const dash = () => lines.push('-'.repeat(32))
+      const dash = () => lines.push('-'.repeat(PAPER_WIDTH_CHARS))
       const rowLine = (left, right) => {
         const l = String(left ?? '')
         const r = String(right ?? '')
-        const pad = Math.max(1, 32 - l.length - r.length)
+        const pad = Math.max(1, PAPER_WIDTH_CHARS - l.length - r.length)
         lines.push(l + ' '.repeat(pad) + r)
       }
 

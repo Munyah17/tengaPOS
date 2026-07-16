@@ -8,6 +8,7 @@ import toast from 'react-hot-toast'
 import { useAuthStore } from '@/stores/authStore'
 import { formatCurrency, formatDateTime } from '@/utils/formatters'
 import { fetchPaymentSessions, approvePaymentSession, declinePaymentSession } from '@/lib/db'
+import { loadWithOfflineCache } from '@/lib/offlineCache'
 
 const STATUS_CONFIG = {
   pending:            { label: 'Pending',    icon: Clock,        bg: 'bg-amber-100 dark:bg-amber-900/40',  text: 'text-amber-700 dark:text-amber-300' },
@@ -150,14 +151,20 @@ export default function Payments() {
 
   const load = () => {
     if (!tenant?.id) return
-    setLoading(true)
-    fetchPaymentSessions(tenant.id)
-      .then(setSessions)
-      .catch(err => toast.error(err.message))
-      .finally(() => setLoading(false))
+    loadWithOfflineCache(['paymentSessions', tenant.id], () => fetchPaymentSessions(tenant.id), {
+      onData: setSessions,
+      onError: (err) => toast.error(err.message),
+      onLoadingChange: setLoading,
+    })
   }
 
   useEffect(() => { load() }, [tenant?.id])
+
+  useEffect(() => {
+    window.addEventListener('tengapos:force-refresh', load)
+    return () => window.removeEventListener('tengapos:force-refresh', load)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tenant?.id])
 
   const pendingCount = sessions.filter(s => s.status === 'pending').length
 

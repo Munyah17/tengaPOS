@@ -7,6 +7,7 @@ import { useFiscalStore } from '@/stores/fiscalStore'
 import { useAuthStore } from '@/stores/authStore'
 import { pingDevice, registerDevice } from '@/lib/fiscalApi'
 import { supabase } from '@/lib/supabase'
+import { loadWithOfflineCache } from '@/lib/offlineCache'
 import toast from 'react-hot-toast'
 
 const isSupabaseConfigured = !!(
@@ -35,26 +36,36 @@ export default function Fiscalisation() {
 
   useEffect(() => {
     if (!tenant?.id) return
-    supabase.from('tenant_fiscal_configs')
-      .select('*')
-      .eq('tenant_id', tenant.id)
-      .maybeSingle()
-      .then(({ data }) => {
-        if (!data) return
-        fiscal.loadFromDB(data)
-        setFiscalForm({
-          deviceID:             data.device_id             || '',
-          activationKey:        data.activation_key        || '',
-          deviceSerialNo:       data.device_serial_no      || '',
-          deviceModelName:      data.device_model_name     || '',
-          deviceModelVersionNo: data.device_model_version_no || '',
-          tin:                  data.tin                   || '',
-          vatNumber:            data.vat_number            || '',
-          branchName:           data.branch_name           || '',
-          branchAddress:        data.branch_address        || '',
-          branchContacts:       data.branch_contacts       || '',
-        })
-      })
+    const loadFiscalConfig = () => loadWithOfflineCache(
+      ['fiscalConfig', tenant.id],
+      () => supabase.from('tenant_fiscal_configs')
+        .select('*')
+        .eq('tenant_id', tenant.id)
+        .maybeSingle()
+        .then(({ data, error }) => { if (error) throw error; return data }),
+      {
+        onData: (data) => {
+          if (!data) return
+          fiscal.loadFromDB(data)
+          setFiscalForm({
+            deviceID:             data.device_id             || '',
+            activationKey:        data.activation_key        || '',
+            deviceSerialNo:       data.device_serial_no      || '',
+            deviceModelName:      data.device_model_name     || '',
+            deviceModelVersionNo: data.device_model_version_no || '',
+            tin:                  data.tin                   || '',
+            vatNumber:            data.vat_number            || '',
+            branchName:           data.branch_name           || '',
+            branchAddress:        data.branch_address        || '',
+            branchContacts:       data.branch_contacts       || '',
+          })
+        },
+      },
+    )
+    loadFiscalConfig()
+    window.addEventListener('tengapos:force-refresh', loadFiscalConfig)
+    return () => window.removeEventListener('tengapos:force-refresh', loadFiscalConfig)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tenant?.id])
 
   const handleOpenDay = async () => {

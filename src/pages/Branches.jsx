@@ -9,6 +9,7 @@ import { formatCurrency } from '@/utils/formatters'
 import { useAuthStore } from '@/stores/authStore'
 import Modal from '@/components/common/Modal'
 import { fetchBranches, insertBranch, updateBranch, deleteBranch } from '@/lib/db'
+import { loadWithOfflineCache } from '@/lib/offlineCache'
 import toast from 'react-hot-toast'
 
 const CAN_MANAGE = ['vendor']
@@ -142,17 +143,23 @@ export default function Branches() {
 
   const loadBranches = () => {
     if (!tenant?.id) return
-    setLoading(true)
-    fetchBranches(tenant.id)
-      .then(data => setBranches(data.map(b => ({
+    loadWithOfflineCache(['branches', tenant.id], () => fetchBranches(tenant.id), {
+      onData: (data) => setBranches(data.map(b => ({
         ...b, isMain: b.is_main, status: b.is_active ? 'active' : 'inactive',
         location: b.address || '', manager: '', staff: 0, revenue: 0, expenses: 0, orders: 0, topProducts: [], inventory: [],
-      }))))
-      .catch(() => toast.error('Failed to load branches'))
-      .finally(() => setLoading(false))
+      }))),
+      onError: () => toast.error('Failed to load branches'),
+      onLoadingChange: setLoading,
+    })
   }
 
   useEffect(() => { loadBranches() }, [tenant?.id])
+
+  useEffect(() => {
+    window.addEventListener('tengapos:force-refresh', loadBranches)
+    return () => window.removeEventListener('tengapos:force-refresh', loadBranches)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tenant?.id])
 
   if (viewing) {
     return (

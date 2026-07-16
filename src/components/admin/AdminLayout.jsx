@@ -3,6 +3,7 @@ import { Outlet, useNavigate } from 'react-router-dom'
 import { Bell, Menu, User, Settings, LogOut, ChevronDown } from 'lucide-react'
 import AdminSidebar from './AdminSidebar'
 import ThemeToggle from '@/components/common/ThemeToggle'
+import RefreshOnlineButton from '@/components/common/RefreshOnlineButton'
 import { useAuthStore } from '@/stores/authStore'
 
 const ROLE_LABEL = { super_admin: 'Super Admin', admin: 'Admin', tech_support: 'Tech Support' }
@@ -58,6 +59,7 @@ export default function AdminLayout() {
           </button>
 
           <div className="ml-auto flex flex-shrink-0 items-center gap-1 sm:gap-2">
+            <RefreshOnlineButton />
             <ThemeToggle />
             <button
               onClick={() => navigate(notificationsPath)}

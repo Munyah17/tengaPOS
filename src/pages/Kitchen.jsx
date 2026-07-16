@@ -5,6 +5,7 @@ import { Link } from 'react-router-dom'
 import { useAuthStore } from '@/stores/authStore'
 import { supabase } from '@/lib/supabase'
 import { fetchKitchenOrders, advanceKitchenOrder, completeKitchenOrder } from '@/lib/db'
+import { loadWithOfflineCache } from '@/lib/offlineCache'
 
 const STATUS_CFG = {
   received: { label: 'New',     color: 'bg-blue-500',   bg: 'bg-blue-50 dark:bg-blue-950/50 border-blue-200 dark:border-blue-800',         icon: Clock,       btn: 'bg-blue-600 hover:bg-blue-700 text-white',    next: 'Accept' },
@@ -115,7 +116,9 @@ export default function Kitchen() {
   useEffect(() => {
     if (!tenant?.id) return
 
-    fetchKitchenOrders(tenant.id).then(setLiveOrders).catch(() => {})
+    const loadOrders = () => loadWithOfflineCache(['kitchenOrders', tenant.id], () => fetchKitchenOrders(tenant.id), { onData: setLiveOrders })
+    loadOrders()
+    window.addEventListener('tengapos:force-refresh', loadOrders)
 
     const channel = supabase
       .channel(`kitchen-${tenant.id}`)
@@ -154,7 +157,10 @@ export default function Kitchen() {
       })
       .subscribe()
 
-    return () => { supabase.removeChannel(channel) }
+    return () => {
+      supabase.removeChannel(channel)
+      window.removeEventListener('tengapos:force-refresh', loadOrders)
+    }
   }, [tenant?.id])
 
   const orders = liveOrders

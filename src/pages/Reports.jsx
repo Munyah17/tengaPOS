@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useState, useEffect } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { motion } from 'framer-motion'
 import { BarChart3, TrendingUp, DollarSign, Package, RefreshCw, Calendar, Download } from 'lucide-react'
 import {
@@ -9,6 +9,7 @@ import {
 import { useThemeStore } from '@/stores/themeStore'
 import { useAuthStore } from '@/stores/authStore'
 import { fetchReportMetrics, fetchTransactionsInRange } from '@/lib/db'
+import { withOfflineCache, seedFromOfflineCache } from '@/lib/offlineCache'
 import { formatCurrency } from '@/utils/formatters'
 import { DATE_PRESETS, getPresetRange } from '@/utils/dateRanges'
 import { exportToCSV, exportToExcel, exportToPDF } from '@/utils/exportUtils'
@@ -30,9 +31,16 @@ export default function Reports() {
   const { tenant } = useAuthStore()
   const accent = posMode === 'restaurant' ? '#22c55e' : '#3b82f6'
 
+  const queryClient = useQueryClient()
+  useEffect(() => {
+    if (!tenant?.id) return
+    seedFromOfflineCache(queryClient, ['reportMetrics', tenant.id])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tenant?.id])
+
   const metricsQuery = useQuery({
     queryKey: ['reportMetrics', tenant?.id],
-    queryFn: () => fetchReportMetrics(tenant.id),
+    queryFn: withOfflineCache(['reportMetrics', tenant?.id], () => fetchReportMetrics(tenant.id)),
     enabled: !!tenant?.id,
     staleTime: 60000,
   })

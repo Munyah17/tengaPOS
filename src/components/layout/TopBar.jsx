@@ -2,6 +2,7 @@ import { Bell, Wifi, WifiOff, ShieldAlert, Menu, User, Settings, LogOut, Chevron
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import ThemeToggle from '@/components/common/ThemeToggle'
+import RefreshOnlineButton from '@/components/common/RefreshOnlineButton'
 import { useThemeStore } from '@/stores/themeStore'
 import { useAuthStore, ROLE_COLORS, ROLE_LABELS, NAV_PERMISSIONS } from '@/stores/authStore'
 import { useFiscalStore } from '@/stores/fiscalStore'
@@ -98,6 +99,8 @@ export default function TopBar({ onMenuClick }) {
           {isOnline ? <Wifi className="h-3.5 w-3.5" /> : <WifiOff className="h-3.5 w-3.5" />}
           <span className="hidden sm:inline">{isOnline ? 'Online' : 'Offline'}</span>
         </div>
+
+        <RefreshOnlineButton />
 
         {/* POS mode toggle — hidden on mobile */}
         <div className="hidden items-center overflow-hidden rounded-xl border border-slate-200 dark:border-slate-700 sm:flex">

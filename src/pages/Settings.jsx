@@ -15,6 +15,7 @@ import { useAuthStore } from '@/stores/authStore'
 import { useFiscalPricing } from '@/lib/platformSettings'
 import { CURRENCIES, PAYMENT_PROVIDERS } from '@/utils/constants'
 import { fetchAllTenantData } from '@/lib/db'
+import { loadWithOfflineCache } from '@/lib/offlineCache'
 import { Download, Clock } from 'lucide-react'
 import toast from 'react-hot-toast'
 
@@ -44,18 +45,23 @@ export default function Settings() {
   const [fiscalRequesting, setFiscalRequesting] = useState(false)
   const [pendingFiscalRequest, setPendingFiscalRequest] = useState(null)
 
-  useEffect(() => {
+  const loadPendingFiscalRequest = () => {
     if (!tenant?.id) return
-    supabase
-      .from('fiscalisation_requests')
-      .select('*')
-      .eq('tenant_id', tenant.id)
-      .eq('status', 'pending')
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle()
-      .then(({ data }) => setPendingFiscalRequest(data))
-  }, [tenant?.id])
+    loadWithOfflineCache(
+      ['pendingFiscalRequest', tenant.id],
+      () => supabase
+        .from('fiscalisation_requests')
+        .select('*')
+        .eq('tenant_id', tenant.id)
+        .eq('status', 'pending')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+        .then(({ data, error }) => { if (error) throw error; return data }),
+      { onData: setPendingFiscalRequest },
+    )
+  }
+  useEffect(loadPendingFiscalRequest, [tenant?.id])
 
   const requestFiscalisation = async () => {
     setFiscalRequesting(true)
@@ -111,21 +117,28 @@ export default function Settings() {
   const [paynowSaving, setPaynowSaving] = useState(false)
   const [paynowConfigured, setPaynowConfigured] = useState(false)
 
-  useEffect(() => {
+  const loadPaynowConfig = () => {
     if (!tenant?.id) return
-    supabase
-      .from('tenants')
-      .select('paynow_integration_id, paynow_integration_key')
-      .eq('id', tenant.id)
-      .single()
-      .then(({ data }) => {
-        if (data?.paynow_integration_id) {
-          setPaynowId(data.paynow_integration_id)
-          setPaynowKey(data.paynow_integration_key || '')
-          setPaynowConfigured(true)
-        }
-      })
-  }, [tenant?.id])
+    loadWithOfflineCache(
+      ['paynowConfig', tenant.id],
+      () => supabase
+        .from('tenants')
+        .select('paynow_integration_id, paynow_integration_key')
+        .eq('id', tenant.id)
+        .single()
+        .then(({ data, error }) => { if (error) throw error; return data }),
+      {
+        onData: (data) => {
+          if (data?.paynow_integration_id) {
+            setPaynowId(data.paynow_integration_id)
+            setPaynowKey(data.paynow_integration_key || '')
+            setPaynowConfigured(true)
+          }
+        },
+      },
+    )
+  }
+  useEffect(loadPaynowConfig, [tenant?.id])
 
   const handleSavePaynow = async () => {
     if (!paynowId.trim() || !paynowKey.trim()) {
@@ -155,20 +168,35 @@ export default function Settings() {
   const [stripeSaving, setStripeSaving] = useState(false)
   const [stripeConfigured, setStripeConfigured] = useState(false)
 
-  useEffect(() => {
+  const loadStripeConfig = () => {
     if (!tenant?.id) return
-    supabase
-      .from('tenants')
-      .select('stripe_publishable_key, stripe_secret_key')
-      .eq('id', tenant.id)
-      .single()
-      .then(({ data }) => {
-        if (data?.stripe_publishable_key) {
-          setStripePubKey(data.stripe_publishable_key)
-          setStripeSecretKey(data.stripe_secret_key || '')
-          setStripeConfigured(true)
-        }
-      })
+    loadWithOfflineCache(
+      ['stripeConfig', tenant.id],
+      () => supabase
+        .from('tenants')
+        .select('stripe_publishable_key, stripe_secret_key')
+        .eq('id', tenant.id)
+        .single()
+        .then(({ data, error }) => { if (error) throw error; return data }),
+      {
+        onData: (data) => {
+          if (data?.stripe_publishable_key) {
+            setStripePubKey(data.stripe_publishable_key)
+            setStripeSecretKey(data.stripe_secret_key || '')
+            setStripeConfigured(true)
+          }
+        },
+      },
+    )
+  }
+  useEffect(loadStripeConfig, [tenant?.id])
+
+  // "Refresh Online Updates" button — reload all of this page's network data
+  useEffect(() => {
+    const handler = () => { loadPendingFiscalRequest(); loadPaynowConfig(); loadStripeConfig() }
+    window.addEventListener('tengapos:force-refresh', handler)
+    return () => window.removeEventListener('tengapos:force-refresh', handler)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tenant?.id])
 
   const handleSaveStripe = async () => {

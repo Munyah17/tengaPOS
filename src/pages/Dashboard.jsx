@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   DollarSign, ShoppingCart, Package, Users, TrendingUp,
@@ -16,6 +16,7 @@ import { useAuthStore } from '@/stores/authStore'
 import { fetchDashboardMetrics } from '@/lib/db'
 import { formatCurrency } from '@/utils/formatters'
 import { supabase } from '@/lib/supabase'
+import { withOfflineCache, seedFromOfflineCache } from '@/lib/offlineCache'
 import { useTenantNotifications } from '@/hooks/useTenantNotifications'
 import OnboardingChecklist from '@/components/common/OnboardingChecklist'
 
@@ -76,10 +77,16 @@ export default function Dashboard() {
   }
 
   // Cached instead of a hard fetch on every mount — revisiting the
-  // dashboard within a minute reuses what's already loaded.
+  // dashboard within a minute reuses what's already loaded. Also falls back
+  // to the last-known numbers when offline instead of a blank dashboard.
+  useEffect(() => {
+    if (!tenant?.id) return
+    seedFromOfflineCache(queryClient, ['dashboardMetrics', tenant.id])
+  }, [tenant?.id]) // eslint-disable-line react-hooks/exhaustive-deps
+
   const { data: metrics = null } = useQuery({
     queryKey: ['dashboardMetrics', tenant?.id],
-    queryFn: () => fetchDashboardMetrics(tenant.id),
+    queryFn: withOfflineCache(['dashboardMetrics', tenant?.id], () => fetchDashboardMetrics(tenant.id)),
     enabled: !!tenant?.id,
     staleTime: 60000,
   })

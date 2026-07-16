@@ -7,6 +7,7 @@ import { useThemeStore } from '@/stores/themeStore'
 import { useAuthStore } from '@/stores/authStore'
 import { fetchOrders } from '@/lib/db'
 import { supabase } from '@/lib/supabase'
+import { loadWithOfflineCache } from '@/lib/offlineCache'
 import toast from 'react-hot-toast'
 
 const ORDER_STATUS = {
@@ -159,7 +160,9 @@ export default function Orders() {
   // reload. Now both boards subscribe to the same table and stay in sync.
   useEffect(() => {
     if (!tenant?.id) return
-    fetchOrders(tenant.id).then(setRawOrders).catch(() => {})
+    const loadOrders = () => loadWithOfflineCache(['orders', tenant.id], () => fetchOrders(tenant.id), { onData: setRawOrders })
+    loadOrders()
+    window.addEventListener('tengapos:force-refresh', loadOrders)
 
     const channel = supabase
       .channel(`orders-board-${tenant.id}`)
@@ -181,7 +184,11 @@ export default function Orders() {
       .subscribe()
 
     const clock = setInterval(() => setClockTick(t => t + 1), 30000)
-    return () => { supabase.removeChannel(channel); clearInterval(clock) }
+    return () => {
+      supabase.removeChannel(channel)
+      clearInterval(clock)
+      window.removeEventListener('tengapos:force-refresh', loadOrders)
+    }
   }, [tenant?.id])
 
   const dbOrders = useMemo(() => rawOrders.map(o => ({

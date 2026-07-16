@@ -9,6 +9,7 @@ import Modal from '@/components/common/Modal'
 import { useThemeStore } from '@/stores/themeStore'
 import { useAuthStore } from '@/stores/authStore'
 import { fetchTasks, insertTask, updateTaskStatus, deleteTask as dbDeleteTask, fetchStaff } from '@/lib/db'
+import { loadWithOfflineCache } from '@/lib/offlineCache'
 import toast from 'react-hot-toast'
 
 const CAN_ASSIGN = ['vendor', 'shop_manager']
@@ -193,8 +194,21 @@ export default function Tasks() {
 
   useEffect(() => {
     if (!tenant?.id) return
-    fetchTasks(tenant.id).then(rows => setTasks(rows.map(dbRowToTask))).catch(() => {})
-    fetchStaff(tenant.id).then(rows => setStaffList(rows.map(r => ({ id: r.id, name: r.name, role: r.role })))).catch(() => {})
+    const loadTasks = () => loadWithOfflineCache(
+      ['tasks', tenant.id],
+      () => fetchTasks(tenant.id),
+      { onData: (rows) => setTasks(rows.map(dbRowToTask)) },
+    )
+    const loadStaffList = () => loadWithOfflineCache(
+      ['tasksStaffList', tenant.id],
+      () => fetchStaff(tenant.id),
+      { onData: (rows) => setStaffList(rows.map(r => ({ id: r.id, name: r.name, role: r.role }))) },
+    )
+    loadTasks()
+    loadStaffList()
+    const handler = () => { loadTasks(); loadStaffList() }
+    window.addEventListener('tengapos:force-refresh', handler)
+    return () => window.removeEventListener('tengapos:force-refresh', handler)
   }, [tenant?.id])
 
   const myId = user?.id || ''
