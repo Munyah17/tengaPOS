@@ -1,15 +1,17 @@
 import { useState, useEffect } from 'react'
-import { Outlet } from 'react-router-dom'
+import { Outlet, useLocation } from 'react-router-dom'
 import Sidebar from './Sidebar'
 import TopBar from './TopBar'
 import { useAuthStore } from '@/stores/authStore'
 import { startBackgroundSync } from '@/lib/offlineSync'
 import { supabase } from '@/lib/supabase'
+import ErrorBoundary from '@/components/common/ErrorBoundary'
 import toast from 'react-hot-toast'
 
 export default function AppLayout() {
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false)
   const { tenant } = useAuthStore()
+  const location = useLocation()
 
   // Lock body scroll when mobile sidebar is open
   useEffect(() => {
@@ -67,7 +69,12 @@ export default function AppLayout() {
       <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
         <TopBar onMenuClick={() => setMobileSidebarOpen(true)} />
         <main className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain">
-          <Outlet />
+          {/* Keyed by path so a crash on one page doesn't take the sidebar/topbar
+              down with it, and navigating away recovers cleanly instead of
+              staying stuck on the fallback screen. */}
+          <ErrorBoundary key={location.pathname} fullPage={false}>
+            <Outlet />
+          </ErrorBoundary>
         </main>
       </div>
     </div>

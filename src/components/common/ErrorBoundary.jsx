@@ -22,8 +22,12 @@ export default class ErrorBoundary extends Component {
 
   render() {
     if (this.state.hasError) {
+      // fullPage=false is used per-route (inside AppLayout) so one page
+      // crashing doesn't take the sidebar/topbar down with it — the cashier
+      // can still navigate elsewhere instead of being stuck on a dead screen.
+      const fullPage = this.props.fullPage !== false
       return (
-        <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-slate-50 p-6 text-center dark:bg-slate-950">
+        <div className={`flex flex-col items-center justify-center gap-4 bg-slate-50 p-6 text-center dark:bg-slate-950 ${fullPage ? 'min-h-screen' : 'min-h-[60vh]'}`}>
           <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-amber-100 dark:bg-amber-900/30">
             <AlertTriangle className="h-7 w-7 text-amber-600 dark:text-amber-400" />
           </div>
