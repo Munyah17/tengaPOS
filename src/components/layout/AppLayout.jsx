@@ -3,15 +3,30 @@ import { Outlet, useLocation } from 'react-router-dom'
 import Sidebar from './Sidebar'
 import TopBar from './TopBar'
 import { useAuthStore } from '@/stores/authStore'
+import { useReceiptConfigStore } from '@/stores/receiptConfigStore'
 import { startBackgroundSync } from '@/lib/offlineSync'
+import { fetchEffectiveReceiptConfig } from '@/lib/db'
 import { supabase } from '@/lib/supabase'
 import ErrorBoundary from '@/components/common/ErrorBoundary'
 import toast from 'react-hot-toast'
 
 export default function AppLayout() {
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false)
-  const { tenant } = useAuthStore()
+  const { tenant, branch } = useAuthStore()
   const location = useLocation()
+
+  // Real, persisted receipt branding — loaded here (not just when Settings
+  // happens to be visited) so every role gets correctly-branded receipts,
+  // not just whoever last opened the Fiscalisation/Receipts Config page.
+  useEffect(() => {
+    if (!tenant?.id) return
+    const loadReceiptConfig = () => fetchEffectiveReceiptConfig(tenant.id, branch?.id || null)
+      .then((row) => useReceiptConfigStore.getState().loadFromDB(row))
+      .catch(() => {})
+    loadReceiptConfig()
+    window.addEventListener('tengapos:force-refresh', loadReceiptConfig)
+    return () => window.removeEventListener('tengapos:force-refresh', loadReceiptConfig)
+  }, [tenant?.id, branch?.id])
 
   // Lock body scroll when mobile sidebar is open
   useEffect(() => {

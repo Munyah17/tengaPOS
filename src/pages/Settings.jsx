@@ -12,16 +12,21 @@ import { useFiscalStore } from '@/stores/fiscalStore'
 import { pingDevice } from '@/lib/fiscalApi'
 import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/stores/authStore'
+import { useReceiptConfigStore } from '@/stores/receiptConfigStore'
 import { useFiscalPricing } from '@/lib/platformSettings'
 import { CURRENCIES, PAYMENT_PROVIDERS } from '@/utils/constants'
-import { fetchAllTenantData } from '@/lib/db'
+import {
+  fetchAllTenantData, fetchBranches, fetchReceiptConfigs,
+  submitReceiptConfig, approveReceiptConfig, rejectReceiptConfig,
+} from '@/lib/db'
 import { loadWithOfflineCache } from '@/lib/offlineCache'
-import { Download, Clock } from 'lucide-react'
+import { PAPER_SIZES, PRINTER_CONNECTIONS } from '@/lib/posPrinter'
+import { Download, Clock, Printer } from 'lucide-react'
 import toast from 'react-hot-toast'
 
 const sections = [
   { id: 'general', label: 'General', icon: SettingsIcon },
-  { id: 'store', label: 'Store', icon: Store },
+  { id: 'store', label: 'Receipts Config', icon: Printer },
   { id: 'payments', label: 'Payments', icon: CreditCard },
   { id: 'receipts', label: 'Receipts', icon: Receipt },
   { id: 'fiscalisation', label: 'ZIMRA Fiscal', icon: Cpu },
@@ -39,7 +44,7 @@ const SHOP_MANAGER_HIDDEN_SECTIONS = ['payments', 'fiscalisation', 'security']
 export default function Settings() {
   const [activeSection, setActiveSection] = useState('general')
   const { posMode, setPosMode } = useThemeStore()
-  const { tenant, role, initAuth } = useAuthStore()
+  const { tenant, role, branch: homeBranch, initAuth } = useAuthStore()
   const fiscal = useFiscalStore()
   const visibleSections = role === 'shop_manager'
     ? sections.filter((s) => !SHOP_MANAGER_HIDDEN_SECTIONS.includes(s.id))
@@ -49,6 +54,89 @@ export default function Settings() {
     if (!visibleSections.some((s) => s.id === activeSection)) setActiveSection('general')
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [role])
+
+  // ─── Receipts Config: real, persisted receipt branding/paper/template ───
+  const RECEIPT_TEMPLATES = [
+    { key: 'zimra_default', label: 'ZIMRA Default Receipt', hint: 'Standard ZIMRA-format receipt — no customisation.' },
+    { key: 'zimra_customized', label: 'ZIMRA + Customisation', hint: 'ZIMRA format, with your own store info and footer message.' },
+    { key: 'fully_customized', label: 'Fully Customized Receipt', hint: 'Your own layout — hides the ZIMRA fiscal section even if fiscalisation is active.' },
+  ]
+  const [branches, setBranches] = useState([])
+  const [receiptConfigs, setReceiptConfigs] = useState([])
+  const [scopeBranchId, setScopeBranchId] = useState(role === 'shop_manager' ? (homeBranch?.id || '') : '')
+  const [receiptForm, setReceiptForm] = useState({
+    templateMode: 'zimra_default', storeName: '', storeAddress: '', storeContacts: '',
+    tin: '', vatNumber: '', footerMessage: '', paperWidthMm: 80, printerConnection: 'usb',
+  })
+  const [savingReceiptConfig, setSavingReceiptConfig] = useState(false)
+
+  const loadReceiptConfigs = () => {
+    if (!tenant?.id) return
+    loadWithOfflineCache(['receiptConfigs', tenant.id], () => fetchReceiptConfigs(tenant.id), {
+      onData: setReceiptConfigs,
+    })
+  }
+  useEffect(loadReceiptConfigs, [tenant?.id])
+  useEffect(() => {
+    if (!tenant?.id) return
+    fetchBranches(tenant.id).then(setBranches).catch(() => {})
+  }, [tenant?.id])
+
+  // Populate the form from whatever config already exists for the selected
+  // scope (tenant default, or a specific branch) — blank/defaults otherwise.
+  useEffect(() => {
+    const existing = receiptConfigs.find((c) => (c.branch_id || '') === (scopeBranchId || ''))
+    setReceiptForm({
+      templateMode: existing?.template_mode || 'zimra_default',
+      storeName: existing?.store_name || '',
+      storeAddress: existing?.store_address || '',
+      storeContacts: existing?.store_contacts || '',
+      tin: existing?.tin || '',
+      vatNumber: existing?.vat_number || '',
+      footerMessage: existing?.footer_message || '',
+      paperWidthMm: existing?.paper_width_mm || 80,
+      printerConnection: existing?.printer_connection || 'usb',
+    })
+  }, [scopeBranchId, receiptConfigs])
+
+  const handleSaveReceiptConfig = async () => {
+    setSavingReceiptConfig(true)
+    try {
+      await submitReceiptConfig({ ...receiptForm, branchId: scopeBranchId || null })
+      toast.success(
+        role === 'shop_manager'
+          ? 'Submitted — awaiting the business owner\'s approval'
+          : 'Receipt config saved',
+      )
+      loadReceiptConfigs()
+    } catch (err) {
+      toast.error(err.message || 'Failed to save receipt config')
+    } finally {
+      setSavingReceiptConfig(false)
+    }
+  }
+
+  const handleApproveReceiptConfig = async (id) => {
+    try {
+      await approveReceiptConfig(id)
+      toast.success('Approved')
+      loadReceiptConfigs()
+    } catch (err) {
+      toast.error(err.message || 'Failed to approve')
+    }
+  }
+
+  const handleRejectReceiptConfig = async (id) => {
+    try {
+      await rejectReceiptConfig(id)
+      toast.success('Rejected')
+      loadReceiptConfigs()
+    } catch (err) {
+      toast.error(err.message || 'Failed to reject')
+    }
+  }
+
+  const pendingConfigs = receiptConfigs.filter((c) => c.pending_approval)
 
   // ─── Fiscalisation add-on subscription ───
   const fiscalPricing = useFiscalPricing()
@@ -1070,24 +1158,173 @@ export default function Settings() {
 
             {activeSection === 'store' && (
               <div className="space-y-6">
-                <h3 className="text-lg font-bold text-slate-900 dark:text-white">Store Details</h3>
+                <div>
+                  <h3 className="text-lg font-bold text-slate-900 dark:text-white">Receipts Config</h3>
+                  <p className="mt-1 text-sm text-slate-500">
+                    What actually prints on the receipt — store details, TIN, paper size, and layout.
+                    {role === 'shop_manager' && ' Changes to your branch need the business owner\'s approval before they take effect.'}
+                  </p>
+                </div>
+
+                {/* Vendor: pending approval queue */}
+                {role === 'vendor' && pendingConfigs.length > 0 && (
+                  <div className="space-y-2 rounded-xl border border-amber-300 bg-amber-50 p-4 dark:border-amber-700/60 dark:bg-amber-900/20">
+                    <p className="text-sm font-semibold text-amber-900 dark:text-amber-200">
+                      {pendingConfigs.length} change{pendingConfigs.length !== 1 ? 's' : ''} awaiting your approval
+                    </p>
+                    {pendingConfigs.map((c) => (
+                      <div key={c.id} className="flex items-center justify-between gap-3 rounded-lg bg-white p-3 text-sm dark:bg-slate-900">
+                        <span className="text-slate-700 dark:text-slate-300">
+                          {c.branches?.name || 'Unknown branch'} — {RECEIPT_TEMPLATES.find(t => t.key === c.template_mode)?.label}
+                        </span>
+                        <div className="flex flex-shrink-0 gap-2">
+                          <button onClick={() => handleApproveReceiptConfig(c.id)} className="rounded-lg bg-green-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-green-700">Approve</button>
+                          <button onClick={() => handleRejectReceiptConfig(c.id)} className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300">Reject</button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Scope selector */}
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium text-slate-700 dark:text-slate-300">Applies to</label>
+                  {role === 'vendor' ? (
+                    <select
+                      value={scopeBranchId}
+                      onChange={(e) => setScopeBranchId(e.target.value)}
+                      className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                    >
+                      <option value="">All branches (default)</option>
+                      {branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+                    </select>
+                  ) : (
+                    <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
+                      {branches.find((b) => b.id === homeBranch?.id)?.name || 'Your branch'} only
+                    </div>
+                  )}
+                </div>
+
+                {/* Template mode */}
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium text-slate-700 dark:text-slate-300">Receipt Template</label>
+                  <div className="space-y-2">
+                    {RECEIPT_TEMPLATES.map((t, i) => (
+                      <label
+                        key={t.key}
+                        className={`flex cursor-pointer items-start gap-3 rounded-xl border p-3 ${
+                          receiptForm.templateMode === t.key
+                            ? 'border-brand-500 bg-brand-50 dark:bg-brand-950'
+                            : 'border-slate-200 dark:border-slate-700'
+                        }`}
+                      >
+                        <input
+                          type="radio"
+                          checked={receiptForm.templateMode === t.key}
+                          onChange={() => setReceiptForm((f) => ({ ...f, templateMode: t.key }))}
+                          className="mt-0.5"
+                        />
+                        <div>
+                          <p className="text-sm font-semibold text-slate-900 dark:text-white">Option {i + 1}. {t.label}</p>
+                          <p className="text-xs text-slate-500">{t.hint}</p>
+                        </div>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Store info */}
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div>
+                    <label className="mb-1.5 block text-sm font-medium text-slate-700 dark:text-slate-300">Store Name</label>
+                    <input
+                      type="text"
+                      value={receiptForm.storeName}
+                      onChange={(e) => setReceiptForm((f) => ({ ...f, storeName: e.target.value }))}
+                      placeholder={tenant?.name || 'Your Business Name'}
+                      className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1.5 block text-sm font-medium text-slate-700 dark:text-slate-300">Store Contacts</label>
+                    <input
+                      type="text"
+                      value={receiptForm.storeContacts}
+                      onChange={(e) => setReceiptForm((f) => ({ ...f, storeContacts: e.target.value }))}
+                      placeholder="+263 77 123 4567"
+                      className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                    />
+                  </div>
+                </div>
                 <div>
                   <label className="mb-1.5 block text-sm font-medium text-slate-700 dark:text-slate-300">Store Address</label>
                   <input
                     type="text"
-                    defaultValue="123 Samora Machel Ave, Harare"
+                    value={receiptForm.storeAddress}
+                    onChange={(e) => setReceiptForm((f) => ({ ...f, storeAddress: e.target.value }))}
+                    placeholder="123 Samora Machel Ave, Harare"
                     className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
                   />
+                </div>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div>
+                    <label className="mb-1.5 block text-sm font-medium text-slate-700 dark:text-slate-300">TIN</label>
+                    <input
+                      type="text"
+                      value={receiptForm.tin}
+                      onChange={(e) => setReceiptForm((f) => ({ ...f, tin: e.target.value }))}
+                      placeholder="e.g. 2000123456"
+                      className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1.5 block text-sm font-medium text-slate-700 dark:text-slate-300">VAT Registration No.</label>
+                    <input
+                      type="text"
+                      value={receiptForm.vatNumber}
+                      onChange={(e) => setReceiptForm((f) => ({ ...f, vatNumber: e.target.value }))}
+                      className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                    />
+                  </div>
                 </div>
                 <div>
-                  <label className="mb-1.5 block text-sm font-medium text-slate-700 dark:text-slate-300">Phone</label>
-                  <input
-                    type="text"
-                    defaultValue="+263 77 123 4567"
+                  <label className="mb-1.5 block text-sm font-medium text-slate-700 dark:text-slate-300">Footer Message (optional)</label>
+                  <textarea
+                    value={receiptForm.footerMessage}
+                    onChange={(e) => setReceiptForm((f) => ({ ...f, footerMessage: e.target.value }))}
+                    placeholder="Leave blank to use the default 'Thank you for your business!' footer"
+                    rows={2}
                     className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
                   />
                 </div>
-                <Button>Save Changes</Button>
+
+                {/* Printer hardware */}
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div>
+                    <label className="mb-1.5 block text-sm font-medium text-slate-700 dark:text-slate-300">Paper Size</label>
+                    <select
+                      value={receiptForm.paperWidthMm}
+                      onChange={(e) => setReceiptForm((f) => ({ ...f, paperWidthMm: Number(e.target.value) }))}
+                      className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                    >
+                      {PAPER_SIZES.map((p) => <option key={p.mm} value={p.mm}>{p.label}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="mb-1.5 block text-sm font-medium text-slate-700 dark:text-slate-300">Printer Connection</label>
+                    <select
+                      value={receiptForm.printerConnection}
+                      onChange={(e) => setReceiptForm((f) => ({ ...f, printerConnection: e.target.value }))}
+                      className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                    >
+                      {PRINTER_CONNECTIONS.map((p) => <option key={p.key} value={p.key}>{p.label}</option>)}
+                    </select>
+                  </div>
+                </div>
+
+                <Button onClick={handleSaveReceiptConfig} disabled={savingReceiptConfig}>
+                  {savingReceiptConfig ? 'Saving…' : role === 'shop_manager' ? 'Submit for Approval' : 'Save Changes'}
+                </Button>
               </div>
             )}
 

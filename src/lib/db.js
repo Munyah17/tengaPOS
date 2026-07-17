@@ -952,3 +952,96 @@ export async function deletePayrollRun(runId) {
   const { error } = await supabase.from('payroll_runs').delete().eq('id', runId)
   if (error) throw error
 }
+
+// ─── Receipt configuration (branding, paper size, template mode) ──────────────
+
+export async function fetchReceiptConfigs(tenantId) {
+  const { data, error } = await supabase
+    .from('receipt_configs')
+    .select('*, branches(name)')
+    .eq('tenant_id', tenantId)
+  if (error) throw error
+  return data
+}
+
+/** The config that should actually apply for a given branch right now:
+ *  an approved branch-specific override if one exists, else the tenant-wide
+ *  default (branch_id IS NULL), else null (caller falls back to hardcoded defaults). */
+export async function fetchEffectiveReceiptConfig(tenantId, branchId) {
+  const { data, error } = await supabase
+    .from('receipt_configs')
+    .select('*')
+    .eq('tenant_id', tenantId)
+    .or(branchId ? `branch_id.eq.${branchId},branch_id.is.null` : 'branch_id.is.null')
+    .eq('pending_approval', false)
+  if (error) throw error
+  const branchRow = branchId ? data.find((r) => r.branch_id === branchId) : null
+  return branchRow || data.find((r) => r.branch_id === null) || null
+}
+
+export async function submitReceiptConfig(config) {
+  const { data, error } = await supabase.rpc('submit_receipt_config', {
+    p_branch_id: config.branchId || null,
+    p_template_mode: config.templateMode || 'zimra_default',
+    p_store_name: config.storeName || null,
+    p_store_address: config.storeAddress || null,
+    p_store_contacts: config.storeContacts || null,
+    p_tin: config.tin || null,
+    p_vat_number: config.vatNumber || null,
+    p_footer_message: config.footerMessage || null,
+    p_paper_width_mm: config.paperWidthMm || 80,
+    p_printer_connection: config.printerConnection || 'usb',
+  })
+  if (error) throw error
+  return data
+}
+
+export async function approveReceiptConfig(configId) {
+  const { error } = await supabase.rpc('approve_receipt_config', { p_config_id: configId })
+  if (error) throw error
+}
+
+export async function rejectReceiptConfig(configId) {
+  const { error } = await supabase.rpc('reject_receipt_config', { p_config_id: configId })
+  if (error) throw error
+}
+
+// ─── Staff shifts (shop manager: working hours & rotations) ───────────────────
+
+export async function fetchShifts(tenantId, { fromDate, toDate } = {}) {
+  let query = supabase
+    .from('staff_shifts')
+    .select('*, users(name, role)')
+    .eq('tenant_id', tenantId)
+    .order('shift_date', { ascending: true })
+    .order('start_time', { ascending: true })
+  if (fromDate) query = query.gte('shift_date', fromDate)
+  if (toDate) query = query.lte('shift_date', toDate)
+  const { data, error } = await query
+  if (error) throw error
+  return data
+}
+
+export async function insertShift(tenantId, branchId, shift) {
+  const { data, error } = await supabase
+    .from('staff_shifts')
+    .insert({
+      tenant_id: tenantId,
+      branch_id: branchId || null,
+      user_id: shift.userId,
+      shift_date: shift.shiftDate,
+      start_time: shift.startTime,
+      end_time: shift.endTime,
+      notes: shift.notes || null,
+      created_by: shift.createdBy || null,
+    })
+    .select('*, users(name, role)')
+    .single()
+  if (error) throw error
+  return data
+}
+
+export async function deleteShift(shiftId) {
+  const { error } = await supabase.from('staff_shifts').delete().eq('id', shiftId)
+  if (error) throw error
+}

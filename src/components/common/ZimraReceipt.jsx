@@ -1,8 +1,9 @@
 import { useRef, useState } from 'react'
 import { Printer, X, CheckCircle, Usb } from 'lucide-react'
 import { useFiscalStore } from '@/stores/fiscalStore'
+import { useReceiptConfigStore } from '@/stores/receiptConfigStore'
 import { formatCurrency } from '@/utils/formatters'
-import { printToPosPrinter, PAPER_WIDTH_CHARS } from '@/lib/posPrinter'
+import { printToPosPrinter, paperWidthToChars } from '@/lib/posPrinter'
 import toast from 'react-hot-toast'
 
 // ZIMRA payment method mapping per FDMS spec v7.2
@@ -35,23 +36,32 @@ export default function ZimraReceipt({ receipt, onClose }) {
   const receiptRef = useRef(null)
   const [posPrinting, setPosPrinting] = useState(false)
   const fiscal = useFiscalStore()
+  const receiptConfig = useReceiptConfigStore()
   const vatEnabled = receipt.vatEnabled !== false
   const vatRate = receipt.vatRate ?? 15.5
   const fmt = (n) => formatCurrency(n, receipt.currency)
 
   const isFiscalised = fiscal.isEnabled && fiscal.isRegistered
+  // Fully Customized hides the ZIMRA fiscal section even if fiscalisation is
+  // technically active — the vendor explicitly opted into their own layout.
+  const showFiscalSection = isFiscalised && receiptConfig.templateMode !== 'fully_customized'
 
   const now = new Date(receipt.date)
   const dateStr = now.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' })
   const timeStr = now.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
 
-  const storeName = fiscal.branchName || 'TENGAPOS DEMO STORE'
-  const storeAddress = fiscal.branchAddress || '123 Samora Machel Ave, Harare'
-  const storeContacts = fiscal.branchContacts || '+263 77 123 4567'
-  const tin = fiscal.tin || 'XXXXXXXXXX'
-  const vatNo = fiscal.vatNumber || 'Not Configured'
+  // Receipts Config (Settings) is the real, persisted source of store
+  // branding — falls back to the ZIMRA fiscal registration's own values
+  // (for tenants who set up fiscalisation but never touched Receipts
+  // Config), then to placeholder demo values as a last resort.
+  const storeName = receiptConfig.storeName || fiscal.branchName || 'TENGAPOS DEMO STORE'
+  const storeAddress = receiptConfig.storeAddress || fiscal.branchAddress || '123 Samora Machel Ave, Harare'
+  const storeContacts = receiptConfig.storeContacts || fiscal.branchContacts || '+263 77 123 4567'
+  const tin = receiptConfig.tin || fiscal.tin || 'XXXXXXXXXX'
+  const vatNo = receiptConfig.vatNumber || fiscal.vatNumber || 'Not Configured'
   const deviceID = fiscal.deviceID ? fiscal.deviceID.padStart(10, '0') : '0000000000'
   const receiptGlobalNo = String(fiscal.lastReceiptGlobalNo).padStart(10, '0')
+  const paperWidthChars = paperWidthToChars(receiptConfig.paperWidthMm || 80)
 
   const zimraPaymentType = ZIMRA_PAYMENT_MAP[receipt.paymentMethod] || 'Cash'
 
@@ -71,14 +81,14 @@ export default function ZimraReceipt({ receipt, onClose }) {
       <div class="item">
         <div class="item-name">${esc(item.name)}</div>
         <div class="row indent"><span>${item.quantity} x ${esc(fmt(item.price))}</span><span>${esc(fmt(item.price * item.quantity))}</span></div>
-        <div class="tiny indent">HS: 000000 | Tax: D (15%)</div>
+        ${vatEnabled ? `<div class="tiny indent">HS: 000000 | Tax: D (${vatRate}%)</div>` : ''}
       </div>
     `).join('')
 
     // Fiscalisation is an optional add-on — if the tenant hasn't activated it,
     // the receipt shouldn't mention ZIMRA at all rather than flag itself as
     // "not yet fiscalised" to every customer.
-    const fiscalHtml = isFiscalised ? `
+    const fiscalHtml = showFiscalSection ? `
       <div class="center">
         <div class="fiscal-badge">ZIMRA FISCAL RECEIPT</div>
         <div class="tiny">Device ID: ${esc(deviceID)}</div>
@@ -129,7 +139,7 @@ export default function ZimraReceipt({ receipt, onClose }) {
           <div>VAT Reg: ${esc(vatNo)}</div>
         </div>
         <div class="sep"></div>
-        <div class="center bold">${isFiscalised ? 'FISCAL TAX INVOICE' : 'RECEIPT'}</div>
+        <div class="center bold">${showFiscalSection ? 'FISCAL TAX INVOICE' : 'RECEIPT'}</div>
         ${row('Receipt No:', receipt.receiptNumber)}
         ${row('Date:', dateStr)}
         ${row('Time:', timeStr)}
@@ -154,11 +164,14 @@ export default function ZimraReceipt({ receipt, onClose }) {
         <div class="row-4"><span>Code</span><span>Rate</span><span>Taxable</span><span>VAT</span></div>
         <div class="row-4"><span>D</span><span>${esc(vatRate)}%</span><span>${esc(fmt(taxableAmt))}</span><span>${esc(fmt(vatAmt))}</span></div>
         ` : ''}
-        ${isFiscalised ? `<div class="sep"></div>${fiscalHtml}` : ''}
+        ${showFiscalSection ? `<div class="sep"></div>${fiscalHtml}` : ''}
         <div class="sep"></div>
         <div class="center tiny">
+          ${receiptConfig.footerMessage ? `<div>${esc(receiptConfig.footerMessage)}</div>` : `
           <div>Thank you for your business!</div>
-          <div>Powered by tengaPOS</div>
+          <div>Powered by tengaPOS - www.tengapos.co.zw</div>
+          <div>+263773909307 | info@globalspaceweb.co.zw</div>
+          `}
         </div>
       </body>
       </html>
@@ -176,11 +189,11 @@ export default function ZimraReceipt({ receipt, onClose }) {
     setPosPrinting(true)
     try {
       const lines = []
-      const dash = () => lines.push('-'.repeat(PAPER_WIDTH_CHARS))
+      const dash = () => lines.push('-'.repeat(paperWidthChars))
       const rowLine = (left, right) => {
         const l = String(left ?? '')
         const r = String(right ?? '')
-        const pad = Math.max(1, PAPER_WIDTH_CHARS - l.length - r.length)
+        const pad = Math.max(1, paperWidthChars - l.length - r.length)
         lines.push(l + ' '.repeat(pad) + r)
       }
 
@@ -190,7 +203,7 @@ export default function ZimraReceipt({ receipt, onClose }) {
       lines.push({ text: `TIN: ${tin}`, center: true })
       lines.push({ text: `VAT Reg: ${vatNo}`, center: true })
       dash()
-      lines.push({ text: isFiscalised ? 'FISCAL TAX INVOICE' : 'RECEIPT', bold: true, center: true })
+      lines.push({ text: showFiscalSection ? 'FISCAL TAX INVOICE' : 'RECEIPT', bold: true, center: true })
       rowLine('Receipt No:', receipt.receiptNumber)
       rowLine('Date:', dateStr)
       rowLine('Time:', timeStr)
@@ -219,7 +232,7 @@ export default function ZimraReceipt({ receipt, onClose }) {
         lines.push({ text: 'TAX BREAKDOWN', bold: true })
         rowLine(`Code D  ${vatRate}%`, `${fmt(taxableAmt)} / ${fmt(vatAmt)}`)
       }
-      if (isFiscalised) {
+      if (showFiscalSection) {
         dash()
         lines.push({ text: 'ZIMRA FISCAL RECEIPT', bold: true, center: true })
         lines.push({ text: `Device ID: ${deviceID}`, center: true })
@@ -227,8 +240,13 @@ export default function ZimraReceipt({ receipt, onClose }) {
         lines.push({ text: 'Verify: fdms.zimra.co.zw', center: true })
       }
       dash()
-      lines.push({ text: 'Thank you for your business!', center: true })
-      lines.push({ text: 'Powered by tengaPOS', center: true })
+      if (receiptConfig.footerMessage) {
+        lines.push({ text: receiptConfig.footerMessage, center: true })
+      } else {
+        lines.push({ text: 'Thank you for your business!', center: true })
+        lines.push({ text: 'Powered by tengaPOS - www.tengapos.co.zw', center: true })
+        lines.push({ text: '+263773909307 | info@globalspaceweb.co.zw', center: true })
+      }
 
       await printToPosPrinter(lines)
       toast.success('Sent to POS printer')
@@ -252,13 +270,13 @@ export default function ZimraReceipt({ receipt, onClose }) {
         {/* Header */}
         <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4 dark:border-slate-800">
           <div className="flex items-center gap-2">
-            {isFiscalised ? (
+            {showFiscalSection ? (
               <CheckCircle className="h-5 w-5 text-green-500" />
             ) : (
               <Printer className="h-5 w-5 text-slate-400" />
             )}
             <span className="font-bold text-slate-900 dark:text-white">
-              {isFiscalised ? 'Fiscal Receipt' : 'Receipt'}
+              {showFiscalSection ? 'Fiscal Receipt' : 'Receipt'}
             </span>
           </div>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
@@ -286,7 +304,7 @@ export default function ZimraReceipt({ receipt, onClose }) {
             <div className="my-2 border-t border-dashed border-black" />
 
             {/* Receipt info */}
-            <div className="text-center font-bold">{isFiscalised ? 'FISCAL TAX INVOICE' : 'RECEIPT'}</div>
+            <div className="text-center font-bold">{showFiscalSection ? 'FISCAL TAX INVOICE' : 'RECEIPT'}</div>
             <div className="mt-1 flex justify-between">
               <span>Receipt No:</span>
               <span>{receipt.receiptNumber}</span>
@@ -315,7 +333,9 @@ export default function ZimraReceipt({ receipt, onClose }) {
                   <span>{item.quantity} x {fmt(item.price)}</span>
                   <span>{fmt(item.price * item.quantity)}</span>
                 </div>
-                <div className="pl-2 text-[9px] text-slate-500">HS: 000000 | Tax: D (15%)</div>
+                {vatEnabled && (
+                  <div className="pl-2 text-[9px] text-slate-500">HS: 000000 | Tax: D ({vatRate}%)</div>
+                )}
               </div>
             ))}
 
@@ -390,7 +410,7 @@ export default function ZimraReceipt({ receipt, onClose }) {
 
             {/* Fiscalisation is an optional add-on — if it isn't active for this
                 tenant, the receipt shouldn't mention ZIMRA at all. */}
-            {isFiscalised && (
+            {showFiscalSection && (
               <>
                 <div className="my-2 border-t border-dashed border-black" />
                 <div className="text-center">
@@ -419,8 +439,15 @@ export default function ZimraReceipt({ receipt, onClose }) {
 
             {/* Footer */}
             <div className="text-center text-[9px]">
-              <div>Thank you for your business!</div>
-              <div>Powered by tengaPOS</div>
+              {receiptConfig.footerMessage ? (
+                <div>{receiptConfig.footerMessage}</div>
+              ) : (
+                <>
+                  <div>Thank you for your business!</div>
+                  <div>Powered by tengaPOS - www.tengapos.co.zw</div>
+                  <div>+263773909307 | info@globalspaceweb.co.zw</div>
+                </>
+              )}
             </div>
           </div>
         </div>

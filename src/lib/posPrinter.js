@@ -16,11 +16,37 @@ const ESC = 0x1b
 const GS = 0x1d
 const PRINT_AGENT_URL = 'http://127.0.0.1:38471'
 
-// Standard 80mm thermal receipt width at the printer's normal Font A —
-// nearly universal across desktop all-in-one POS printers (58mm mobile
-// printers are the exception, at ~32 chars). Used to pad/align columns so
-// totals line up instead of drifting left with a big gap on the right.
-export const PAPER_WIDTH_CHARS = 48
+// Standard thermal/receipt paper widths and their printable character count
+// at the printer's normal Font A (12x24 dots) — used both for the Receipts
+// Config paper-size picker and to pad/align receipt columns so totals don't
+// drift left with a big gap (58mm) or run out of room (110mm).
+export const PAPER_SIZES = [
+  { mm: 44, chars: 24, label: '44mm — Mobile compact' },
+  { mm: 48, chars: 28, label: '48mm — Mobile' },
+  { mm: 56, chars: 30, label: '56mm — Compact' },
+  { mm: 58, chars: 32, label: '58mm — Standard mobile/small (most common)' },
+  { mm: 60, chars: 33, label: '60mm' },
+  { mm: 70, chars: 40, label: '70mm' },
+  { mm: 76, chars: 42, label: '76mm' },
+  { mm: 80, chars: 48, label: '80mm — Standard desktop (most common)' },
+  { mm: 82, chars: 49, label: '82mm' },
+  { mm: 110, chars: 66, label: '110mm — Wide' },
+]
+
+export function paperWidthToChars(mm) {
+  const match = PAPER_SIZES.reduce((closest, size) =>
+    Math.abs(size.mm - mm) < Math.abs(closest.mm - mm) ? size : closest, PAPER_SIZES[7])
+  return match.chars
+}
+
+export const PRINTER_CONNECTIONS = [
+  { key: 'usb', label: 'USB' },
+  { key: 'lpt1', label: 'LPT1 (parallel port)' },
+  { key: 'network', label: 'Network (Ethernet)' },
+  { key: 'wifi', label: 'Wi-Fi' },
+  { key: 'bluetooth', label: 'Bluetooth' },
+  { key: 'serial', label: 'Serial (RS-232)' },
+]
 
 function escPosInit() {
   return [ESC, 0x40] // ESC @ — initialize printer

@@ -12,6 +12,7 @@ import {
 } from '@/lib/db'
 import { loadWithOfflineCache } from '@/lib/offlineCache'
 import { supabase } from '@/lib/supabase'
+import ShiftRoster from '@/components/staff/ShiftRoster'
 import toast from 'react-hot-toast'
 
 const roleLabels = {
@@ -37,7 +38,8 @@ const exportColumns = [
 
 export default function Staff() {
   const { posMode } = useThemeStore()
-  const { tenant } = useAuthStore()
+  const { tenant, role, branch: homeBranch, user } = useAuthStore()
+  const isShopManager = role === 'shop_manager'
   const isRestaurant = posMode === 'restaurant'
   const [staff, setStaff] = useState([])
   const [branches, setBranches] = useState([])
@@ -166,20 +168,31 @@ export default function Staff() {
     <div className="p-4 sm:p-6">
       <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-extrabold text-slate-900 dark:text-white">Staff Management</h1>
-          <p className="text-sm text-slate-500">Add and manage your team — accounts are created instantly, no invitations</p>
+          <h1 className="text-2xl font-extrabold text-slate-900 dark:text-white">
+            {isShopManager ? 'Shift Roster' : 'Staff Management'}
+          </h1>
+          <p className="text-sm text-slate-500">
+            {isShopManager
+              ? 'Plan working hours and rotations for your branch'
+              : 'Add and manage your team — accounts are created instantly, no invitations'}
+          </p>
         </div>
-        <div className="flex gap-2">
-          <button onClick={loadStaff} className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
-            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-          </button>
-          <ExportMenu data={staff} columns={exportColumns} title="Staff" filename="tengapos_staff" />
-          <Button variant={isRestaurant ? 'restaurant' : 'primary'} onClick={() => setShowAdd(true)}>
-            <Plus className="h-4 w-4" /> Add Staff
-          </Button>
-        </div>
+        {!isShopManager && (
+          <div className="flex gap-2">
+            <button onClick={loadStaff} className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
+              <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+            </button>
+            <ExportMenu data={staff} columns={exportColumns} title="Staff" filename="tengapos_staff" />
+            <Button variant={isRestaurant ? 'restaurant' : 'primary'} onClick={() => setShowAdd(true)}>
+              <Plus className="h-4 w-4" /> Add Staff
+            </Button>
+          </div>
+        )}
       </div>
 
+      {isShopManager ? (
+        <ShiftRoster tenant={tenant} branch={homeBranch} staffList={staff} userId={user?.id} />
+      ) : (
       <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
         {loading ? (
           <div className="flex items-center justify-center py-16 text-sm text-slate-400">
@@ -263,6 +276,7 @@ export default function Staff() {
           </div>
         )}
       </div>
+      )}
 
       {/* Add Staff Modal — creates a real account instantly, no invitation */}
       <Modal isOpen={showAdd} onClose={() => setShowAdd(false)} title="Add Staff Member">
