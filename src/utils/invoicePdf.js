@@ -1,22 +1,28 @@
 import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
 import { formatCurrency, formatDate } from './formatters'
+import { hexToRgb } from './exportUtils'
 
 /**
  * Generates and downloads a PDF for a quotation or invoice. `doc` is a row
  * from the `documents` table (or the in-memory equivalent before saving).
  * `store` is { name, address, contacts, tin, vatNumber } — pulled from
  * Receipts Config the same way receipts are, so branding stays consistent
- * across receipts, quotations, and invoices.
+ * across receipts, quotations, and invoices. `brandColor` (hex) comes from
+ * the tenant's white-label config, if they have one — falls back to
+ * tengaPOS blue.
  */
-export function generateDocumentPDF(doc, store, currency = 'USD') {
+export function generateDocumentPDF(doc, store, currency = 'USD', brandColor = null) {
   const pdf = new jsPDF()
   const isInvoice = doc.doc_type === 'invoice'
   const fmt = (n) => formatCurrency(n, currency)
+  const [r, g, b] = hexToRgb(brandColor)
 
   pdf.setFontSize(18)
   pdf.setFont(undefined, 'bold')
+  pdf.setTextColor(r, g, b)
   pdf.text(store.name || 'Your Business', 14, 20)
+  pdf.setTextColor(0, 0, 0)
   pdf.setFont(undefined, 'normal')
   pdf.setFontSize(9)
   let y = 27
@@ -55,7 +61,7 @@ export function generateDocumentPDF(doc, store, currency = 'USD') {
       return [i.description, i.qty, fmt(i.unit_price), i.discount_pct ? `${i.discount_pct}%` : '—', fmt(lineTotal)]
     }),
     styles: { fontSize: 9 },
-    headStyles: { fillColor: [30, 64, 175] },
+    headStyles: { fillColor: [r, g, b] },
   })
 
   let finalY = pdf.lastAutoTable.finalY + 8

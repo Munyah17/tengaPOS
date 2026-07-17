@@ -1133,26 +1133,71 @@ export default function Settings() {
 
             {activeSection === 'whitelabel' && (
               <div className="space-y-6">
-                <h3 className="text-lg font-bold text-slate-900 dark:text-white">White Label Branding</h3>
-                <p className="text-sm text-slate-500">
-                  Customize your POS with your own branding. $50 once-off fee.
-                </p>
                 <div>
-                  <label className="mb-1.5 block text-sm font-medium text-slate-700 dark:text-slate-300">Custom Domain</label>
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="text"
-                      placeholder="yourstore"
-                      className="flex-1 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
-                    />
-                    <span className="text-sm text-slate-500">.tengapos.com</span>
+                  <h3 className="text-lg font-bold text-slate-900 dark:text-white">White Label Branding</h3>
+                  <p className="mt-1 text-sm text-slate-500">
+                    Your brand replaces tengaPOS branding across the portal, reports, and printed documents.
+                    This is a Business/Enterprise add-on set up by tengaPOS — reach out to change it.
+                  </p>
+                </div>
+
+                {tenant?.whitelabel?.enabled ? (
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-2 rounded-xl border border-green-300 bg-green-50 px-4 py-2.5 text-sm font-semibold text-green-800 dark:border-green-700/60 dark:bg-green-900/20 dark:text-green-300">
+                      <CheckCircle className="h-4 w-4" /> White label is active for your account
+                    </div>
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <div>
+                        <p className="text-xs font-semibold uppercase text-slate-400">Brand Name</p>
+                        <p className="text-sm text-slate-900 dark:text-white">{tenant.whitelabel.brand_name || '—'}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs font-semibold uppercase text-slate-400">Support Contact</p>
+                        <p className="text-sm text-slate-900 dark:text-white">
+                          {tenant.whitelabel.support_email || tenant.whitelabel.support_phone || '—'}
+                        </p>
+                      </div>
+                    </div>
+                    {tenant.whitelabel.primary_color && (
+                      <div>
+                        <p className="mb-1.5 text-xs font-semibold uppercase text-slate-400">Brand Colours</p>
+                        <div className="flex items-center gap-3">
+                          <div className="flex items-center gap-2">
+                            <div className="h-8 w-8 rounded-lg border border-slate-200 dark:border-slate-700" style={{ backgroundColor: tenant.whitelabel.primary_color }} />
+                            <span className="text-xs text-slate-500">Primary</span>
+                          </div>
+                          {tenant.whitelabel.secondary_color && (
+                            <div className="flex items-center gap-2">
+                              <div className="h-8 w-8 rounded-lg border border-slate-200 dark:border-slate-700" style={{ backgroundColor: tenant.whitelabel.secondary_color }} />
+                              <span className="text-xs text-slate-500">Accent</span>
+                            </div>
+                          )}
+                        </div>
+                        <p className="mt-2 text-xs text-slate-500">
+                          Already applied to your PDF report and invoice/quotation exports.
+                        </p>
+                      </div>
+                    )}
+                    {tenant.whitelabel.logo_url && (
+                      <div>
+                        <p className="mb-1.5 text-xs font-semibold uppercase text-slate-400">Logo</p>
+                        <img src={tenant.whitelabel.logo_url} alt="Brand logo" className="h-12 rounded-lg border border-slate-200 bg-white p-1 dark:border-slate-700" />
+                      </div>
+                    )}
                   </div>
-                </div>
-                <div>
-                  <label className="mb-1.5 block text-sm font-medium text-slate-700 dark:text-slate-300">Brand Color</label>
-                  <input type="color" defaultValue="#2563eb" className="h-10 w-20 rounded-lg" />
-                </div>
-                <Button>Enable White Label — $50</Button>
+                ) : (
+                  <div className="rounded-xl border-2 border-dashed border-slate-200 p-6 text-center dark:border-slate-700">
+                    <p className="text-sm text-slate-500">
+                      White label isn't set up on your account yet. It's available on Business and Enterprise plans.
+                    </p>
+                    <a
+                      href="mailto:info@globalspaceweb.co.zw?subject=White%20Label%20Enquiry"
+                      className="mt-3 inline-flex items-center gap-1.5 rounded-xl bg-brand-600 px-4 py-2 text-sm font-bold text-white hover:bg-brand-700"
+                    >
+                      Contact us to enable it <ExternalLink className="h-3.5 w-3.5" />
+                    </a>
+                  </div>
+                )}
               </div>
             )}
 

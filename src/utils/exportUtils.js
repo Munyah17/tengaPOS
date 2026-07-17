@@ -17,7 +17,18 @@ export function exportToExcel(data, filename) {
   XLSX.writeFile(wb, `${filename}.xlsx`)
 }
 
-export function exportToPDF(data, columns, title, filename) {
+// White-label brand colour (set by Super Admin per tenant) falls back to
+// tengaPOS blue when a tenant has no white-label configured — so every PDF
+// export reflects the tenant's own brand once it's set, with no visible
+// change for anyone who doesn't have it.
+export function hexToRgb(hex, fallback = [30, 64, 175]) {
+  if (!hex) return fallback
+  const match = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex.trim())
+  if (!match) return fallback
+  return [parseInt(match[1], 16), parseInt(match[2], 16), parseInt(match[3], 16)]
+}
+
+export function exportToPDF(data, columns, title, filename, brandColor) {
   const doc = new jsPDF()
   doc.setFontSize(16)
   doc.text(title, 14, 22)
@@ -29,7 +40,7 @@ export function exportToPDF(data, columns, title, filename) {
     body: data.map((row) => columns.map((c) => row[c.key] ?? '')),
     startY: 35,
     styles: { fontSize: 8 },
-    headStyles: { fillColor: [30, 64, 175] },
+    headStyles: { fillColor: hexToRgb(brandColor) },
   })
 
   doc.save(`${filename}.pdf`)

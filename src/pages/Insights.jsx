@@ -12,6 +12,7 @@ import { supabase } from '@/lib/supabase'
 import { fetchProductPerformance } from '@/lib/db'
 import { loadWithOfflineCache } from '@/lib/offlineCache'
 import { getPresetRange } from '@/utils/dateRanges'
+import { hexToRgb } from '@/utils/exportUtils'
 import toast from 'react-hot-toast'
 import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
@@ -230,7 +231,7 @@ export default function Insights() {
         `${((p.revenue - p.cost) / p.revenue * 100).toFixed(1)}%`,
       ]),
       styles: { fontSize: 9 },
-      headStyles: { fillColor: [37, 99, 235] },
+      headStyles: { fillColor: hexToRgb(tenant?.whitelabel?.enabled ? tenant.whitelabel.primary_color : null, [37, 99, 235]) },
     })
     if (result) {
       let y = doc.lastAutoTable.finalY + 10

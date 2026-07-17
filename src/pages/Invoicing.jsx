@@ -172,7 +172,7 @@ export default function Invoicing() {
       contacts: receiptConfig.storeContacts,
       tin: receiptConfig.tin,
       vatNumber: receiptConfig.vatNumber,
-    }, tenant?.currency)
+    }, tenant?.currency, tenant?.whitelabel?.enabled ? tenant.whitelabel.primary_color : null)
   }
 
   const { subtotal: formSubtotal, vatAmount: formVat, total: formTotal } = computeTotals(

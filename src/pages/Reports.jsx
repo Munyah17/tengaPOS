@@ -79,7 +79,7 @@ export default function Reports() {
       const filename = `tengapos_report_${label.toLowerCase().replace(/\s+/g, '_')}`
       if (format === 'csv') exportToCSV(rows, filename)
       else if (format === 'excel') exportToExcel(rows, filename)
-      else exportToPDF(rows, TRANSACTION_COLUMNS, `Sales Report — ${label}`, filename)
+      else exportToPDF(rows, TRANSACTION_COLUMNS, `Sales Report — ${label}`, filename, tenant?.whitelabel?.enabled ? tenant.whitelabel.primary_color : null)
       toast.success(`Exported ${rows.length} transaction${rows.length !== 1 ? 's' : ''}`)
       setExportOpen(false)
     } catch (err) {
