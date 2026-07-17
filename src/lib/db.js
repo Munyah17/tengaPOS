@@ -1045,3 +1045,112 @@ export async function deleteShift(shiftId) {
   const { error } = await supabase.from('staff_shifts').delete().eq('id', shiftId)
   if (error) throw error
 }
+
+// ─── Documents (quotations & invoices) ─────────────────────────────────────────
+
+export async function fetchDocuments(tenantId, docType) {
+  let query = supabase
+    .from('documents')
+    .select('*')
+    .eq('tenant_id', tenantId)
+    .order('created_at', { ascending: false })
+  if (docType) query = query.eq('doc_type', docType)
+  const { data, error } = await query
+  if (error) throw error
+  return data
+}
+
+export async function insertDocument(tenantId, branchId, userId, doc) {
+  const { data, error } = await supabase
+    .from('documents')
+    .insert({
+      tenant_id: tenantId,
+      branch_id: branchId || null,
+      doc_type: doc.docType,
+      doc_number: doc.docNumber,
+      status: doc.status || 'draft',
+      customer_name: doc.customerName,
+      customer_email: doc.customerEmail || null,
+      customer_phone: doc.customerPhone || null,
+      customer_address: doc.customerAddress || null,
+      items: doc.items || [],
+      subtotal: doc.subtotal,
+      vat_amount: doc.vatAmount,
+      total: doc.total,
+      notes: doc.notes || null,
+      valid_until: doc.validUntil || null,
+      due_date: doc.dueDate || null,
+      converted_from_id: doc.convertedFromId || null,
+      created_by: userId || null,
+    })
+    .select()
+    .single()
+  if (error) throw error
+  return data
+}
+
+export async function updateDocument(id, updates) {
+  const { data, error } = await supabase
+    .from('documents')
+    .update({
+      status: updates.status,
+      customer_name: updates.customerName,
+      customer_email: updates.customerEmail || null,
+      customer_phone: updates.customerPhone || null,
+      customer_address: updates.customerAddress || null,
+      items: updates.items || [],
+      subtotal: updates.subtotal,
+      vat_amount: updates.vatAmount,
+      total: updates.total,
+      notes: updates.notes || null,
+      valid_until: updates.validUntil || null,
+      due_date: updates.dueDate || null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', id)
+    .select()
+    .single()
+  if (error) throw error
+  return data
+}
+
+export async function deleteDocument(id) {
+  const { error } = await supabase.from('documents').delete().eq('id', id)
+  if (error) throw error
+}
+
+/** Converts an accepted quotation into a new invoice, copying customer/items
+ *  across and linking the two records both ways. */
+export async function convertQuotationToInvoice(quotation, docNumber, userId) {
+  const { data: invoice, error } = await supabase
+    .from('documents')
+    .insert({
+      tenant_id: quotation.tenant_id,
+      branch_id: quotation.branch_id,
+      doc_type: 'invoice',
+      doc_number: docNumber,
+      status: 'draft',
+      customer_name: quotation.customer_name,
+      customer_email: quotation.customer_email,
+      customer_phone: quotation.customer_phone,
+      customer_address: quotation.customer_address,
+      items: quotation.items,
+      subtotal: quotation.subtotal,
+      vat_amount: quotation.vat_amount,
+      total: quotation.total,
+      notes: quotation.notes,
+      converted_from_id: quotation.id,
+      created_by: userId || null,
+    })
+    .select()
+    .single()
+  if (error) throw error
+
+  const { error: updateErr } = await supabase
+    .from('documents')
+    .update({ status: 'accepted', converted_to_id: invoice.id, updated_at: new Date().toISOString() })
+    .eq('id', quotation.id)
+  if (updateErr) throw updateErr
+
+  return invoice
+}

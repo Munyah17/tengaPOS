@@ -3,7 +3,7 @@ import { AnimatePresence, motion } from 'framer-motion'
 import {
   LayoutDashboard, ShoppingCart, Package, ClipboardList, BarChart3,
   Settings, Users, ChefHat, ListTodo, LogOut, ChevronLeft, ChevronRight,
-  Store, Receipt, Cpu, X, Sparkles, CreditCard, BriefcaseBusiness,
+  Store, Receipt, Cpu, X, Sparkles, CreditCard, BriefcaseBusiness, FileText,
 } from 'lucide-react'
 import { useState } from 'react'
 import { useThemeStore } from '@/stores/themeStore'
@@ -25,6 +25,7 @@ const ALL_NAV_ITEMS = [
   { key: 'fiscalisation', icon: Cpu, label: 'Fiscalisation', path: '/app/fiscalisation' },
   { key: 'payments', icon: CreditCard, label: 'Payments', path: '/app/payments' },
   { key: 'hr', icon: BriefcaseBusiness, label: 'HR & Payroll', path: '/app/hr' },
+  { key: 'invoicing', icon: FileText, label: 'Invoicing', path: '/app/invoicing' },
   { key: 'settings', icon: Settings, label: 'Settings', path: '/app/settings' },
 ]
 

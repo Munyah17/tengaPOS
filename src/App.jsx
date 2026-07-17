@@ -29,6 +29,7 @@ const Insights = lazy(() => import('@/pages/Insights'))
 const PaymentReturn = lazy(() => import('@/pages/PaymentReturn'))
 const Payments = lazy(() => import('@/pages/Payments'))
 const HR = lazy(() => import('@/pages/HR'))
+const Invoicing = lazy(() => import('@/pages/Invoicing'))
 const Notifications = lazy(() => import('@/pages/Notifications'))
 const Dining = lazy(() => import('@/pages/Dining'))
 const PendingApproval = lazy(() => import('@/pages/PendingApproval'))
@@ -173,6 +174,7 @@ export default function App() {
             <Route path="fiscalisation" element={<RequireNav navKey="fiscalisation"><Fiscalisation /></RequireNav>} />
             <Route path="payments" element={<RequireNav navKey="payments"><Payments /></RequireNav>} />
             <Route path="hr" element={<RequireNav navKey="hr"><HR /></RequireNav>} />
+            <Route path="invoicing" element={<RequireNav navKey="invoicing"><Invoicing /></RequireNav>} />
             <Route path="notifications" element={<Notifications />} />
             <Route path="settings" element={<RequireNav navKey="settings"><Settings /></RequireNav>} />
           </Route>
