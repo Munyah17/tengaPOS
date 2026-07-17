@@ -198,15 +198,55 @@ async function printViaWebUsb(bytes) {
   }
 }
 
+// Most generic/white-label ESC/POS Bluetooth thermal printers expose a
+// serial-over-BLE profile using this service/characteristic pair (the same
+// one used by countless open-source ESC/POS BLE projects). Printers with a
+// genuinely different GATT profile won't be found by this filter — there's
+// no universal BLE printer standard the way there is for USB.
+const BLE_PRINTER_SERVICE_UUID = '49535343-fe7d-4ae5-8fa9-9fafd205e455'
+const BLE_PRINTER_WRITE_CHAR_UUID = '49535343-8841-43f4-a8d4-ecbe34729bb3'
+const BLE_WRITE_CHUNK_SIZE = 180 // conservative — under the default BLE MTU most printers negotiate
+
+export function isWebBluetoothSupported() {
+  return typeof navigator !== 'undefined' && 'bluetooth' in navigator
+}
+
+async function printViaBluetooth(bytes) {
+  if (!isWebBluetoothSupported()) {
+    throw new Error('This browser can\'t talk to Bluetooth devices directly — use Chrome or Edge.')
+  }
+  const device = await navigator.bluetooth.requestDevice({
+    filters: [{ services: [BLE_PRINTER_SERVICE_UUID] }],
+  })
+  const server = await device.gatt.connect()
+  try {
+    const service = await server.getPrimaryService(BLE_PRINTER_SERVICE_UUID)
+    const characteristic = await service.getCharacteristic(BLE_PRINTER_WRITE_CHAR_UUID)
+    for (let i = 0; i < bytes.length; i += BLE_WRITE_CHUNK_SIZE) {
+      await characteristic.writeValueWithoutResponse(bytes.slice(i, i + BLE_WRITE_CHUNK_SIZE))
+    }
+  } finally {
+    server.disconnect()
+  }
+}
+
 /**
- * Prints plain receipt text to the built-in printer. Tries the local Print
- * Agent first (works regardless of which driver Windows has installed),
- * then falls back to WebUSB. `lines` is an array of { text, bold, center }
- * objects (or plain strings) — the caller builds these from the same
- * receipt data used for the regular print/preview.
+ * Prints plain receipt text to the built-in printer. `lines` is an array of
+ * { text, bold, center } objects (or plain strings) — the caller builds
+ * these from the same receipt data used for the regular print/preview.
+ * `connectionHint` (from Receipts Config) picks the transport to try first:
+ * 'bluetooth' goes straight to WebBluetooth (the Print Agent/WebUSB can't
+ * reach a BLE device); everything else tries the Print Agent first, then
+ * WebUSB — both of those work the same regardless of USB/LPT1/network,
+ * since Windows' print spooler already abstracts those differences away.
  */
-export async function printToPosPrinter(lines) {
+export async function printToPosPrinter(lines, connectionHint) {
   const bytes = buildEscPosBytes(lines)
+
+  if (connectionHint === 'bluetooth') {
+    await printViaBluetooth(bytes)
+    return
+  }
 
   try {
     await printViaAgent(bytes)

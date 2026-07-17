@@ -103,6 +103,25 @@ function Get-DefaultPrinterName {
     (Get-CimInstance -ClassName Win32_Printer -ErrorAction SilentlyContinue | Where-Object { $_.Default -eq $true } | Select-Object -First 1).Name
 }
 
+# Sends raw bytes straight to a COM port — used for Bluetooth printers paired
+# as a virtual serial port on Windows, and genuine RS-232 serial printers.
+# Bypasses the print spooler entirely (there's no "printer object" for a
+# bare serial port), unlike the USB/LPT1/network path above.
+function Send-BytesToSerialPort($portName, $bytes, [ref]$errorOut) {
+    $port = New-Object System.IO.Ports.SerialPort($portName, 9600, [System.IO.Ports.Parity]::None, 8, [System.IO.Ports.StopBits]::One)
+    try {
+        $port.Open()
+        $port.Write($bytes, 0, $bytes.Length)
+        return $true
+    } catch {
+        $errorOut.Value = $_.Exception.Message
+        return $false
+    } finally {
+        if ($port.IsOpen) { $port.Close() }
+        $port.Dispose()
+    }
+}
+
 function Add-CorsHeaders($response, $origin) {
     if ($AllowedOrigins -contains $origin) {
         $response.Headers.Add('Access-Control-Allow-Origin', $origin)
@@ -151,25 +170,36 @@ while ($listener.IsListening) {
         }
         elseif ($request.HttpMethod -eq 'GET' -and $request.Url.AbsolutePath -eq '/status') {
             $printers = @(Get-CimInstance -ClassName Win32_Printer -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Name)
-            Write-JsonResponse $response @{ ok = $true; printers = $printers; defaultPrinter = (Get-DefaultPrinterName) }
+            $comPorts = @([System.IO.Ports.SerialPort]::GetPortNames())
+            Write-JsonResponse $response @{ ok = $true; printers = $printers; defaultPrinter = (Get-DefaultPrinterName); comPorts = $comPorts }
         }
         elseif ($request.HttpMethod -eq 'POST' -and $request.Url.AbsolutePath -eq '/print') {
             $reader = New-Object System.IO.StreamReader($request.InputStream)
             $bodyText = $reader.ReadToEnd()
             $reader.Close()
             $payload = $bodyText | ConvertFrom-Json
-            $printerName = if ($payload.printerName) { $payload.printerName } else { Get-DefaultPrinterName }
+            $bytes = [System.Convert]::FromBase64String($payload.data)
+            $printError = ''
 
-            if (-not $printerName) {
-                Write-JsonResponse $response @{ ok = $false; error = 'No default printer is set on this machine, and none was specified.' } 400
-            } else {
-                $bytes = [System.Convert]::FromBase64String($payload.data)
-                $printError = ''
-                $ok = [TengaRawPrinter]::SendBytesToPrinter($printerName, $bytes, [ref]$printError)
+            if ($payload.comPort) {
+                # Bluetooth (paired as a virtual COM port) or genuine RS-232 serial
+                $ok = Send-BytesToSerialPort $payload.comPort $bytes ([ref]$printError)
                 if ($ok) {
-                    Write-JsonResponse $response @{ ok = $true; printer = $printerName }
+                    Write-JsonResponse $response @{ ok = $true; comPort = $payload.comPort }
                 } else {
-                    Write-JsonResponse $response @{ ok = $false; error = $printError; printer = $printerName } 500
+                    Write-JsonResponse $response @{ ok = $false; error = $printError; comPort = $payload.comPort } 500
+                }
+            } else {
+                $printerName = if ($payload.printerName) { $payload.printerName } else { Get-DefaultPrinterName }
+                if (-not $printerName) {
+                    Write-JsonResponse $response @{ ok = $false; error = 'No default printer is set on this machine, and none was specified.' } 400
+                } else {
+                    $ok = [TengaRawPrinter]::SendBytesToPrinter($printerName, $bytes, [ref]$printError)
+                    if ($ok) {
+                        Write-JsonResponse $response @{ ok = $true; printer = $printerName }
+                    } else {
+                        Write-JsonResponse $response @{ ok = $false; error = $printError; printer = $printerName } 500
+                    }
                 }
             }
         }

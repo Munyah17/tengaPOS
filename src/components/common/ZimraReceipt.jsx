@@ -248,7 +248,7 @@ export default function ZimraReceipt({ receipt, onClose }) {
         lines.push({ text: '+263773909307 | info@globalspaceweb.co.zw', center: true })
       }
 
-      await printToPosPrinter(lines)
+      await printToPosPrinter(lines, receiptConfig.printerConnection)
       toast.success('Sent to POS printer')
     } catch (err) {
       toast.error(err.message || 'Failed to print to POS printer')
