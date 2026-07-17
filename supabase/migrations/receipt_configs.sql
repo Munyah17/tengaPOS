@@ -83,13 +83,18 @@ BEGIN
     RAISE EXCEPTION 'Only the business owner or a shop manager can configure receipts';
   END IF;
 
+  -- Shop managers may only ever touch their own branch's row — including
+  -- rejecting an attempt to set the tenant-wide default (p_branch_id NULL),
+  -- which is not "their branch" and must stay Vendor-only. A shop manager
+  -- with no assigned branch (misconfigured account) can't touch this at all.
+  IF NOT is_vendor AND (caller_branch IS NULL OR p_branch_id IS DISTINCT FROM caller_branch) THEN
+    RAISE EXCEPTION 'Shop managers can only configure their own branch';
+  END IF;
+
   IF p_branch_id IS NOT NULL THEN
     SELECT tenant_id INTO target_tenant FROM public.branches WHERE id = p_branch_id;
     IF target_tenant IS NULL OR target_tenant != caller_tenant THEN
       RAISE EXCEPTION 'Branch not found in your business';
-    END IF;
-    IF NOT is_vendor AND p_branch_id != caller_branch THEN
-      RAISE EXCEPTION 'Shop managers can only configure their own branch';
     END IF;
   END IF;
 
