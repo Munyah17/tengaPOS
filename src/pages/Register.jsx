@@ -8,7 +8,7 @@ import { useAuthStore } from '@/stores/authStore'
 import toast from 'react-hot-toast'
 
 export default function Register() {
-  const [form, setForm] = useState({ name: '', email: '', password: '', businessName: '', businessType: 'retail' })
+  const [form, setForm] = useState({ name: '', email: '', phone: '', password: '', businessName: '', businessType: 'retail' })
   const [loading, setLoading] = useState(false)
   const navigate = useNavigate()
   const { signUp } = useAuthStore()
@@ -16,9 +16,10 @@ export default function Register() {
   const handleSubmit = async (e) => {
     e.preventDefault()
     if (form.password.length < 8) { toast.error('Password must be at least 8 characters'); return }
+    if (!form.phone.trim()) { toast.error('Phone number is required'); return }
     setLoading(true)
     try {
-      const data = await signUp(form.email, form.password, form.name, form.businessName, form.businessType)
+      const data = await signUp(form.email, form.password, form.name, form.businessName, form.businessType, form.phone)
       if (data.user && !data.session) {
         // Email confirmation required — they pick trial or plan after signing in
         toast.success('Almost there! Check your email to confirm, then sign in to choose your plan or free trial.')
@@ -118,6 +119,19 @@ export default function Register() {
                 placeholder="you@example.com"
                 required
               />
+            </div>
+
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-slate-300">Phone Number</label>
+              <input
+                type="tel"
+                value={form.phone}
+                onChange={update('phone')}
+                className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white placeholder-slate-500 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+                placeholder="+263 77 123 4567"
+                required
+              />
+              <p className="mt-1 text-xs text-slate-500">So we can reach you if you need help getting set up</p>
             </div>
 
             <div>

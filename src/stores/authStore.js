@@ -235,11 +235,11 @@ export const useAuthStore = create(
         }
       },
 
-      signUp: async (email, password, name, businessName, businessType) => {
+      signUp: async (email, password, name, businessName, businessType, phone) => {
         const { data, error } = await supabase.auth.signUp({
           email,
           password,
-          options: { data: { name, business_name: businessName, business_type: businessType || 'retail' } },
+          options: { data: { name, business_name: businessName, business_type: businessType || 'retail', phone } },
         })
         if (error) throw error
 

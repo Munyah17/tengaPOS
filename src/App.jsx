@@ -36,6 +36,7 @@ const PendingApproval = lazy(() => import('@/pages/PendingApproval'))
 const AdminDashboard = lazy(() => import('@/pages/admin/AdminDashboard'))
 const SuperAdminDashboard = lazy(() => import('@/pages/admin/SuperAdminDashboard'))
 const AdminTenants = lazy(() => import('@/pages/admin/AdminTenants'))
+const AdminMarketing = lazy(() => import('@/pages/admin/AdminMarketing'))
 const AdminStaff = lazy(() => import('@/pages/admin/AdminStaff'))
 const AdminSupport = lazy(() => import('@/pages/admin/AdminSupport'))
 const AdminReports = lazy(() => import('@/pages/admin/AdminReports'))
@@ -192,6 +193,7 @@ export default function App() {
             <Route path="dashboard" element={<SuperAdminDashboard />} />
             <Route path="notifications" element={<AdminNotifications />} />
             <Route path="tenants" element={<AdminTenants />} />
+            <Route path="marketing" element={<AdminMarketing />} />
             <Route path="users" element={<AdminUsers />} />
             <Route path="fiscal-requests" element={<AdminFiscalRequests />} />
             <Route path="subscriptions" element={<SuperAdminSubscriptions />} />
@@ -220,6 +222,7 @@ export default function App() {
           >
             <Route index element={<Navigate to="dashboard" replace />} />
             <Route path="dashboard" element={<AdminDashboard />} />
+            <Route path="marketing" element={<AdminMarketing />} />
             <Route path="users" element={<AdminUsers />} />
             <Route path="fiscal-requests" element={<AdminFiscalRequests />} />
             <Route path="support" element={<AdminSupport />} />

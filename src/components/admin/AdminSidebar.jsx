@@ -3,7 +3,7 @@ import { AnimatePresence, motion } from 'framer-motion'
 import {
   LayoutDashboard, Building2, Users, LifeBuoy, BarChart3,
   Settings, LogOut, Shield, X, ChevronLeft, ChevronRight, Bell,
-  DollarSign, Tag, Database, Activity, Mail, Lock, Eye, Megaphone,
+  DollarSign, Tag, Database, Activity, Mail, Lock, Eye, Megaphone, Phone,
 } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import { useAuthStore } from '@/stores/authStore'
@@ -97,6 +97,7 @@ const NAV_BY_ROLE = {
 
     // TENANT MANAGEMENT
     { icon: Building2, label: 'All Tenants', path: '/admin/super/tenants', group: 'TENANTS' },
+    { icon: Phone, label: 'Marketing Database', path: '/admin/super/marketing', group: 'TENANTS' },
     { icon: Users, label: 'User Management', path: '/admin/super/users', group: 'TENANTS' },
     { icon: Eye, label: 'Fiscal Requests', path: '/admin/super/fiscal-requests', group: 'TENANTS' },
     { icon: DollarSign, label: 'Subscriptions', path: '/admin/super/subscriptions', group: 'TENANTS' },
@@ -126,6 +127,7 @@ const NAV_BY_ROLE = {
   admin: [
     // LIMITED TO OPERATIONS ONLY
     { icon: LayoutDashboard, label: 'Dashboard', path: '/admin/dashboard', group: 'OPERATIONS' },
+    { icon: Phone, label: 'Marketing Database', path: '/admin/marketing', group: 'OPERATIONS' },
     { icon: Users, label: 'User Management', path: '/admin/users', group: 'OPERATIONS' },
     { icon: Eye, label: 'Fiscal Requests', path: '/admin/fiscal-requests', group: 'OPERATIONS' },
     { icon: LifeBuoy, label: 'Support Tickets', path: '/admin/support', group: 'OPERATIONS' },
