@@ -67,6 +67,7 @@ export default function Settings() {
   const [receiptForm, setReceiptForm] = useState({
     templateMode: 'zimra_default', storeName: '', storeAddress: '', storeContacts: '',
     tin: '', vatNumber: '', footerMessage: '', paperWidthMm: 80, printerConnection: 'usb',
+    showPosPrint: true,
   })
   const [savingReceiptConfig, setSavingReceiptConfig] = useState(false)
 
@@ -96,6 +97,7 @@ export default function Settings() {
       footerMessage: existing?.footer_message || '',
       paperWidthMm: existing?.paper_width_mm || 80,
       printerConnection: existing?.printer_connection || 'usb',
+      showPosPrint: existing?.show_pos_print !== false,
     })
   }, [scopeBranchId, receiptConfigs])
 
@@ -600,21 +602,21 @@ export default function Settings() {
                       <div className="peer h-5 w-9 rounded-full bg-slate-300 after:absolute after:left-[2px] after:top-[2px] after:h-4 after:w-4 after:rounded-full after:bg-white after:transition-all peer-checked:bg-brand-600 peer-checked:after:translate-x-full dark:bg-slate-600" />
                     </label>
                   </div>
-                  {vatEnabled && (
-                    <div className="mt-3">
-                      <label className="mb-1 block text-xs font-medium text-slate-500">VAT Rate (%)</label>
-                      <input
-                        type="number"
-                        step="0.1"
-                        value={vatRate}
-                        onChange={(e) => setVatRate(e.target.value)}
-                        className="w-32 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
-                      />
-                    </div>
-                  )}
+                  {/* Rate field stays visible but locked while VAT is off */}
+                  <div className="mt-3">
+                    <label className="mb-1 block text-xs font-medium text-slate-500">VAT Rate (%)</label>
+                    <input
+                      type="number"
+                      step="0.1"
+                      value={vatRate}
+                      onChange={(e) => setVatRate(e.target.value)}
+                      disabled={!vatEnabled}
+                      className="w-32 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm disabled:cursor-not-allowed disabled:bg-slate-100 disabled:opacity-60 dark:border-slate-700 dark:bg-slate-800 dark:text-white dark:disabled:bg-slate-900"
+                    />
+                  </div>
                   {!vatEnabled && (
                     <p className="mt-2 text-xs text-amber-600 dark:text-amber-400">
-                      VAT will not appear on checkout or receipts while disabled.
+                      VAT is disabled — it will never be mentioned on checkout, receipts, or reports.
                     </p>
                   )}
                 </div>
@@ -950,7 +952,11 @@ export default function Settings() {
                 <div className="flex items-center justify-between rounded-xl bg-slate-50 p-4 dark:bg-slate-800">
                   <div>
                     <span className="text-sm font-semibold text-slate-900 dark:text-white">Enable Fiscalisation</span>
-                    <p className="text-xs text-slate-500">Receipts will be submitted to ZIMRA FDMS on each sale</p>
+                    <p className="text-xs text-slate-500">
+                      {fiscalForm.isEnabled
+                        ? 'Receipts will be submitted to ZIMRA FDMS on each sale'
+                        : 'Disabled — ZIMRA is never mentioned on your receipts, and the fields below are locked until you enable it'}
+                    </p>
                   </div>
                   <label className="relative inline-flex cursor-pointer items-center">
                     <input
@@ -995,7 +1001,8 @@ export default function Settings() {
                         value={fiscalForm.deviceID}
                         onChange={(e) => setFiscalForm(f => ({ ...f, deviceID: e.target.value }))}
                         placeholder="e.g. 1234567890"
-                        className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                        disabled={!fiscalForm.isEnabled}
+                        className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm disabled:cursor-not-allowed disabled:bg-slate-100 disabled:opacity-60 dark:border-slate-700 dark:bg-slate-800 dark:text-white dark:disabled:bg-slate-900"
                       />
                     </div>
                     <div>
@@ -1005,7 +1012,8 @@ export default function Settings() {
                         value={fiscalForm.activationKey}
                         onChange={(e) => setFiscalForm(f => ({ ...f, activationKey: e.target.value }))}
                         placeholder="Device activation key"
-                        className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                        disabled={!fiscalForm.isEnabled}
+                        className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm disabled:cursor-not-allowed disabled:bg-slate-100 disabled:opacity-60 dark:border-slate-700 dark:bg-slate-800 dark:text-white dark:disabled:bg-slate-900"
                       />
                     </div>
                     <div>
@@ -1015,7 +1023,8 @@ export default function Settings() {
                         value={fiscalForm.deviceSerialNo}
                         onChange={(e) => setFiscalForm(f => ({ ...f, deviceSerialNo: e.target.value }))}
                         placeholder="e.g. SN-ABC123"
-                        className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                        disabled={!fiscalForm.isEnabled}
+                        className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm disabled:cursor-not-allowed disabled:bg-slate-100 disabled:opacity-60 dark:border-slate-700 dark:bg-slate-800 dark:text-white dark:disabled:bg-slate-900"
                       />
                     </div>
                     <div>
@@ -1025,7 +1034,8 @@ export default function Settings() {
                         value={fiscalForm.deviceModelName}
                         onChange={(e) => setFiscalForm(f => ({ ...f, deviceModelName: e.target.value }))}
                         placeholder="e.g. tengaPOS-v2"
-                        className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                        disabled={!fiscalForm.isEnabled}
+                        className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm disabled:cursor-not-allowed disabled:bg-slate-100 disabled:opacity-60 dark:border-slate-700 dark:bg-slate-800 dark:text-white dark:disabled:bg-slate-900"
                       />
                     </div>
                     <div className="col-span-2">
@@ -1035,7 +1045,8 @@ export default function Settings() {
                         value={fiscalForm.deviceModelVersionNo}
                         onChange={(e) => setFiscalForm(f => ({ ...f, deviceModelVersionNo: e.target.value }))}
                         placeholder="e.g. 2.0.0"
-                        className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                        disabled={!fiscalForm.isEnabled}
+                        className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm disabled:cursor-not-allowed disabled:bg-slate-100 disabled:opacity-60 dark:border-slate-700 dark:bg-slate-800 dark:text-white dark:disabled:bg-slate-900"
                       />
                     </div>
                   </div>
@@ -1052,7 +1063,8 @@ export default function Settings() {
                         onChange={(e) => setFiscalForm(f => ({ ...f, tin: e.target.value }))}
                         placeholder="10-digit TIN"
                         maxLength={10}
-                        className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                        disabled={!fiscalForm.isEnabled}
+                        className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm disabled:cursor-not-allowed disabled:bg-slate-100 disabled:opacity-60 dark:border-slate-700 dark:bg-slate-800 dark:text-white dark:disabled:bg-slate-900"
                       />
                     </div>
                     <div>
@@ -1062,7 +1074,8 @@ export default function Settings() {
                         value={fiscalForm.vatNumber}
                         onChange={(e) => setFiscalForm(f => ({ ...f, vatNumber: e.target.value }))}
                         placeholder="VAT number"
-                        className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                        disabled={!fiscalForm.isEnabled}
+                        className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm disabled:cursor-not-allowed disabled:bg-slate-100 disabled:opacity-60 dark:border-slate-700 dark:bg-slate-800 dark:text-white dark:disabled:bg-slate-900"
                       />
                     </div>
                   </div>
@@ -1078,7 +1091,8 @@ export default function Settings() {
                         value={fiscalForm.branchName}
                         onChange={(e) => setFiscalForm(f => ({ ...f, branchName: e.target.value }))}
                         placeholder="e.g. Main Branch"
-                        className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                        disabled={!fiscalForm.isEnabled}
+                        className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm disabled:cursor-not-allowed disabled:bg-slate-100 disabled:opacity-60 dark:border-slate-700 dark:bg-slate-800 dark:text-white dark:disabled:bg-slate-900"
                       />
                     </div>
                     <div>
@@ -1088,7 +1102,8 @@ export default function Settings() {
                         value={fiscalForm.branchAddress}
                         onChange={(e) => setFiscalForm(f => ({ ...f, branchAddress: e.target.value }))}
                         placeholder="e.g. 123 Samora Machel Ave, Harare"
-                        className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                        disabled={!fiscalForm.isEnabled}
+                        className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm disabled:cursor-not-allowed disabled:bg-slate-100 disabled:opacity-60 dark:border-slate-700 dark:bg-slate-800 dark:text-white dark:disabled:bg-slate-900"
                       />
                     </div>
                     <div>
@@ -1098,7 +1113,8 @@ export default function Settings() {
                         value={fiscalForm.branchContacts}
                         onChange={(e) => setFiscalForm(f => ({ ...f, branchContacts: e.target.value }))}
                         placeholder="e.g. +263 77 123 4567"
-                        className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                        disabled={!fiscalForm.isEnabled}
+                        className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm disabled:cursor-not-allowed disabled:bg-slate-100 disabled:opacity-60 dark:border-slate-700 dark:bg-slate-800 dark:text-white dark:disabled:bg-slate-900"
                       />
                     </div>
                   </div>
@@ -1116,7 +1132,7 @@ export default function Settings() {
                   </Button>
                   <button
                     onClick={handlePingDevice}
-                    disabled={pingLoading}
+                    disabled={pingLoading || !fiscalForm.isEnabled}
                     title="Test ZIMRA device connection"
                     className="flex items-center gap-2 rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
                   >
@@ -1324,12 +1340,18 @@ export default function Settings() {
                   </div>
                   <div>
                     <label className="mb-1.5 block text-sm font-medium text-slate-700 dark:text-slate-300">VAT Registration No.</label>
+                    {/* VAT is switched off for this tenant (General settings) —
+                        field stays visible but locked, and never prints. */}
                     <input
                       type="text"
                       value={receiptForm.vatNumber}
                       onChange={(e) => setReceiptForm((f) => ({ ...f, vatNumber: e.target.value }))}
-                      className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                      disabled={tenant?.vat_enabled === false}
+                      className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm disabled:cursor-not-allowed disabled:bg-slate-100 disabled:opacity-60 dark:border-slate-700 dark:bg-slate-800 dark:text-white dark:disabled:bg-slate-900"
                     />
+                    {tenant?.vat_enabled === false && (
+                      <p className="mt-1 text-xs text-slate-400">VAT is disabled in General settings — this won't appear on receipts.</p>
+                    )}
                   </div>
                 </div>
                 <div>
@@ -1365,6 +1387,23 @@ export default function Settings() {
                       {PRINTER_CONNECTIONS.map((p) => <option key={p.key} value={p.key}>{p.label}</option>)}
                     </select>
                   </div>
+                </div>
+
+                {/* Optional POS Printer button on the receipt modal */}
+                <div className="flex items-center justify-between rounded-xl border border-slate-200 p-4 dark:border-slate-700">
+                  <div>
+                    <span className="text-sm font-semibold text-slate-900 dark:text-white">'POS Printer' Button</span>
+                    <p className="text-xs text-slate-500">Show the direct-to-thermal-printer button on the receipt popup. Turn off if you only use the standard Print option.</p>
+                  </div>
+                  <label className="relative inline-flex cursor-pointer items-center">
+                    <input
+                      type="checkbox"
+                      checked={receiptForm.showPosPrint}
+                      onChange={(e) => setReceiptForm((f) => ({ ...f, showPosPrint: e.target.checked }))}
+                      className="peer sr-only"
+                    />
+                    <div className="peer h-5 w-9 rounded-full bg-slate-300 after:absolute after:left-[2px] after:top-[2px] after:h-4 after:w-4 after:rounded-full after:bg-white after:transition-all peer-checked:bg-brand-600 peer-checked:after:translate-x-full dark:bg-slate-600" />
+                  </label>
                 </div>
 
                 <Button onClick={handleSaveReceiptConfig} disabled={savingReceiptConfig}>

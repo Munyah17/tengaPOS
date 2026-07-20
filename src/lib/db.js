@@ -991,6 +991,7 @@ export async function submitReceiptConfig(config) {
     p_footer_message: config.footerMessage || null,
     p_paper_width_mm: config.paperWidthMm || 80,
     p_printer_connection: config.printerConnection || 'usb',
+    p_show_pos_print: config.showPosPrint !== false,
   })
   if (error) throw error
   return data

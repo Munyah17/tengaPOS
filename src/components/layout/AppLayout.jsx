@@ -4,8 +4,10 @@ import Sidebar from './Sidebar'
 import TopBar from './TopBar'
 import { useAuthStore } from '@/stores/authStore'
 import { useReceiptConfigStore } from '@/stores/receiptConfigStore'
+import { useFiscalStore } from '@/stores/fiscalStore'
 import { startBackgroundSync } from '@/lib/offlineSync'
 import { fetchEffectiveReceiptConfig } from '@/lib/db'
+import { loadWithOfflineCache } from '@/lib/offlineCache'
 import { supabase } from '@/lib/supabase'
 import ErrorBoundary from '@/components/common/ErrorBoundary'
 import toast from 'react-hot-toast'
@@ -18,15 +20,41 @@ export default function AppLayout() {
   // Real, persisted receipt branding — loaded here (not just when Settings
   // happens to be visited) so every role gets correctly-branded receipts,
   // not just whoever last opened the Fiscalisation/Receipts Config page.
+  // Wrapped in the shared IndexedDB offline cache so an offline relaunch or
+  // a failed fetch keeps printing the tenant's real details instead of
+  // silently reverting to demo placeholders.
   useEffect(() => {
     if (!tenant?.id) return
-    const loadReceiptConfig = () => fetchEffectiveReceiptConfig(tenant.id, branch?.id || null)
-      .then((row) => useReceiptConfigStore.getState().loadFromDB(row))
-      .catch(() => {})
+    const scopeKey = `${tenant.id}:${branch?.id || ''}`
+    const loadReceiptConfig = () => loadWithOfflineCache(
+      ['effectiveReceiptConfig', tenant.id, branch?.id],
+      () => fetchEffectiveReceiptConfig(tenant.id, branch?.id || null),
+      { onData: (row) => useReceiptConfigStore.getState().loadFromDB(row, scopeKey) },
+    )
     loadReceiptConfig()
     window.addEventListener('tengapos:force-refresh', loadReceiptConfig)
     return () => window.removeEventListener('tengapos:force-refresh', loadReceiptConfig)
   }, [tenant?.id, branch?.id])
+
+  // Fiscal config too — previously only loaded when a Vendor opened the
+  // Settings/Fiscalisation pages, so cashier sessions printed receipts with
+  // an empty fiscal store (no branch branding fallback, no FDMS submission).
+  // Same cache key the Fiscalisation page uses, so they share one copy.
+  useEffect(() => {
+    if (!tenant?.id) return
+    const loadFiscalConfig = () => loadWithOfflineCache(
+      ['fiscalConfig', tenant.id],
+      () => supabase.from('tenant_fiscal_configs')
+        .select('*')
+        .eq('tenant_id', tenant.id)
+        .maybeSingle()
+        .then(({ data, error }) => { if (error) throw error; return data }),
+      { onData: (data) => { if (data) useFiscalStore.getState().loadFromDB(data) } },
+    )
+    loadFiscalConfig()
+    window.addEventListener('tengapos:force-refresh', loadFiscalConfig)
+    return () => window.removeEventListener('tengapos:force-refresh', loadFiscalConfig)
+  }, [tenant?.id])
 
   // Lock body scroll when mobile sidebar is open
   useEffect(() => {

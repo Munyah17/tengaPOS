@@ -205,8 +205,11 @@ export default function Fiscalisation() {
   }
 
   const inputClass =
-    'w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-900 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 dark:border-slate-700 dark:bg-slate-900 dark:text-white'
+    'w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-900 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-white'
   const labelClass = 'mb-1.5 block text-sm font-medium text-slate-700 dark:text-slate-300'
+  // Fiscalisation switched off — the whole configuration is greyed out
+  // (visible but not editable or submittable) until it's enabled again.
+  const locked = !fiscal.isEnabled
 
   return (
     <div className="p-6">
@@ -289,6 +292,7 @@ export default function Fiscalisation() {
                   type="text"
                   value={fiscalForm.deviceID}
                   onChange={updateForm('deviceID')}
+                  disabled={locked}
                   className={inputClass}
                   placeholder="e.g. ZW123456"
                 />
@@ -299,6 +303,7 @@ export default function Fiscalisation() {
                   type="password"
                   value={fiscalForm.activationKey}
                   onChange={updateForm('activationKey')}
+                  disabled={locked}
                   className={inputClass}
                   placeholder="••••••••"
                 />
@@ -309,6 +314,7 @@ export default function Fiscalisation() {
                   type="text"
                   value={fiscalForm.deviceSerialNo}
                   onChange={updateForm('deviceSerialNo')}
+                  disabled={locked}
                   className={inputClass}
                   placeholder="SN-XXXXXXXXXX"
                 />
@@ -319,6 +325,7 @@ export default function Fiscalisation() {
                   type="text"
                   value={fiscalForm.deviceModelName}
                   onChange={updateForm('deviceModelName')}
+                  disabled={locked}
                   className={inputClass}
                   placeholder="e.g. TengaFDMS-v1"
                 />
@@ -336,6 +343,7 @@ export default function Fiscalisation() {
                   type="text"
                   value={fiscalForm.tin}
                   onChange={updateForm('tin')}
+                  disabled={locked}
                   className={inputClass}
                   placeholder="1234567890"
                 />
@@ -346,6 +354,7 @@ export default function Fiscalisation() {
                   type="text"
                   value={fiscalForm.vatNumber}
                   onChange={updateForm('vatNumber')}
+                  disabled={locked}
                   className={inputClass}
                   placeholder="VAT-XXXXXXXXXX"
                 />
@@ -363,6 +372,7 @@ export default function Fiscalisation() {
                   type="text"
                   value={fiscalForm.branchName}
                   onChange={updateForm('branchName')}
+                  disabled={locked}
                   className={inputClass}
                   placeholder="My Store — Main Branch"
                 />
@@ -373,6 +383,7 @@ export default function Fiscalisation() {
                   type="text"
                   value={fiscalForm.branchAddress}
                   onChange={updateForm('branchAddress')}
+                  disabled={locked}
                   className={inputClass}
                   placeholder="123 Main Street, Harare, Zimbabwe"
                 />
@@ -383,6 +394,7 @@ export default function Fiscalisation() {
                   type="text"
                   value={fiscalForm.branchContacts}
                   onChange={updateForm('branchContacts')}
+                  disabled={locked}
                   className={inputClass}
                   placeholder="+263 77 123 4567"
                 />
@@ -391,16 +403,23 @@ export default function Fiscalisation() {
           </div>
 
           {/* Actions */}
+          {locked && (
+            <p className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-500 dark:border-slate-700 dark:bg-slate-800/60 dark:text-slate-400">
+              ZIMRA fiscalisation is disabled for your account — the fields above are locked and nothing
+              ZIMRA-related appears on your receipts. Use the toggle at the top right to enable it.
+            </p>
+          )}
           <div className="flex flex-wrap gap-3">
             <button
               onClick={handleSave}
-              className="rounded-xl bg-brand-600 px-6 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-brand-700"
+              disabled={locked}
+              className="rounded-xl bg-brand-600 px-6 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-50"
             >
               Save Configuration
             </button>
             <button
               onClick={handlePing}
-              disabled={pingLoading || !isSupabaseConfigured}
+              disabled={pingLoading || !isSupabaseConfigured || locked}
               className="flex items-center gap-2 rounded-xl border border-slate-200 px-6 py-2.5 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
               title={!isSupabaseConfigured ? 'Supabase not configured' : undefined}
             >
@@ -485,6 +504,7 @@ export default function Fiscalisation() {
               type="text"
               value={fiscal.qrUrl}
               onChange={(e) => fiscal.setConfig({ qrUrl: e.target.value })}
+              disabled={locked}
               className={inputClass}
             />
           </div>

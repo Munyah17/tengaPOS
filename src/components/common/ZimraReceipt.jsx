@@ -2,6 +2,7 @@ import { useRef, useState } from 'react'
 import { Printer, X, CheckCircle, Usb } from 'lucide-react'
 import { useFiscalStore } from '@/stores/fiscalStore'
 import { useReceiptConfigStore } from '@/stores/receiptConfigStore'
+import { useAuthStore } from '@/stores/authStore'
 import { formatCurrency } from '@/utils/formatters'
 import { printToPosPrinter, paperWidthToChars } from '@/lib/posPrinter'
 import toast from 'react-hot-toast'
@@ -37,6 +38,7 @@ export default function ZimraReceipt({ receipt, onClose }) {
   const [posPrinting, setPosPrinting] = useState(false)
   const fiscal = useFiscalStore()
   const receiptConfig = useReceiptConfigStore()
+  const { tenant } = useAuthStore()
   const vatEnabled = receipt.vatEnabled !== false
   const vatRate = receipt.vatRate ?? 15.5
   const fmt = (n) => formatCurrency(n, receipt.currency)
@@ -53,15 +55,19 @@ export default function ZimraReceipt({ receipt, onClose }) {
   // Receipts Config (Settings) is the real, persisted source of store
   // branding — falls back to the ZIMRA fiscal registration's own values
   // (for tenants who set up fiscalisation but never touched Receipts
-  // Config), then to placeholder demo values as a last resort.
-  const storeName = receiptConfig.storeName || fiscal.branchName || 'TENGAPOS DEMO STORE'
-  const storeAddress = receiptConfig.storeAddress || fiscal.branchAddress || '123 Samora Machel Ave, Harare'
-  const storeContacts = receiptConfig.storeContacts || fiscal.branchContacts || '+263 77 123 4567'
-  const tin = receiptConfig.tin || fiscal.tin || 'XXXXXXXXXX'
-  const vatNo = receiptConfig.vatNumber || fiscal.vatNumber || 'Not Configured'
+  // Config), then to the tenant's business name. Never demo placeholders —
+  // a line with no real value for this tenant is simply not printed.
+  const storeName = receiptConfig.storeName || fiscal.branchName || tenant?.name || 'Receipt'
+  const storeAddress = receiptConfig.storeAddress || fiscal.branchAddress || ''
+  const storeContacts = receiptConfig.storeContacts || fiscal.branchContacts || ''
+  const tin = receiptConfig.tin || fiscal.tin || ''
+  // VAT registration only ever appears for tenants who actually run VAT —
+  // a tenant that disabled VAT gets no VAT mention anywhere on the receipt.
+  const vatNo = vatEnabled ? (receiptConfig.vatNumber || fiscal.vatNumber || '') : ''
   const deviceID = fiscal.deviceID ? fiscal.deviceID.padStart(10, '0') : '0000000000'
   const receiptGlobalNo = String(fiscal.lastReceiptGlobalNo).padStart(10, '0')
   const paperWidthChars = paperWidthToChars(receiptConfig.paperWidthMm || 80)
+  const showPosPrintButton = receiptConfig.showPosPrint !== false
 
   const zimraPaymentType = ZIMRA_PAYMENT_MAP[receipt.paymentMethod] || 'Cash'
 
@@ -133,10 +139,10 @@ export default function ZimraReceipt({ receipt, onClose }) {
       <body>
         <div class="center">
           <div class="store-name">${esc(storeName)}</div>
-          <div>${esc(storeAddress)}</div>
-          <div>${esc(storeContacts)}</div>
-          <div>TIN: ${esc(tin)}</div>
-          <div>VAT Reg: ${esc(vatNo)}</div>
+          ${storeAddress ? `<div>${esc(storeAddress)}</div>` : ''}
+          ${storeContacts ? `<div>${esc(storeContacts)}</div>` : ''}
+          ${tin ? `<div>TIN: ${esc(tin)}</div>` : ''}
+          ${vatNo ? `<div>VAT Reg: ${esc(vatNo)}</div>` : ''}
         </div>
         <div class="sep"></div>
         <div class="center bold">${showFiscalSection ? 'FISCAL TAX INVOICE' : 'RECEIPT'}</div>
@@ -155,7 +161,7 @@ export default function ZimraReceipt({ receipt, onClose }) {
         <div class="sep"></div>
         <div class="bold upper">Payment</div>
         ${row(PAYMENT_DISPLAY[receipt.paymentMethod] || receipt.paymentMethod, fmt(receipt.total))}
-        <div class="tiny">Type: ${esc(zimraPaymentType)}</div>
+        ${showFiscalSection ? `<div class="tiny">Type: ${esc(zimraPaymentType)}</div>` : ''}
         ${receipt.amountTendered != null ? row('Tendered', fmt(receipt.amountTendered)) : ''}
         ${receipt.changeDue != null ? row('Change', fmt(receipt.changeDue)) : ''}
         ${vatEnabled ? `
@@ -198,10 +204,10 @@ export default function ZimraReceipt({ receipt, onClose }) {
       }
 
       lines.push({ text: storeName, bold: true, center: true })
-      lines.push({ text: storeAddress, center: true })
-      lines.push({ text: storeContacts, center: true })
-      lines.push({ text: `TIN: ${tin}`, center: true })
-      lines.push({ text: `VAT Reg: ${vatNo}`, center: true })
+      if (storeAddress) lines.push({ text: storeAddress, center: true })
+      if (storeContacts) lines.push({ text: storeContacts, center: true })
+      if (tin) lines.push({ text: `TIN: ${tin}`, center: true })
+      if (vatNo) lines.push({ text: `VAT Reg: ${vatNo}`, center: true })
       dash()
       lines.push({ text: showFiscalSection ? 'FISCAL TAX INVOICE' : 'RECEIPT', bold: true, center: true })
       rowLine('Receipt No:', receipt.receiptNumber)
@@ -224,7 +230,7 @@ export default function ZimraReceipt({ receipt, onClose }) {
       dash()
       lines.push({ text: 'PAYMENT', bold: true })
       rowLine(PAYMENT_DISPLAY[receipt.paymentMethod] || receipt.paymentMethod, fmt(receipt.total))
-      lines.push(`Type: ${zimraPaymentType}`)
+      if (showFiscalSection) lines.push(`Type: ${zimraPaymentType}`)
       if (receipt.amountTendered != null) rowLine('Tendered', fmt(receipt.amountTendered))
       if (receipt.changeDue != null) rowLine('Change', fmt(receipt.changeDue))
       if (vatEnabled) {
@@ -292,13 +298,13 @@ export default function ZimraReceipt({ receipt, onClose }) {
             className="mx-auto w-full max-w-[300px] rounded-sm bg-white p-4 font-mono text-[11px] leading-tight text-black shadow-md"
             style={{ fontFamily: "'Courier New', Courier, monospace" }}
           >
-            {/* Store header */}
+            {/* Store header — only lines this tenant actually configured */}
             <div className="text-center">
               <div className="text-sm font-bold uppercase">{storeName}</div>
-              <div>{storeAddress}</div>
-              <div>{storeContacts}</div>
-              <div>TIN: {tin}</div>
-              <div>VAT Reg: {vatNo}</div>
+              {storeAddress && <div>{storeAddress}</div>}
+              {storeContacts && <div>{storeContacts}</div>}
+              {tin && <div>TIN: {tin}</div>}
+              {vatNo && <div>VAT Reg: {vatNo}</div>}
             </div>
 
             <div className="my-2 border-t border-dashed border-black" />
@@ -373,7 +379,9 @@ export default function ZimraReceipt({ receipt, onClose }) {
               <span>{PAYMENT_DISPLAY[receipt.paymentMethod] || receipt.paymentMethod}</span>
               <span>{fmt(receipt.total)}</span>
             </div>
-            <div className="text-[9px] text-slate-500">Type: {zimraPaymentType}</div>
+            {showFiscalSection && (
+              <div className="text-[9px] text-slate-500">Type: {zimraPaymentType}</div>
+            )}
             {receipt.amountTendered != null && (
               <div className="flex justify-between">
                 <span>Tendered</span>
@@ -454,7 +462,9 @@ export default function ZimraReceipt({ receipt, onClose }) {
 
         {/* Actions */}
         <div className="flex flex-col gap-2 border-t border-slate-200 p-4 dark:border-slate-800">
-          <div className="grid grid-cols-2 gap-2">
+          {/* POS Printer is optional per tenant (Receipts Config) — when
+              disabled the modal only offers the standard Print flow. */}
+          <div className={`grid gap-2 ${showPosPrintButton ? 'grid-cols-2' : 'grid-cols-1'}`}>
             <button
               onClick={handlePrint}
               className="flex items-center justify-center gap-1.5 rounded-xl bg-brand-600 px-2 py-2.5 text-sm font-semibold text-white hover:bg-brand-700"
@@ -462,14 +472,16 @@ export default function ZimraReceipt({ receipt, onClose }) {
               <Printer className="h-4 w-4 flex-shrink-0" />
               <span className="truncate">Print</span>
             </button>
-            <button
-              onClick={handlePosPrint}
-              disabled={posPrinting}
-              className="flex items-center justify-center gap-1.5 rounded-xl border border-brand-600 px-2 py-2.5 text-sm font-semibold text-brand-600 hover:bg-brand-50 disabled:opacity-60 dark:text-brand-400 dark:hover:bg-slate-800"
-            >
-              <Usb className="h-4 w-4 flex-shrink-0" />
-              <span className="truncate">{posPrinting ? 'Printing…' : 'POS Printer'}</span>
-            </button>
+            {showPosPrintButton && (
+              <button
+                onClick={handlePosPrint}
+                disabled={posPrinting}
+                className="flex items-center justify-center gap-1.5 rounded-xl border border-brand-600 px-2 py-2.5 text-sm font-semibold text-brand-600 hover:bg-brand-50 disabled:opacity-60 dark:text-brand-400 dark:hover:bg-slate-800"
+              >
+                <Usb className="h-4 w-4 flex-shrink-0" />
+                <span className="truncate">{posPrinting ? 'Printing…' : 'POS Printer'}</span>
+              </button>
+            )}
           </div>
           <button
             onClick={onClose}
