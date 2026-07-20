@@ -69,6 +69,25 @@ export default function ZimraReceipt({ receipt, onClose }) {
   const paperWidthChars = paperWidthToChars(receiptConfig.paperWidthMm || 80)
   const showPosPrintButton = receiptConfig.showPosPrint !== false
 
+  // Footer: the tenant's custom message always wins. Otherwise the standard
+  // footer — branded to the tenant's white-label identity when that add-on
+  // is active (their name + support contacts, never tengaPOS), or the
+  // default tengaPOS lines for everyone else.
+  const whitelabel = tenant?.whitelabel?.enabled ? tenant.whitelabel : null
+  const footerLines = receiptConfig.footerMessage
+    ? receiptConfig.footerMessage.split('\n').filter(Boolean)
+    : [
+        'Thank You For Your Purchase',
+        ...(whitelabel
+          ? [
+              ...(whitelabel.hide_powered_by || !whitelabel.brand_name ? [] : [`Powered by ${whitelabel.brand_name}`]),
+              ...((whitelabel.support_email || whitelabel.support_phone)
+                ? [[whitelabel.support_email, whitelabel.support_phone].filter(Boolean).join(' | ')]
+                : []),
+            ]
+          : ['Powered by tengaPOS', 'info@globalspaceweb.co.zw | +263773909307']),
+      ]
+
   const zimraPaymentType = ZIMRA_PAYMENT_MAP[receipt.paymentMethod] || 'Cash'
 
   // VAT breakdown — standard ZIMRA tax code D. VAT is inclusive in shelf prices.
@@ -173,11 +192,7 @@ export default function ZimraReceipt({ receipt, onClose }) {
         ${showFiscalSection ? `<div class="sep"></div>${fiscalHtml}` : ''}
         <div class="sep"></div>
         <div class="center tiny">
-          ${receiptConfig.footerMessage ? `<div>${esc(receiptConfig.footerMessage)}</div>` : `
-          <div>Thank you for your business!</div>
-          <div>Powered by tengaPOS - www.tengapos.co.zw</div>
-          <div>+263773909307 | info@globalspaceweb.co.zw</div>
-          `}
+          ${footerLines.map((l) => `<div>${esc(l)}</div>`).join('\n          ')}
         </div>
       </body>
       </html>
@@ -246,13 +261,7 @@ export default function ZimraReceipt({ receipt, onClose }) {
         lines.push({ text: 'Verify: fdms.zimra.co.zw', center: true })
       }
       dash()
-      if (receiptConfig.footerMessage) {
-        lines.push({ text: receiptConfig.footerMessage, center: true })
-      } else {
-        lines.push({ text: 'Thank you for your business!', center: true })
-        lines.push({ text: 'Powered by tengaPOS - www.tengapos.co.zw', center: true })
-        lines.push({ text: '+263773909307 | info@globalspaceweb.co.zw', center: true })
-      }
+      for (const l of footerLines) lines.push({ text: l, center: true })
 
       await printToPosPrinter(lines, receiptConfig.printerConnection)
       toast.success('Sent to POS printer')
@@ -447,15 +456,7 @@ export default function ZimraReceipt({ receipt, onClose }) {
 
             {/* Footer */}
             <div className="text-center text-[9px]">
-              {receiptConfig.footerMessage ? (
-                <div>{receiptConfig.footerMessage}</div>
-              ) : (
-                <>
-                  <div>Thank you for your business!</div>
-                  <div>Powered by tengaPOS - www.tengapos.co.zw</div>
-                  <div>+263773909307 | info@globalspaceweb.co.zw</div>
-                </>
-              )}
+              {footerLines.map((l, i) => <div key={i}>{l}</div>)}
             </div>
           </div>
         </div>

@@ -49,6 +49,9 @@ export default function Sidebar({ open = false, onClose }) {
   const displayName = profile?.name || 'User'
   const initial = displayName[0]?.toUpperCase() || 'U'
 
+  // White-label: the tenant's own logo/name replaces tengaPOS branding
+  const whitelabel = tenant?.whitelabel?.enabled ? tenant.whitelabel : null
+
   const handleSignOut = async () => {
     await clearAuth()
     navigate('/')
@@ -103,7 +106,19 @@ export default function Sidebar({ open = false, onClose }) {
                 exit={{ opacity: 0 }}
                 transition={{ duration: 0.15 }}
               >
-                <img src={posIcon} alt="tengaPOS" className="h-8 w-auto" />
+                {whitelabel?.logo_url ? (
+                  <img
+                    src={whitelabel.logo_url}
+                    alt={whitelabel.brand_name || 'Logo'}
+                    className="h-8 w-auto max-w-[160px] object-contain"
+                  />
+                ) : whitelabel?.brand_name ? (
+                  <span className="truncate text-lg font-extrabold text-brand-700 dark:text-brand-400">
+                    {whitelabel.brand_name}
+                  </span>
+                ) : (
+                  <img src={posIcon} alt="tengaPOS" className="h-8 w-auto" />
+                )}
               </motion.div>
             )}
           </AnimatePresence>

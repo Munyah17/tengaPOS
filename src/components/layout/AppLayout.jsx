@@ -8,6 +8,7 @@ import { useFiscalStore } from '@/stores/fiscalStore'
 import { startBackgroundSync } from '@/lib/offlineSync'
 import { fetchEffectiveReceiptConfig } from '@/lib/db'
 import { loadWithOfflineCache } from '@/lib/offlineCache'
+import { applyWhitelabelTheme, clearWhitelabelTheme } from '@/lib/whitelabelTheme'
 import { supabase } from '@/lib/supabase'
 import ErrorBoundary from '@/components/common/ErrorBoundary'
 import toast from 'react-hot-toast'
@@ -55,6 +56,14 @@ export default function AppLayout() {
     window.addEventListener('tengapos:force-refresh', loadFiscalConfig)
     return () => window.removeEventListener('tengapos:force-refresh', loadFiscalConfig)
   }, [tenant?.id])
+
+  // White-label: re-skin the whole portal (brand colour palette, favicon,
+  // page title) for tenants with the white-label add-on. Cleared on
+  // logout/unmount so the login screen and admin portal stay tengaPOS.
+  useEffect(() => {
+    applyWhitelabelTheme(tenant?.whitelabel)
+    return () => clearWhitelabelTheme()
+  }, [tenant?.whitelabel])
 
   // Lock body scroll when mobile sidebar is open
   useEffect(() => {

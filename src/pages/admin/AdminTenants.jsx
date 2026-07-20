@@ -7,6 +7,7 @@ import {
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/stores/authStore'
+import { buildShadeScale, INDUSTRIES } from '@/lib/whitelabelTheme'
 import toast from 'react-hot-toast'
 
 // ─── Plan metadata ────────────────────────────────────────────────────────────
@@ -533,14 +534,14 @@ export function TenantModal({ tenant, technicians, onClose, onSaved }) {
                 <Toggle value={!!whitelabel.enabled} onChange={(v) => setWL('enabled', v)} />
               </div>
 
+              {/* Identity */}
               {[
                 { key: 'brand_name',     label: 'Brand Name',      placeholder: 'e.g. AcmePOS', type: 'text' },
-                { key: 'logo_url',       label: 'Logo URL',        placeholder: 'https://…/logo.png', type: 'url' },
-                { key: 'favicon_url',    label: 'Favicon URL',     placeholder: 'https://…/favicon.ico', type: 'url' },
-                { key: 'primary_color',  label: 'Primary Colour',  placeholder: '#0066CC', type: 'text' },
-                { key: 'secondary_color', label: 'Accent Colour',  placeholder: '#FF6600', type: 'text' },
-                { key: 'support_email',  label: 'Support Email',   placeholder: 'support@client.com', type: 'email' },
-                { key: 'support_phone',  label: 'Support Phone',   placeholder: '+263…', type: 'text' },
+                { key: 'tagline',        label: 'Tagline (shown in browser tab)', placeholder: 'e.g. Pharmacy Point of Sale', type: 'text' },
+                { key: 'logo_url',       label: 'Logo URL (sidebar + receipts branding)', placeholder: 'https://…/logo.png', type: 'url' },
+                { key: 'favicon_url',    label: 'Favicon URL (browser tab icon)', placeholder: 'https://…/favicon.ico', type: 'url' },
+                { key: 'support_email',  label: 'Support Email (printed on receipts)', placeholder: 'support@client.com', type: 'email' },
+                { key: 'support_phone',  label: 'Support Phone (printed on receipts)', placeholder: '+263…', type: 'text' },
               ].map(({ key, label, placeholder, type }) => (
                 <div key={key}>
                   <label className="text-xs font-semibold text-slate-400">{label}</label>
@@ -554,13 +555,91 @@ export function TenantModal({ tenant, technicians, onClose, onSaved }) {
                 </div>
               ))}
 
-              {whitelabel.primary_color && (
-                <div className="flex items-center gap-3 rounded-xl border border-white/10 p-3">
-                  <div className="h-8 w-8 rounded-lg border border-white/20" style={{ backgroundColor: whitelabel.primary_color }} />
-                  <div className="h-8 w-8 rounded-lg border border-white/20" style={{ backgroundColor: whitelabel.secondary_color || '#ccc' }} />
-                  <span className="text-xs text-slate-500">Colour preview</span>
+              {/* Industry vertical — filtering today, per-vertical presets later */}
+              <div>
+                <label className="text-xs font-semibold text-slate-400">Industry / Business Type</label>
+                <select
+                  value={whitelabel.industry || ''}
+                  onChange={(e) => setWL('industry', e.target.value)}
+                  className="mt-1 w-full rounded-xl border border-slate-200 bg-white dark:border-white/10 dark:bg-white/5 px-3 py-2 text-sm text-white focus:border-indigo-500 focus:outline-none [&>option]:text-slate-900"
+                >
+                  <option value="">Not set</option>
+                  {INDUSTRIES.map((i) => <option key={i.key} value={i.key}>{i.label}</option>)}
+                </select>
+              </div>
+
+              {/* Brand colours — picker + hex, side by side */}
+              <div className="grid grid-cols-2 gap-3">
+                {[
+                  { key: 'primary_color',   label: 'Primary Colour (themes the whole portal)' },
+                  { key: 'secondary_color', label: 'Accent Colour' },
+                ].map(({ key, label }) => (
+                  <div key={key}>
+                    <label className="text-xs font-semibold text-slate-400">{label}</label>
+                    <div className="mt-1 flex items-center gap-2">
+                      <input
+                        type="color"
+                        value={/^#[0-9a-fA-F]{6}$/.test(whitelabel[key] || '') ? whitelabel[key] : '#2563eb'}
+                        onChange={(e) => setWL(key, e.target.value)}
+                        className="h-9 w-10 flex-shrink-0 cursor-pointer rounded-lg border border-white/10 bg-transparent p-0.5"
+                      />
+                      <input
+                        type="text"
+                        value={whitelabel[key] || ''}
+                        onChange={(e) => setWL(key, e.target.value)}
+                        placeholder="#0066CC"
+                        className="w-full rounded-xl border border-slate-200 bg-white dark:border-white/10 dark:bg-white/5 px-3 py-2 text-sm text-white placeholder-slate-400 dark:placeholder-slate-600 focus:border-indigo-500 focus:outline-none"
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="flex items-center justify-between rounded-xl border border-white/10 px-4 py-3">
+                <div>
+                  <p className="text-sm font-semibold text-slate-900 dark:text-white">Hide "Powered by" line</p>
+                  <p className="text-xs text-slate-500">Receipts show only the client's brand — no powered-by mention at all</p>
                 </div>
-              )}
+                <Toggle value={!!whitelabel.hide_powered_by} onChange={(v) => setWL('hide_powered_by', v)} />
+              </div>
+
+              {/* Live preview: generated palette + how the portal accent will look */}
+              {(() => {
+                const scale = buildShadeScale(whitelabel.primary_color)
+                if (!scale) return null
+                return (
+                  <div className="space-y-3 rounded-xl border border-white/10 p-4">
+                    <p className="text-xs font-bold uppercase tracking-widest text-slate-500">Theme preview</p>
+                    <div className="flex overflow-hidden rounded-lg border border-white/10">
+                      {Object.entries(scale).map(([shade, hex]) => (
+                        <div key={shade} className="h-8 flex-1" style={{ backgroundColor: hex }} title={`${shade}: ${hex}`} />
+                      ))}
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span
+                        className="rounded-xl px-4 py-2 text-sm font-semibold text-white"
+                        style={{ backgroundColor: scale['600'] }}
+                      >
+                        {whitelabel.brand_name || 'Primary button'}
+                      </span>
+                      <span
+                        className="rounded-xl border px-4 py-2 text-sm font-semibold"
+                        style={{ borderColor: scale['600'], color: scale['400'] }}
+                      >
+                        Secondary
+                      </span>
+                      {whitelabel.secondary_color && (
+                        <span className="rounded-xl px-4 py-2 text-sm font-semibold text-white" style={{ backgroundColor: whitelabel.secondary_color }}>
+                          Accent
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs text-slate-500">
+                      This palette replaces the blue portal theme everywhere in the client's app the moment you save.
+                    </p>
+                  </div>
+                )
+              })()}
             </div>
           )}
 

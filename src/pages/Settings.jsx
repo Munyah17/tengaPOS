@@ -20,6 +20,7 @@ import {
   submitReceiptConfig, approveReceiptConfig, rejectReceiptConfig,
 } from '@/lib/db'
 import { loadWithOfflineCache } from '@/lib/offlineCache'
+import { INDUSTRIES } from '@/lib/whitelabelTheme'
 import { PAPER_SIZES, PRINTER_CONNECTIONS } from '@/lib/posPrinter'
 import { Download, Clock, Printer } from 'lucide-react'
 import toast from 'react-hot-toast'
@@ -835,26 +836,14 @@ export default function Settings() {
             {activeSection === 'receipts' && (
               <div className="space-y-6">
                 <h3 className="text-lg font-bold text-slate-900 dark:text-white">Receipt Settings</h3>
-                <div>
-                  <label className="mb-1.5 block text-sm font-medium text-slate-700 dark:text-slate-300">Receipt Header</label>
-                  <input
-                    type="text"
-                    defaultValue="Thank you for shopping with us!"
-                    className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
-                  />
-                </div>
-                <div>
-                  <label className="mb-1.5 block text-sm font-medium text-slate-700 dark:text-slate-300">Receipt Footer</label>
-                  <input
-                    type="text"
-                    defaultValue="Powered by tengaPOS"
-                    className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
-                  />
-                </div>
-                <p className="text-xs text-slate-500">
-                  ZIMRA Fiscalisation is managed on its own tab — see <b>ZIMRA Fiscal</b> in the sidebar.
+                <p className="text-sm text-slate-500">
+                  Everything that prints on your receipts — store details, TIN, footer message, paper
+                  size, and the optional POS Printer button — is managed under <b>Receipts Config</b> in
+                  the sidebar. ZIMRA Fiscalisation has its own <b>ZIMRA Fiscal</b> tab.
                 </p>
-                <Button>Save Changes</Button>
+                <Button variant="secondary" onClick={() => setActiveSection('store')}>
+                  Open Receipts Config
+                </Button>
               </div>
             )}
 
@@ -1173,6 +1162,20 @@ export default function Settings() {
                           {tenant.whitelabel.support_email || tenant.whitelabel.support_phone || '—'}
                         </p>
                       </div>
+                      {tenant.whitelabel.tagline && (
+                        <div>
+                          <p className="text-xs font-semibold uppercase text-slate-400">Tagline</p>
+                          <p className="text-sm text-slate-900 dark:text-white">{tenant.whitelabel.tagline}</p>
+                        </div>
+                      )}
+                      {tenant.whitelabel.industry && (
+                        <div>
+                          <p className="text-xs font-semibold uppercase text-slate-400">Industry</p>
+                          <p className="text-sm text-slate-900 dark:text-white">
+                            {INDUSTRIES.find((i) => i.key === tenant.whitelabel.industry)?.label || tenant.whitelabel.industry}
+                          </p>
+                        </div>
+                      )}
                     </div>
                     {tenant.whitelabel.primary_color && (
                       <div>
