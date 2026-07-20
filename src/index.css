@@ -62,6 +62,17 @@ table {
   }
 }
 
+/* iOS Safari auto-zooms the viewport when focusing any input/select/textarea
+   under 16px. Since this is a client-routed SPA (no full page reload between
+   /login and the dashboard), that zoom level carries straight into the
+   post-login layout — the "logged in zoomed in and overflowing" bug. Forcing
+   16px on mobile form controls stops the zoom at its source, app-wide. */
+@media (max-width: 640px) {
+  input, select, textarea {
+    font-size: 16px;
+  }
+}
+
 .glass {
   background: rgba(255, 255, 255, 0.05);
   backdrop-filter: blur(12px);

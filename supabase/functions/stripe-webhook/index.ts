@@ -74,6 +74,13 @@ serve(async (req) => {
         features: { ...(t?.features || {}), fiscalisation: true },
         fiscal_expires_at: renewal.toISOString(),
       }).eq('id', tenantId)
+    } else if (kind === 'hr_payroll') {
+      // Unlock the HR & Payroll add-on for the paid period
+      const { data: t } = await admin.from('tenants').select('features').eq('id', tenantId).maybeSingle()
+      await admin.from('tenants').update({
+        features: { ...(t?.features || {}), hr_payroll: true },
+        hr_payroll_expires_at: renewal.toISOString(),
+      }).eq('id', tenantId)
     } else {
       // Activate the tenant on the paid plan (clears any trial lock)
       await admin.from('tenants').update({

@@ -2,7 +2,7 @@
 // working with no connection, queue sales made while offline, and
 // periodically sync everything back to Supabase in the background.
 import { db, addToSyncQueue, getSyncQueueItems, removeSyncQueueItem } from '@/db'
-import { fetchProducts, saveCheckout } from '@/lib/db'
+import { fetchProducts, saveCheckout, insertProduct, updateProduct } from '@/lib/db'
 
 export async function cacheProductsForOffline(tenantId) {
   try {
@@ -24,20 +24,37 @@ export async function queueOfflineSale(payload) {
   await addToSyncQueue('checkout', 'create', payload)
 }
 
+/** Queues a product add/edit made while offline (or mid-save on a network
+ *  failure) for replay once connectivity returns — same treatment as
+ *  offline POS checkout, the other priority write path. */
+export async function queueOfflineInventoryWrite(operation, tenantId, payload, productId = null) {
+  await addToSyncQueue('inventory', operation, { tenantId, productId, payload })
+}
+
 export async function pendingSyncCount() {
   return db.syncQueue.count()
 }
 
-/** Replays any queued offline sales. Safe to call repeatedly. */
+/** Replays any queued offline writes (POS checkout + Inventory). Safe to call repeatedly. */
 export async function processSyncQueue() {
   if (!navigator.onLine) return { synced: 0, failed: 0 }
   const items = await getSyncQueueItems()
   let synced = 0
   let failed = 0
   for (const item of items) {
-    if (item.table_name !== 'checkout') continue
     try {
-      await saveCheckout(item.data)
+      if (item.table_name === 'checkout') {
+        await saveCheckout(item.data)
+      } else if (item.table_name === 'inventory') {
+        const { operation, data } = item
+        if (operation === 'insert') {
+          await insertProduct(data.tenantId, data.payload)
+        } else {
+          await updateProduct(data.productId, data.payload)
+        }
+      } else {
+        continue
+      }
       await removeSyncQueueItem(item.id)
       synced += 1
     } catch {

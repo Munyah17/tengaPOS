@@ -260,6 +260,24 @@ export default function HR() {
   const inp  = 'w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-brand-500 focus:outline-none dark:border-slate-700 dark:bg-slate-900 dark:text-white'
   const cell = 'w-full rounded border border-slate-200 bg-transparent px-2 py-1 text-right text-sm text-slate-900 focus:border-brand-500 focus:outline-none dark:border-slate-700 dark:text-white'
 
+  const hrUnlocked = tenant?.features?.hr_payroll === true
+  if (!hrUnlocked) {
+    return (
+      <div className="p-4 sm:p-6">
+        <div className="mb-6">
+          <h1 className="text-2xl font-extrabold text-slate-900 dark:text-white">HR & Payroll</h1>
+          <p className="text-sm text-slate-500">Manage staff pay rates and process payroll runs</p>
+        </div>
+        <div className="rounded-2xl border-2 border-amber-300 bg-amber-50 p-6 dark:border-amber-700/50 dark:bg-amber-900/20">
+          <h4 className="font-bold text-amber-900 dark:text-amber-200">HR & Payroll isn't active yet</h4>
+          <p className="mt-1 text-sm text-amber-800 dark:text-amber-300">
+            This is a paid add-on (${5}/person/month). Request it from Settings and it'll unlock here once approved.
+          </p>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="p-4 sm:p-6">
       <div className="mb-6">

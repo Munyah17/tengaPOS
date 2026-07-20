@@ -3,7 +3,7 @@ import { motion } from 'framer-motion'
 import {
   Settings as SettingsIcon, Store, CreditCard, Receipt,
   Bell, Shield, Palette, Globe, ExternalLink, Cpu,
-  CheckCircle, AlertTriangle, Loader, Power, PowerOff, Eye, EyeOff,
+  CheckCircle, AlertTriangle, Loader, Power, PowerOff, Eye, EyeOff, X,
 } from 'lucide-react'
 import Button from '@/components/common/Button'
 import ThemeToggle from '@/components/common/ThemeToggle'
@@ -22,7 +22,7 @@ import {
 import { loadWithOfflineCache } from '@/lib/offlineCache'
 import { INDUSTRIES } from '@/lib/whitelabelTheme'
 import { PAPER_SIZES, PRINTER_CONNECTIONS } from '@/lib/posPrinter'
-import { Download, Clock, Printer } from 'lucide-react'
+import { Download, Clock, Printer, BriefcaseBusiness } from 'lucide-react'
 import toast from 'react-hot-toast'
 
 const sections = [
@@ -31,6 +31,7 @@ const sections = [
   { id: 'payments', label: 'Payments', icon: CreditCard },
   { id: 'receipts', label: 'Receipts', icon: Receipt },
   { id: 'fiscalisation', label: 'ZIMRA Fiscal', icon: Cpu },
+  { id: 'hr', label: 'HR & Payroll', icon: BriefcaseBusiness },
   { id: 'notifications', label: 'Notifications', icon: Bell },
   { id: 'security', label: 'Security', icon: Shield },
   { id: 'appearance', label: 'Appearance', icon: Palette },
@@ -40,7 +41,7 @@ const sections = [
 // Shop managers run day-to-day operations but don't own the business —
 // payment gateway credentials, ZIMRA fiscal device registration, and the
 // account-security/data-export tools stay Vendor-only.
-const SHOP_MANAGER_HIDDEN_SECTIONS = ['payments', 'fiscalisation', 'security']
+const SHOP_MANAGER_HIDDEN_SECTIONS = ['payments', 'fiscalisation', 'security', 'hr']
 
 export default function Settings() {
   const [activeSection, setActiveSection] = useState('general')
@@ -68,7 +69,7 @@ export default function Settings() {
   const [receiptForm, setReceiptForm] = useState({
     templateMode: 'zimra_default', storeName: '', storeAddress: '', storeContacts: '',
     tin: '', vatNumber: '', footerMessage: '', paperWidthMm: 80, printerConnection: 'usb',
-    showPosPrint: true,
+    showPosPrint: true, headerMessage: '', customLines: [],
   })
   const [savingReceiptConfig, setSavingReceiptConfig] = useState(false)
 
@@ -81,7 +82,7 @@ export default function Settings() {
   useEffect(loadReceiptConfigs, [tenant?.id])
   useEffect(() => {
     if (!tenant?.id) return
-    fetchBranches(tenant.id).then(setBranches).catch(() => {})
+    fetchBranches(tenant.id).then(setBranches).catch(() => toast.error("Couldn't load branches"))
   }, [tenant?.id])
 
   // Populate the form from whatever config already exists for the selected
@@ -105,6 +106,8 @@ export default function Settings() {
       paperWidthMm: existing?.paper_width_mm || 80,
       printerConnection: existing?.printer_connection || 'usb',
       showPosPrint: existing?.show_pos_print !== false,
+      headerMessage: existing?.header_message || '',
+      customLines: Array.isArray(existing?.custom_lines) ? existing.custom_lines : [],
     })
   }, [scopeBranchId, receiptConfigs])
 
@@ -217,6 +220,83 @@ export default function Settings() {
       toast.error(err.message || 'Could not submit request')
     } finally {
       setFiscalRequesting(false)
+    }
+  }
+
+  // ─── HR & Payroll add-on subscription ($5/person/month) ───
+  const HR_PRICE_PER_HEAD = 5
+  const HR_PERIOD_LABEL = { monthly: 'Monthly', quarterly: '3 Months', halfyear: '6 Months', yearly: 'Yearly' }
+  const HR_PERIOD_MONTHS = { monthly: 1, quarterly: 3, halfyear: 6, yearly: 12 }
+  const hrUnlocked = tenant?.features?.hr_payroll === true
+  const [hrPeriod, setHrPeriod] = useState('monthly')
+  const [hrHeadcount, setHrHeadcount] = useState(1)
+  const [hrPayMethod, setHrPayMethod] = useState('paynow')
+  const [hrRequesting, setHrRequesting] = useState(false)
+  const [pendingHrRequest, setPendingHrRequest] = useState(null)
+  const hrPrice = HR_PRICE_PER_HEAD * (Number(hrHeadcount) || 0) * (HR_PERIOD_MONTHS[hrPeriod] || 1)
+
+  const loadPendingHrRequest = () => {
+    if (!tenant?.id) return
+    loadWithOfflineCache(
+      ['pendingHrRequest', tenant.id],
+      () => supabase
+        .from('hr_payroll_requests')
+        .select('*')
+        .eq('tenant_id', tenant.id)
+        .eq('status', 'pending')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+        .then(({ data, error }) => { if (error) throw error; return data }),
+      { onData: setPendingHrRequest },
+    )
+  }
+  useEffect(loadPendingHrRequest, [tenant?.id])
+
+  const requestHRPayroll = async () => {
+    if (!hrHeadcount || hrHeadcount < 1) { toast.error('Enter how many people need payroll'); return }
+    setHrRequesting(true)
+    try {
+      if (hrPayMethod === 'cash') {
+        const { error } = await supabase.from('hr_payroll_requests').insert({
+          tenant_id: tenant.id,
+          headcount: hrHeadcount,
+          period: hrPeriod,
+          method: 'cash',
+          amount: hrPrice,
+        })
+        if (error) throw error
+        toast.success('Request sent! Our team will confirm your cash payment and activate HR & Payroll.')
+        setPendingHrRequest({ status: 'pending', period: hrPeriod, method: 'cash', headcount: hrHeadcount })
+      } else {
+        const { data: { session } } = await supabase.auth.getSession()
+        const { data, error } = await supabase.functions.invoke('signup-checkout', {
+          body: {
+            type: 'hr_payroll',
+            period: hrPeriod,
+            headcount: hrHeadcount,
+            provider: hrPayMethod,
+            return_url: `${window.location.origin}/app/settings`,
+          },
+          headers: { Authorization: `Bearer ${session?.access_token}` },
+        })
+        if (error) {
+          let msg = error.message
+          try {
+            const ctx = await error.context?.json()
+            if (ctx?.error) msg = ctx.error
+          } catch { /* keep default */ }
+          throw new Error(msg)
+        }
+        if (data?.error) throw new Error(data.error)
+        if (!data?.url) throw new Error('No checkout URL returned')
+        window.location.href = data.url
+        return
+      }
+    } catch (err) {
+      toast.error(err.message || 'Could not submit request')
+    } finally {
+      setHrRequesting(false)
     }
   }
 
@@ -623,7 +703,7 @@ export default function Settings() {
                   </div>
                   {!vatEnabled && (
                     <p className="mt-2 text-xs text-amber-600 dark:text-amber-400">
-                      VAT is disabled — it will never be mentioned on checkout, receipts, or reports.
+                      VAT is disabled.
                     </p>
                   )}
                 </div>
@@ -948,16 +1028,22 @@ export default function Settings() {
                   <div>
                     <span className="text-sm font-semibold text-slate-900 dark:text-white">Enable Fiscalisation</span>
                     <p className="text-xs text-slate-500">
-                      {fiscalForm.isEnabled
+                      {!fiscalUnlocked
+                        ? 'Request this add-on above before you can turn it on'
+                        : fiscalForm.isEnabled
                         ? 'Receipts will be submitted to ZIMRA FDMS on each sale'
-                        : 'Disabled — ZIMRA is never mentioned on your receipts, and the fields below are locked until you enable it'}
+                        : 'Disabled — the fields below are locked until you enable it'}
                     </p>
                   </div>
-                  <label className="relative inline-flex cursor-pointer items-center">
+                  <label className={`relative inline-flex items-center ${fiscalUnlocked ? 'cursor-pointer' : 'cursor-not-allowed opacity-50'}`}>
                     <input
                       type="checkbox"
                       checked={fiscalForm.isEnabled}
-                      onChange={(e) => setFiscalForm(f => ({ ...f, isEnabled: e.target.checked }))}
+                      disabled={!fiscalUnlocked}
+                      onChange={(e) => {
+                        if (!fiscalUnlocked) return
+                        setFiscalForm(f => ({ ...f, isEnabled: e.target.checked }))
+                      }}
                       className="peer sr-only"
                     />
                     <div className="peer h-5 w-9 rounded-full bg-slate-300 after:absolute after:left-[2px] after:top-[2px] after:h-4 after:w-4 after:rounded-full after:bg-white after:transition-all peer-checked:bg-brand-600 peer-checked:after:translate-x-full dark:bg-slate-600" />
@@ -1142,13 +1228,121 @@ export default function Settings() {
               </div>
             )}
 
+            {activeSection === 'hr' && (
+              <div className="space-y-6">
+                <div className="flex items-start justify-between">
+                  <div>
+                    <h3 className="text-lg font-bold text-slate-900 dark:text-white">HR & Payroll</h3>
+                    <p className="text-sm text-slate-500">
+                      Optional add-on — manage staff pay rates and run payroll. ${HR_PRICE_PER_HEAD}/person/month.
+                    </p>
+                  </div>
+                  {hrUnlocked && (
+                    <span className="flex items-center gap-1.5 rounded-full bg-green-100 px-3 py-1 text-xs font-semibold text-green-700 dark:bg-green-950 dark:text-green-400">
+                      <CheckCircle className="h-3.5 w-3.5" />
+                      Active
+                    </span>
+                  )}
+                </div>
+
+                {!hrUnlocked && (
+                  <div className="rounded-2xl border-2 border-amber-300 bg-amber-50 p-5 dark:border-amber-700/50 dark:bg-amber-900/20">
+                    <h4 className="font-bold text-amber-900 dark:text-amber-200">Activate HR & Payroll</h4>
+                    {pendingHrRequest ? (
+                      <p className="mt-2 text-sm text-amber-800 dark:text-amber-300">
+                        Your cash payment request is <b>awaiting confirmation</b> by our team.
+                        HR & Payroll unlocks as soon as it's approved.
+                      </p>
+                    ) : (
+                      <>
+                        <p className="mt-1 text-sm text-amber-800 dark:text-amber-300">
+                          Tell us how many people need payroll, choose a period, pay online or by cash, and it unlocks automatically.
+                        </p>
+                        <div className="mt-3 flex flex-wrap items-end gap-3">
+                          <div>
+                            <label className="mb-1 block text-xs font-medium text-amber-800 dark:text-amber-300">People</label>
+                            <input
+                              type="number"
+                              min={1}
+                              value={hrHeadcount}
+                              onChange={(e) => setHrHeadcount(e.target.value)}
+                              className="w-20 rounded-xl border border-amber-200 bg-white px-3 py-2 text-sm dark:border-amber-800/40 dark:bg-slate-900 dark:text-white"
+                            />
+                          </div>
+                          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                            {Object.entries(HR_PERIOD_LABEL).map(([key, label]) => (
+                              <button
+                                key={key}
+                                onClick={() => setHrPeriod(key)}
+                                className={`rounded-xl border px-3 py-2.5 text-left transition-colors ${
+                                  hrPeriod === key
+                                    ? 'border-amber-600 bg-white dark:bg-slate-900'
+                                    : 'border-amber-200 bg-white/60 hover:border-amber-400 dark:border-amber-800/40 dark:bg-white/5'
+                                }`}
+                              >
+                                <p className="text-xs text-slate-500">{label}</p>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                        <p className="mt-3 text-lg font-extrabold text-slate-900 dark:text-white">${hrPrice.toFixed(2)}</p>
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          {[
+                            { key: 'paynow', label: 'Paynow · EcoCash' },
+                            { key: 'stripe', label: 'Card · Stripe' },
+                            { key: 'cash', label: 'Cash (approved by our team)' },
+                          ].map((m) => (
+                            <button
+                              key={m.key}
+                              onClick={() => setHrPayMethod(m.key)}
+                              className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${
+                                hrPayMethod === m.key
+                                  ? 'bg-amber-600 text-white'
+                                  : 'bg-white text-slate-600 hover:bg-amber-100 dark:bg-white/10 dark:text-slate-300'
+                              }`}
+                            >
+                              {m.label}
+                            </button>
+                          ))}
+                        </div>
+                        <button
+                          onClick={requestHRPayroll}
+                          disabled={hrRequesting}
+                          className="mt-4 w-full rounded-xl bg-amber-600 py-2.5 text-sm font-bold text-white hover:bg-amber-700 disabled:opacity-60 sm:w-auto sm:px-6"
+                        >
+                          {hrRequesting
+                            ? 'Processing…'
+                            : hrPayMethod === 'cash'
+                              ? `Request HR & Payroll — $${hrPrice.toFixed(2)} cash`
+                              : `Request HR & Payroll — pay $${hrPrice.toFixed(2)} now`}
+                        </button>
+                      </>
+                    )}
+                  </div>
+                )}
+
+                {hrUnlocked && tenant?.hr_payroll_expires_at && (
+                  <div className="flex items-center gap-2 rounded-xl border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800 dark:border-green-800/50 dark:bg-green-900/20 dark:text-green-300">
+                    <CheckCircle className="h-4 w-4 flex-shrink-0" />
+                    HR & Payroll add-on active until {new Date(tenant.hr_payroll_expires_at).toLocaleDateString('en-GB')}
+                  </div>
+                )}
+
+                {hrUnlocked && (
+                  <Button variant="secondary" onClick={() => window.location.assign('/app/hr')}>
+                    Open HR & Payroll
+                  </Button>
+                )}
+              </div>
+            )}
+
             {activeSection === 'whitelabel' && (
               <div className="space-y-6">
                 <div>
                   <h3 className="text-lg font-bold text-slate-900 dark:text-white">White Label Branding</h3>
                   <p className="mt-1 text-sm text-slate-500">
                     Your brand replaces tengaPOS branding across the portal, reports, and printed documents.
-                    This is a Business/Enterprise add-on set up by tengaPOS — reach out to change it.
+                    This is a Business/Enterprise add-on set up by tengaPOS. Contact us if you'd like it changed.
                   </p>
                 </div>
 
@@ -1303,6 +1497,17 @@ export default function Settings() {
                   </div>
                 </div>
 
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium text-slate-700 dark:text-slate-300">Header Message (optional)</label>
+                  <textarea
+                    value={receiptForm.headerMessage}
+                    onChange={(e) => setReceiptForm((f) => ({ ...f, headerMessage: e.target.value }))}
+                    placeholder="Prints above your store name, e.g. a promo line or slogan."
+                    rows={2}
+                    className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                  />
+                </div>
+
                 {/* Store info */}
                 <div className="grid gap-4 sm:grid-cols-2">
                   <div>
@@ -1359,7 +1564,7 @@ export default function Settings() {
                       className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm disabled:cursor-not-allowed disabled:bg-slate-100 disabled:opacity-60 dark:border-slate-700 dark:bg-slate-800 dark:text-white dark:disabled:bg-slate-900"
                     />
                     {tenant?.vat_enabled === false && (
-                      <p className="mt-1 text-xs text-slate-400">VAT is disabled in General settings — this won't appear on receipts.</p>
+                      <p className="mt-1 text-xs text-slate-400">VAT is disabled in General settings.</p>
                     )}
                   </div>
                 </div>
@@ -1368,10 +1573,57 @@ export default function Settings() {
                   <textarea
                     value={receiptForm.footerMessage}
                     onChange={(e) => setReceiptForm((f) => ({ ...f, footerMessage: e.target.value }))}
-                    placeholder="Leave blank for the default 'Thank You For Your Purchase' line. The 'Powered by' line always prints after your footer."
+                    placeholder="Leave blank for the default 'Thank You For Your Purchase' line."
                     rows={2}
                     className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
                   />
+                </div>
+
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium text-slate-700 dark:text-slate-300">
+                    Custom Lines (optional)
+                    <span className="ml-2 font-normal text-slate-400">Website, socials, return policy — anything else you want printed</span>
+                  </label>
+                  <div className="space-y-2">
+                    {receiptForm.customLines.map((line, i) => (
+                      <div key={i} className="flex gap-2">
+                        <input
+                          type="text"
+                          value={line.label}
+                          onChange={(e) => setReceiptForm((f) => ({
+                            ...f,
+                            customLines: f.customLines.map((l, idx) => idx === i ? { ...l, label: e.target.value } : l),
+                          }))}
+                          placeholder="Label (optional)"
+                          className="w-1/3 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                        />
+                        <input
+                          type="text"
+                          value={line.value}
+                          onChange={(e) => setReceiptForm((f) => ({
+                            ...f,
+                            customLines: f.customLines.map((l, idx) => idx === i ? { ...l, value: e.target.value } : l),
+                          }))}
+                          placeholder="e.g. www.yourstore.co.zw"
+                          className="flex-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setReceiptForm((f) => ({ ...f, customLines: f.customLines.filter((_, idx) => idx !== i) }))}
+                          className="rounded-xl border border-slate-200 px-3 text-slate-400 hover:bg-slate-50 hover:text-red-500 dark:border-slate-700 dark:hover:bg-slate-800"
+                        >
+                          <X className="h-4 w-4" />
+                        </button>
+                      </div>
+                    ))}
+                    <button
+                      type="button"
+                      onClick={() => setReceiptForm((f) => ({ ...f, customLines: [...f.customLines, { label: '', value: '' }] }))}
+                      className="rounded-xl border border-dashed border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-500 hover:border-brand-400 hover:text-brand-600 dark:border-slate-700 dark:text-slate-400"
+                    >
+                      + Add a line
+                    </button>
+                  </div>
                 </div>
 
                 {/* Printer hardware */}

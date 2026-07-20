@@ -79,7 +79,7 @@ export default function Staff() {
       setBranches(rows)
       const main = rows.find((b) => b.is_main) || rows[0]
       if (main) setForm((f) => ({ ...f, branch_id: f.branch_id || main.id }))
-    }).catch(() => {})
+    }).catch(() => toast.error("Couldn't load branches"))
   }, [tenant?.id])
 
   const toggleActive = async (member) => {

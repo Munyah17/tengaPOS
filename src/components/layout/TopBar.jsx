@@ -1,4 +1,4 @@
-import { Bell, Wifi, WifiOff, ShieldAlert, Menu, User, Settings, LogOut, ChevronDown, CheckCheck, BellOff, ShoppingBag, UtensilsCrossed, AlertTriangle } from 'lucide-react'
+import { Bell, Wifi, WifiOff, ShieldAlert, Menu, User, Settings, LogOut, ChevronDown, CheckCheck, BellOff, ShoppingBag, UtensilsCrossed, AlertTriangle, CloudUpload } from 'lucide-react'
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import ThemeToggle from '@/components/common/ThemeToggle'
@@ -7,6 +7,7 @@ import { useThemeStore } from '@/stores/themeStore'
 import { useAuthStore, ROLE_COLORS, ROLE_LABELS, NAV_PERMISSIONS } from '@/stores/authStore'
 import { useFiscalStore } from '@/stores/fiscalStore'
 import { useTenantNotifications } from '@/hooks/useTenantNotifications'
+import { pendingSyncCount } from '@/lib/offlineSync'
 
 function useClickOutside(ref, handler) {
   useEffect(() => {
@@ -26,6 +27,7 @@ export default function TopBar({ onMenuClick }) {
   const [bellOpen, setBellOpen] = useState(false)
   const [avatarOpen, setAvatarOpen] = useState(false)
   const [showFiscalWarning, setShowFiscalWarning] = useState(false)
+  const [pendingSync, setPendingSync] = useState(0)
   const bellRef = useRef(null)
   const avatarRef = useRef(null)
 
@@ -49,6 +51,15 @@ export default function TopBar({ onMenuClick }) {
     window.addEventListener('online', on)
     window.addEventListener('offline', off)
     return () => { window.removeEventListener('online', on); window.removeEventListener('offline', off) }
+  }, [])
+
+  // Surfaces how many offline sales/inventory edits are still waiting to
+  // sync, so people aren't left guessing whether their work actually saved.
+  useEffect(() => {
+    const tick = () => pendingSyncCount().then(setPendingSync).catch(() => {})
+    tick()
+    const interval = setInterval(tick, 5000)
+    return () => clearInterval(interval)
   }, [])
 
   const handleSignOut = async () => {
@@ -99,6 +110,17 @@ export default function TopBar({ onMenuClick }) {
           {isOnline ? <Wifi className="h-3.5 w-3.5" /> : <WifiOff className="h-3.5 w-3.5" />}
           <span className="hidden sm:inline">{isOnline ? 'Online' : 'Offline'}</span>
         </div>
+
+        {/* Pending offline sync count — reassurance that queued work hasn't been lost */}
+        {pendingSync > 0 && (
+          <div
+            title={`${pendingSync} item${pendingSync !== 1 ? 's' : ''} saved offline, waiting to sync`}
+            className="hidden items-center gap-1.5 rounded-lg bg-amber-50 px-2.5 py-1.5 text-xs font-medium text-amber-700 dark:bg-amber-950 dark:text-amber-400 sm:flex"
+          >
+            <CloudUpload className="h-3.5 w-3.5" />
+            {pendingSync} pending
+          </div>
+        )}
 
         <RefreshOnlineButton />
 

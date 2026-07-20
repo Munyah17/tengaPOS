@@ -6,6 +6,7 @@ import { useAuthStore } from '@/stores/authStore'
 import { supabase } from '@/lib/supabase'
 import { fetchKitchenOrders, advanceKitchenOrder, completeKitchenOrder } from '@/lib/db'
 import { loadWithOfflineCache } from '@/lib/offlineCache'
+import toast from 'react-hot-toast'
 
 const STATUS_CFG = {
   received: { label: 'New',     color: 'bg-blue-500',   bg: 'bg-blue-50 dark:bg-blue-950/50 border-blue-200 dark:border-blue-800',         icon: Clock,       btn: 'bg-blue-600 hover:bg-blue-700 text-white',    next: 'Accept' },
@@ -176,12 +177,28 @@ export default function Kitchen() {
     const idx = STATUS_FLOW.indexOf(order.status)
     const next = STATUS_FLOW[Math.min(idx + 1, STATUS_FLOW.length - 1)]
     setLiveOrders(prev => prev.map(o => o.id === id ? { ...o, status: next } : o))
-    await advanceKitchenOrder(id, next).catch(() => {})
+    try {
+      await advanceKitchenOrder(id, next)
+    } catch (err) {
+      setLiveOrders(prev => prev.map(o => o.id === id ? { ...o, status: order.status } : o))
+      toast.error(navigator.onLine ? (err.message || 'Failed to update order') : "You're offline — this needs a connection to save")
+    }
   }
 
   const handleComplete = async (id) => {
+    const order = liveOrders.find(o => o.id === id)
+    const prevIndex = liveOrders.findIndex(o => o.id === id)
     setLiveOrders(prev => prev.filter(o => o.id !== id))
-    await completeKitchenOrder(id).catch(() => {})
+    try {
+      await completeKitchenOrder(id)
+    } catch (err) {
+      setLiveOrders(prev => {
+        const next = [...prev]
+        next.splice(prevIndex, 0, order)
+        return next
+      })
+      toast.error(navigator.onLine ? (err.message || 'Failed to complete order') : "You're offline — this needs a connection to save")
+    }
   }
 
   const visible = filter === 'all' ? orders : orders.filter(o => o.type === filter)

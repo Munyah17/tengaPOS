@@ -16,7 +16,7 @@ import {
   fetchProducts, insertProduct, updateProduct, deleteProduct, uploadProductImage,
   fetchBranches, fetchProductBranches, assignProductBranch, unassignProductBranch,
 } from '@/lib/db'
-import { getOfflineProducts } from '@/lib/offlineSync'
+import { getOfflineProducts, queueOfflineInventoryWrite } from '@/lib/offlineSync'
 import toast from 'react-hot-toast'
 
 const BLANK = {
@@ -52,7 +52,7 @@ export default function Inventory() {
 
   useEffect(() => {
     if (!tenant?.id) return
-    fetchBranches(tenant.id).then(setBranches).catch(() => {})
+    fetchBranches(tenant.id).then(setBranches).catch(() => toast.error("Couldn't load branches"))
   }, [tenant?.id])
 
   const queryClient = useQueryClient()
@@ -196,9 +196,13 @@ export default function Inventory() {
       return
     }
     setSaving(true)
+    const offline = !navigator.onLine
     try {
       let imageUrl = form.imageUrl
-      if (imageFile) {
+      // Can't upload to Storage without a connection — keep whatever image
+      // URL already exists (edits) or go blank for now (new products); the
+      // tenant can attach the photo once they're reconnected.
+      if (imageFile && !offline) {
         setUploadingImage(true)
         imageUrl = await uploadProductImage(tenant.id, imageFile)
         setUploadingImage(false)
@@ -213,16 +217,40 @@ export default function Inventory() {
       const payload = { ...form, imageUrl: form.imageUnavailable ? '' : imageUrl, attributes, branchId: primaryBranchId || null }
 
       let productId = editTarget?.id
-      if (editTarget) {
-        const updated = await updateProduct(editTarget.id, payload)
-        queryClient.setQueryData(['products', tenant.id], (old) =>
-          (old || []).map(p => p.id === editTarget.id ? { ...updated, stock: updated.stock_qty, category: p.category } : p))
-        toast.success('Product updated')
-      } else {
-        const created = await insertProduct(tenant.id, payload)
-        productId = created.id
-        queryClient.setQueryData(['products', tenant.id], (old) => [...(old || []), created])
-        toast.success('Product added')
+
+      if (offline) {
+        // Offline: queue the write and patch the cache optimistically so the
+        // product shows up right away — same treatment as offline POS sales.
+        await queueOfflineInventoryWrite(editTarget ? 'update' : 'insert', tenant.id, payload, editTarget?.id)
+        if (editTarget) {
+          queryClient.setQueryData(['products', tenant.id], (old) =>
+            (old || []).map(p => p.id === editTarget.id ? { ...p, ...payload, stock: payload.stock ?? p.stock } : p))
+        } else {
+          queryClient.setQueryData(['products', tenant.id], (old) => [...(old || []), { ...payload, id: `offline-${Date.now()}`, stock: payload.stock }])
+        }
+        toast('Offline — product saved, will sync automatically', { icon: '📴' })
+        setShowAdd(false)
+        return
+      }
+
+      try {
+        if (editTarget) {
+          const updated = await updateProduct(editTarget.id, payload)
+          queryClient.setQueryData(['products', tenant.id], (old) =>
+            (old || []).map(p => p.id === editTarget.id ? { ...updated, stock: updated.stock_qty, category: p.category } : p))
+          toast.success('Product updated')
+        } else {
+          const created = await insertProduct(tenant.id, payload)
+          productId = created.id
+          queryClient.setQueryData(['products', tenant.id], (old) => [...(old || []), created])
+          toast.success('Product added')
+        }
+      } catch (err) {
+        // Network/server error mid-save — queue it rather than lose the edit
+        await queueOfflineInventoryWrite(editTarget ? 'update' : 'insert', tenant.id, payload, editTarget?.id)
+        toast('Connection issue — product saved, will sync automatically', { icon: '📴' })
+        setShowAdd(false)
+        return
       }
 
       // Reconcile extra branch grants against whatever was there before.
@@ -249,7 +277,7 @@ export default function Inventory() {
       queryClient.setQueryData(['products', tenant.id], (old) => (old || []).filter(p => p.id !== id))
       toast.success('Product deleted')
     } catch (err) {
-      toast.error(err.message || 'Failed to delete')
+      toast.error(navigator.onLine ? (err.message || 'Failed to delete') : "You're offline — deleting needs a connection")
     }
   }
 

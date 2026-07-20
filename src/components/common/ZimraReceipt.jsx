@@ -68,6 +68,8 @@ export default function ZimraReceipt({ receipt, onClose }) {
   const receiptGlobalNo = String(fiscal.lastReceiptGlobalNo).padStart(10, '0')
   const paperWidthChars = paperWidthToChars(receiptConfig.paperWidthMm || 80)
   const showPosPrintButton = receiptConfig.showPosPrint !== false
+  const headerMessage = receiptConfig.headerMessage || ''
+  const customLines = Array.isArray(receiptConfig.customLines) ? receiptConfig.customLines.filter((l) => l?.value) : []
 
   // Footer: the tenant's custom message (if any) replaces only the thank-you
   // line — the "Powered by" + contact lines are permanent and always print
@@ -156,6 +158,7 @@ export default function ZimraReceipt({ receipt, onClose }) {
         </style>
       </head>
       <body>
+        ${headerMessage ? `<div class="center tiny">${headerMessage.split('\n').filter(Boolean).map((l) => `<div>${esc(l)}</div>`).join('')}</div><div class="sep"></div>` : ''}
         <div class="center">
           <div class="store-name">${esc(storeName)}</div>
           ${storeAddress ? `<div>${esc(storeAddress)}</div>` : ''}
@@ -193,6 +196,7 @@ export default function ZimraReceipt({ receipt, onClose }) {
         <div class="sep"></div>
         <div class="center tiny">
           ${footerLines.map((l) => `<div>${esc(l)}</div>`).join('\n          ')}
+          ${customLines.map((l) => `<div>${esc(l.label ? `${l.label}: ${l.value}` : l.value)}</div>`).join('\n          ')}
         </div>
       </body>
       </html>
@@ -218,6 +222,10 @@ export default function ZimraReceipt({ receipt, onClose }) {
         lines.push(l + ' '.repeat(pad) + r)
       }
 
+      if (headerMessage) {
+        for (const l of headerMessage.split('\n').filter(Boolean)) lines.push({ text: l, center: true })
+        dash()
+      }
       lines.push({ text: storeName, bold: true, center: true })
       if (storeAddress) lines.push({ text: storeAddress, center: true })
       if (storeContacts) lines.push({ text: storeContacts, center: true })
@@ -262,6 +270,7 @@ export default function ZimraReceipt({ receipt, onClose }) {
       }
       dash()
       for (const l of footerLines) lines.push({ text: l, center: true })
+      for (const l of customLines) lines.push({ text: l.label ? `${l.label}: ${l.value}` : l.value, center: true })
 
       await printToPosPrinter(lines, receiptConfig.printerConnection)
       toast.success('Sent to POS printer')
@@ -307,6 +316,15 @@ export default function ZimraReceipt({ receipt, onClose }) {
             className="mx-auto w-full max-w-[300px] rounded-sm bg-white p-4 font-mono text-[11px] leading-tight text-black shadow-md"
             style={{ fontFamily: "'Courier New', Courier, monospace" }}
           >
+            {headerMessage && (
+              <>
+                <div className="text-center text-[10px]">
+                  {headerMessage.split('\n').filter(Boolean).map((l, i) => <div key={i}>{l}</div>)}
+                </div>
+                <div className="my-2 border-t border-dashed border-black" />
+              </>
+            )}
+
             {/* Store header — only lines this tenant actually configured */}
             <div className="text-center">
               <div className="text-sm font-bold uppercase">{storeName}</div>
@@ -457,6 +475,7 @@ export default function ZimraReceipt({ receipt, onClose }) {
             {/* Footer */}
             <div className="text-center text-[9px]">
               {footerLines.map((l, i) => <div key={i}>{l}</div>)}
+              {customLines.map((l, i) => <div key={`c${i}`}>{l.label ? `${l.label}: ${l.value}` : l.value}</div>)}
             </div>
           </div>
         </div>

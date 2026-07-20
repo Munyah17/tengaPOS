@@ -487,6 +487,26 @@ export async function deleteTask(taskId) {
   if (error) throw error
 }
 
+export async function fetchTaskComments(taskId) {
+  const { data, error } = await supabase
+    .from('task_comments')
+    .select('*, author:users!task_comments_author_id_fkey(name, role)')
+    .eq('task_id', taskId)
+    .order('created_at', { ascending: true })
+  if (error) throw error
+  return data
+}
+
+export async function insertTaskComment(taskId, tenantId, authorId, message) {
+  const { data, error } = await supabase
+    .from('task_comments')
+    .insert({ task_id: taskId, tenant_id: tenantId, author_id: authorId, message })
+    .select('*, author:users!task_comments_author_id_fkey(name, role)')
+    .single()
+  if (error) throw error
+  return data
+}
+
 // ─── Branches ─────────────────────────────────────────────────────────────────
 
 export async function fetchBranches(tenantId) {
@@ -494,6 +514,7 @@ export async function fetchBranches(tenantId) {
     .from('branches')
     .select('*')
     .eq('tenant_id', tenantId)
+    .is('deleted_at', null)
     .order('is_main', { ascending: false })
   if (error) throw error
   return data
@@ -535,7 +556,7 @@ export async function updateBranch(id, updates) {
 export async function deleteBranch(id) {
   const { error } = await supabase
     .from('branches')
-    .update({ is_active: false })
+    .update({ deleted_at: new Date().toISOString() })
     .eq('id', id)
   if (error) throw error
 }
@@ -966,17 +987,33 @@ export async function fetchReceiptConfigs(tenantId) {
 
 /** The config that should actually apply for a given branch right now:
  *  an approved branch-specific override if one exists, else the tenant-wide
- *  default (branch_id IS NULL), else null (caller falls back to hardcoded defaults). */
+ *  default (branch_id IS NULL), else null (caller falls back to hardcoded defaults).
+ *
+ *  Fetches every approved row for the tenant (not just the current branch
+ *  scope) and prefers whichever is actually filled in. A session with no
+ *  branch pinned (or one that briefly doesn't match) used to fall straight to
+ *  the tenant-wide default row even when that row had never been configured
+ *  — printing a blank/placeholder-looking receipt even though the tenant had
+ *  real details saved under a specific branch. Once a tenant has configured
+ *  anything, no session should ever see a blank receipt again. */
 export async function fetchEffectiveReceiptConfig(tenantId, branchId) {
   const { data, error } = await supabase
     .from('receipt_configs')
     .select('*')
     .eq('tenant_id', tenantId)
-    .or(branchId ? `branch_id.eq.${branchId},branch_id.is.null` : 'branch_id.is.null')
     .eq('pending_approval', false)
   if (error) throw error
   const branchRow = branchId ? data.find((r) => r.branch_id === branchId) : null
-  return branchRow || data.find((r) => r.branch_id === null) || null
+  const defaultRow = data.find((r) => r.branch_id === null)
+  const populated = (row) => row?.store_name
+  return (
+    (populated(branchRow) && branchRow) ||
+    (populated(defaultRow) && defaultRow) ||
+    branchRow ||
+    defaultRow ||
+    data.find((r) => r.store_name) ||
+    null
+  )
 }
 
 export async function submitReceiptConfig(config) {
@@ -992,6 +1029,8 @@ export async function submitReceiptConfig(config) {
     p_paper_width_mm: config.paperWidthMm || 80,
     p_printer_connection: config.printerConnection || 'usb',
     p_show_pos_print: config.showPosPrint !== false,
+    p_header_message: config.headerMessage || null,
+    p_custom_lines: config.customLines || [],
   })
   if (error) throw error
   return data

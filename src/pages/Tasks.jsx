@@ -3,12 +3,15 @@ import { motion, AnimatePresence } from 'framer-motion'
 import {
   Plus, CheckCircle, Clock, AlertCircle, User, Paperclip, X,
   ChevronDown, Search, Calendar, Flag, FileText, Image, File,
-  CheckSquare, Square, Upload, Send, Edit3, Trash2,
+  CheckSquare, Square, Upload, Send, Edit3, Trash2, Info, MessageCircle,
 } from 'lucide-react'
 import Modal from '@/components/common/Modal'
 import { useThemeStore } from '@/stores/themeStore'
 import { useAuthStore } from '@/stores/authStore'
-import { fetchTasks, insertTask, updateTaskStatus, deleteTask as dbDeleteTask, fetchStaff } from '@/lib/db'
+import {
+  fetchTasks, insertTask, updateTaskStatus, deleteTask as dbDeleteTask, fetchStaff,
+  fetchTaskComments, insertTaskComment,
+} from '@/lib/db'
 import { loadWithOfflineCache } from '@/lib/offlineCache'
 import toast from 'react-hot-toast'
 
@@ -159,6 +162,79 @@ function ProofUploader({ proofs, onAdd }) {
   )
 }
 
+function TaskChat({ taskId, tenantId, myId }) {
+  const [comments, setComments] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [text, setText] = useState('')
+  const [sending, setSending] = useState(false)
+
+  useEffect(() => {
+    let cancelled = false
+    setLoading(true)
+    fetchTaskComments(taskId)
+      .then((rows) => { if (!cancelled) setComments(rows) })
+      .catch(() => toast.error("Couldn't load messages"))
+      .finally(() => { if (!cancelled) setLoading(false) })
+    return () => { cancelled = true }
+  }, [taskId])
+
+  const send = async () => {
+    const message = text.trim()
+    if (!message) return
+    setSending(true)
+    try {
+      const row = await insertTaskComment(taskId, tenantId, myId, message)
+      setComments((prev) => [...prev, row])
+      setText('')
+    } catch (err) {
+      toast.error(navigator.onLine ? (err.message || 'Failed to send message') : "You're offline — this needs a connection to save")
+    } finally {
+      setSending(false)
+    }
+  }
+
+  return (
+    <div>
+      <label className="mb-1.5 flex items-center gap-1.5 text-sm font-semibold text-slate-700 dark:text-slate-300">
+        <MessageCircle className="h-4 w-4" />Questions &amp; updates
+      </label>
+      <div className="max-h-56 space-y-2 overflow-y-auto rounded-xl border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-800/60">
+        {loading ? (
+          <p className="py-3 text-center text-xs text-slate-400">Loading…</p>
+        ) : comments.length === 0 ? (
+          <p className="py-3 text-center text-xs text-slate-400">No messages yet — ask a question here.</p>
+        ) : (
+          comments.map((c) => (
+            <div key={c.id} className={`max-w-[85%] rounded-xl px-3 py-2 text-sm ${c.author_id === myId ? 'ml-auto bg-brand-600 text-white' : 'bg-white text-slate-700 dark:bg-slate-900 dark:text-slate-200'}`}>
+              {c.author_id !== myId && (
+                <div className="mb-0.5 text-xs font-bold opacity-70">{c.author?.name || 'Someone'}</div>
+              )}
+              <div>{c.message}</div>
+            </div>
+          ))
+        )}
+      </div>
+      <div className="mt-2 flex gap-2">
+        <input
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); send() } }}
+          placeholder="Ask a question…"
+          className="flex-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+        />
+        <button
+          type="button"
+          onClick={send}
+          disabled={sending || !text.trim()}
+          className="flex items-center gap-1.5 rounded-xl bg-brand-600 px-3 py-2 text-sm font-bold text-white hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          <Send className="h-4 w-4" />
+        </button>
+      </div>
+    </div>
+  )
+}
+
 function dbRowToTask(row) {
   return {
     id: row.id,
@@ -188,6 +264,7 @@ export default function Tasks() {
   const [filter, setFilter] = useState('all')
   const [showNew, setShowNew] = useState(false)
   const [updateTask, setUpdateTask] = useState(null)
+  const [detailsTask, setDetailsTask] = useState(null)
   const [newTask, setNewTask] = useState({ title: '', description: '', assigneeId: '', assigneeName: '', deadline: '', priority: 'medium' })
   const [updateNote, setUpdateNote] = useState('')
   const [updateProofs, setUpdateProofs] = useState([])
@@ -258,10 +335,17 @@ export default function Tasks() {
     }
   }
 
+  const offlineMsg = () => (navigator.onLine ? undefined : "You're offline — this needs a connection to save")
+
   const accept = async (id) => {
     setTasks(prev => prev.map(t => t.id === id ? { ...t, status: 'in_progress', acceptedAt: new Date().toISOString() } : t))
-    toast.success('Task accepted — get to it!')
-    await updateTaskStatus(id, 'in_progress').catch(() => {})
+    try {
+      await updateTaskStatus(id, 'in_progress')
+      toast.success('Task accepted — get to it!')
+    } catch (err) {
+      setTasks(prev => prev.map(t => t.id === id ? { ...t, status: 'pending', acceptedAt: null } : t))
+      toast.error(offlineMsg() || err.message || 'Failed to accept task')
+    }
   }
 
   const openUpdate = (task) => {
@@ -271,27 +355,51 @@ export default function Tasks() {
   }
 
   const submitUpdate = async () => {
-    const nextStatus = updateNote || updateProofs.length > 0 ? 'in_progress' : updateTask.status
+    const target = updateTask
+    const prevTask = tasks.find(t => t.id === target.id)
+    const nextStatus = updateNote || updateProofs.length > 0 ? 'in_progress' : target.status
     setTasks(prev => prev.map(t =>
-      t.id === updateTask.id
+      t.id === target.id
         ? { ...t, notes: updateNote, proofs: updateProofs, status: nextStatus }
         : t
     ))
     setUpdateTask(null)
-    toast.success('Task updated')
-    await updateTaskStatus(updateTask.id, nextStatus).catch(() => {})
+    try {
+      await updateTaskStatus(target.id, nextStatus)
+      toast.success('Task updated')
+    } catch (err) {
+      setTasks(prev => prev.map(t => t.id === target.id ? prevTask : t))
+      toast.error(offlineMsg() || err.message || 'Failed to update task')
+    }
   }
 
   const markComplete = async (id) => {
+    const prevTask = tasks.find(t => t.id === id)
     setTasks(prev => prev.map(t => t.id === id ? { ...t, status: 'completed' } : t))
-    toast.success('Task completed!')
-    await updateTaskStatus(id, 'completed').catch(() => {})
+    try {
+      await updateTaskStatus(id, 'completed')
+      toast.success('Task completed!')
+    } catch (err) {
+      setTasks(prev => prev.map(t => t.id === id ? prevTask : t))
+      toast.error(offlineMsg() || err.message || 'Failed to complete task')
+    }
   }
 
   const deleteTask = async (id) => {
+    const prevTask = tasks.find(t => t.id === id)
+    const prevIndex = tasks.findIndex(t => t.id === id)
     setTasks(prev => prev.filter(t => t.id !== id))
-    toast.success('Task removed')
-    await dbDeleteTask(id).catch(() => {})
+    try {
+      await dbDeleteTask(id)
+      toast.success('Task removed')
+    } catch (err) {
+      setTasks(prev => {
+        const next = [...prev]
+        next.splice(prevIndex, 0, prevTask)
+        return next
+      })
+      toast.error(offlineMsg() || err.message || 'Failed to remove task')
+    }
   }
 
   const accent = isRestaurant ? 'bg-green-600 hover:bg-green-700' : 'bg-brand-600 hover:bg-brand-700'
@@ -396,6 +504,9 @@ export default function Tasks() {
 
                     {/* Action buttons */}
                     <div className="mt-3 flex flex-wrap gap-2">
+                      <button onClick={() => setDetailsTask(task)} className="flex items-center gap-1.5 rounded-xl border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800">
+                        <Info className="h-3.5 w-3.5" />Details
+                      </button>
                       {/* Assignees: accept if pending, update progress, mark complete */}
                       {!canAssign && isMyTask && task.status === 'pending' && (
                         <button onClick={() => accept(task.id)} className="flex items-center gap-1.5 rounded-xl bg-brand-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-brand-700">
@@ -545,6 +656,75 @@ export default function Tasks() {
                 Close
               </button>
             )}
+          </div>
+        </Modal>
+      )}
+
+      {/* Task Details Modal */}
+      {detailsTask && (
+        <Modal isOpen={true} onClose={() => setDetailsTask(null)} title="Task Details">
+          <div className="space-y-4">
+            <div>
+              <div className="flex items-start justify-between gap-2">
+                <h3 className="text-base font-bold text-slate-900 dark:text-white">{detailsTask.title}</h3>
+                <span className={`rounded-full px-2.5 py-0.5 text-xs font-bold ${PRIORITY_COLORS[detailsTask.priority]}`}>
+                  {detailsTask.priority}
+                </span>
+              </div>
+              {detailsTask.description && (
+                <p className="mt-1 text-sm text-slate-500">{detailsTask.description}</p>
+              )}
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 rounded-xl bg-slate-50 p-3 text-xs dark:bg-slate-800">
+              <div>
+                <div className="font-semibold text-slate-400">Assigned to</div>
+                <div className="text-slate-700 dark:text-slate-200">{detailsTask.assigneeName}</div>
+              </div>
+              <div>
+                <div className="font-semibold text-slate-400">Assigned by</div>
+                <div className="text-slate-700 dark:text-slate-200">{detailsTask.assignedByName}</div>
+              </div>
+              <div>
+                <div className="font-semibold text-slate-400">Status</div>
+                <div className="capitalize text-slate-700 dark:text-slate-200">{detailsTask.status.replace('_', ' ')}</div>
+              </div>
+              <div>
+                <div className="font-semibold text-slate-400">Due</div>
+                <div className="text-slate-700 dark:text-slate-200">{detailsTask.deadline || 'No deadline'}</div>
+              </div>
+            </div>
+
+            {detailsTask.notes && (
+              <div>
+                <div className="mb-1 text-xs font-semibold text-slate-400">Progress notes</div>
+                <div className="rounded-xl bg-slate-50 px-3 py-2 text-sm text-slate-600 dark:bg-slate-800 dark:text-slate-400">
+                  {detailsTask.notes}
+                </div>
+              </div>
+            )}
+
+            {detailsTask.proofs?.length > 0 && (
+              <div>
+                <div className="mb-1.5 text-xs font-semibold text-slate-400">Proof attachments</div>
+                <div className="space-y-2">
+                  {detailsTask.proofs.map((p) => {
+                    const Icon = fileIcon(p.type)
+                    return (
+                      <div key={p.id} className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 p-2.5 dark:border-slate-700 dark:bg-slate-800">
+                        <Icon className="h-5 w-5 flex-shrink-0 text-slate-400" />
+                        <div className="min-w-0 flex-1">
+                          <div className="truncate text-sm font-medium text-slate-700 dark:text-slate-200">{p.name}</div>
+                          {p.note && <div className="text-xs text-slate-400">{p.note}</div>}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+
+            <TaskChat taskId={detailsTask.id} tenantId={tenant?.id} myId={myId} />
           </div>
         </Modal>
       )}

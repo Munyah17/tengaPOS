@@ -24,6 +24,8 @@ export const useReceiptConfigStore = create((set) => ({
   paperWidthMm: 80,
   printerConnection: 'usb',
   showPosPrint: true,
+  headerMessage: '',
+  customLines: [],
 
   loadFromDB: (row, scopeKey = null) => set((s) => {
     // A null row for the scope we already have real values for means the
@@ -44,6 +46,8 @@ export const useReceiptConfigStore = create((set) => ({
       paperWidthMm: row?.paper_width_mm || 80,
       printerConnection: row?.printer_connection || 'usb',
       showPosPrint: row?.show_pos_print !== false,
+      headerMessage: row?.header_message || '',
+      customLines: Array.isArray(row?.custom_lines) ? row.custom_lines : [],
     }
   }),
 
@@ -51,5 +55,6 @@ export const useReceiptConfigStore = create((set) => ({
     loaded: false, scopeKey: null, templateMode: 'zimra_default', storeName: '',
     storeAddress: '', storeContacts: '', tin: '', vatNumber: '', footerMessage: '',
     paperWidthMm: 80, printerConnection: 'usb', showPosPrint: true,
+    headerMessage: '', customLines: [],
   }),
 }))

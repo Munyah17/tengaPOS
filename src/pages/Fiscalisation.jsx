@@ -140,8 +140,14 @@ export default function Fiscalisation() {
     }
   }
 
+  const fiscalUnlocked = tenant?.features?.fiscalisation === true
+
   const handleEnable = async () => {
     const next = !fiscal.isEnabled
+    if (next && !fiscalUnlocked) {
+      toast.error('ZIMRA Fiscalisation is a paid add-on — request it in Settings first')
+      return
+    }
     fiscal.setEnabled(next)
     if (tenant?.id) {
       await supabase
@@ -223,6 +229,7 @@ export default function Fiscalisation() {
         <div className="flex items-center gap-3">
           <button
             onClick={handleEnable}
+            title={!fiscalUnlocked && !fiscal.isEnabled ? 'Request this add-on in Settings first' : undefined}
             className={`flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold transition-colors ${
               fiscal.isEnabled
                 ? 'bg-green-600 text-white hover:bg-green-700'
@@ -237,6 +244,15 @@ export default function Fiscalisation() {
           </button>
         </div>
       </div>
+
+      {!fiscalUnlocked && (
+        <div className="mb-6 rounded-2xl border-2 border-amber-300 bg-amber-50 p-5 dark:border-amber-700/50 dark:bg-amber-900/20">
+          <h4 className="font-bold text-amber-900 dark:text-amber-200">ZIMRA Fiscalisation isn't active yet</h4>
+          <p className="mt-1 text-sm text-amber-800 dark:text-amber-300">
+            This is a paid add-on. Request it from Settings and it'll unlock here once approved.
+          </p>
+        </div>
+      )}
 
       {/* ── Fiscal Day Toggle ─────────────────────────────────── */}
       <div className="mb-6 rounded-2xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900">
@@ -405,8 +421,9 @@ export default function Fiscalisation() {
           {/* Actions */}
           {locked && (
             <p className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-500 dark:border-slate-700 dark:bg-slate-800/60 dark:text-slate-400">
-              ZIMRA fiscalisation is disabled for your account — the fields above are locked and nothing
-              ZIMRA-related appears on your receipts. Use the toggle at the top right to enable it.
+              {fiscalUnlocked
+                ? "ZIMRA fiscalisation is disabled. Use the toggle at the top right to enable it."
+                : "ZIMRA fiscalisation isn't active on your account yet. Request it in Settings."}
             </p>
           )}
           <div className="flex flex-wrap gap-3">

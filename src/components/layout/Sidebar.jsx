@@ -23,9 +23,9 @@ const ALL_NAV_ITEMS = [
   { key: 'staff', icon: Users, label: 'Staff Management', path: '/app/staff' },
   { key: 'tasks', icon: ListTodo, label: 'Tasks', path: '/app/tasks' },
   { key: 'branches', icon: Store, label: 'Branches', path: '/app/branches' },
-  { key: 'fiscalisation', icon: Cpu, label: 'Fiscalisation', path: '/app/fiscalisation' },
+  { key: 'fiscalisation', icon: Cpu, label: 'Fiscalisation', path: '/app/fiscalisation', addonFeature: 'fiscalisation', addonTitle: 'ZIMRA Fiscalisation is an optional add-on — request it in Settings' },
   { key: 'payments', icon: CreditCard, label: 'Payments', path: '/app/payments' },
-  { key: 'hr', icon: BriefcaseBusiness, label: 'HR & Payroll', path: '/app/hr' },
+  { key: 'hr', icon: BriefcaseBusiness, label: 'HR & Payroll', path: '/app/hr', addonFeature: 'hr_payroll', addonTitle: 'HR & Payroll is an optional add-on — request it in Settings' },
   { key: 'invoicing', icon: FileText, label: 'Invoicing', path: '/app/invoicing' },
   { key: 'settings', icon: Settings, label: 'Settings', path: '/app/settings' },
 ]
@@ -183,14 +183,14 @@ export default function Sidebar({ open = false, onClose }) {
           <div className="space-y-0.5">
             {visibleItems.map((item) => {
               const isActive = location.pathname === item.path
-              // Fiscalisation is a paid add-on: greyed out until unlocked
-              if (item.key === 'fiscalisation' && tenant?.features?.fiscalisation !== true) {
+              // Paid add-ons (fiscalisation, HR & Payroll): greyed out until unlocked
+              if (item.addonFeature && tenant?.features?.[item.addonFeature] !== true) {
                 return (
                   <NavLink
                     key={item.path}
                     to="/app/settings"
                     onClick={handleNavClick}
-                    title="ZIMRA Fiscalisation is an optional add-on — request it in Settings"
+                    title={item.addonTitle}
                     className="group flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-slate-400 opacity-60 hover:bg-slate-100 dark:text-slate-600 dark:hover:bg-slate-800"
                   >
                     <item.icon className="h-5 w-5 flex-shrink-0 text-slate-300 dark:text-slate-700" />

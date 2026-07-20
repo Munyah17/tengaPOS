@@ -196,9 +196,13 @@ export default function Branches() {
   const handleDelete = async (id) => {
     const b = branches.find(x => x.id === id)
     if (b?.isMain || b?.is_main) { toast.error('Cannot delete main branch'); return }
-    setBranches(prev => prev.filter(x => x.id !== id))
-    toast.success('Branch removed')
-    await deleteBranch(id).catch(() => {})
+    try {
+      await deleteBranch(id)
+      setBranches(prev => prev.filter(x => x.id !== id))
+      toast.success('Branch removed')
+    } catch (err) {
+      toast.error(err.message || (navigator.onLine ? 'Failed to delete branch' : "You're offline — this needs a connection to save"))
+    }
   }
 
   const openEdit = (branch) => {
