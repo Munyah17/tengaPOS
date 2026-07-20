@@ -3,7 +3,7 @@ import { AnimatePresence, motion } from 'framer-motion'
 import {
   LayoutDashboard, Building2, Users, LifeBuoy, BarChart3,
   Settings, LogOut, Shield, X, ChevronLeft, ChevronRight, Bell,
-  DollarSign, Tag, Database, Activity, Mail, Lock, Eye, Megaphone, Phone,
+  DollarSign, Tag, Database, Activity, Mail, Lock, Eye, Megaphone, Phone, Rocket,
 } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import { useAuthStore } from '@/stores/authStore'
@@ -109,6 +109,7 @@ const NAV_BY_ROLE = {
     { icon: Lock, label: 'Roles & Permissions', path: '/admin/super/roles', group: 'STAFF' },
 
     // COMMUNICATIONS
+    { icon: Rocket, label: 'Version Tracker', path: '/admin/super/versions', group: 'COMMS' },
     { icon: Megaphone, label: 'Announcements', path: '/admin/super/announcements', group: 'COMMS' },
     { icon: Mail, label: 'Email Broadcasts', path: '/admin/super/broadcasts', group: 'COMMS' },
 
@@ -132,6 +133,7 @@ const NAV_BY_ROLE = {
     { icon: Eye, label: 'Fiscal Requests', path: '/admin/fiscal-requests', group: 'OPERATIONS' },
     { icon: LifeBuoy, label: 'Support Tickets', path: '/admin/support', group: 'OPERATIONS' },
     { icon: Bell, label: 'Notifications', path: '/admin/notifications', group: 'OPERATIONS', badge: true },
+    { icon: Rocket, label: 'Version Tracker', path: '/admin/versions', group: 'COMMS' },
     { icon: Megaphone, label: 'Send Announcement', path: '/admin/announcements', group: 'COMMS' },
     { icon: Tag, label: 'Announcement Popup', path: '/admin/pricing', group: 'COMMS' },
     { icon: Eye, label: 'Reports (View Only)', path: '/admin/reports', group: 'REPORTS', readonly: true },

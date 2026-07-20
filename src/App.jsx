@@ -54,6 +54,7 @@ const SuperAdminBackups = lazy(() => import('@/pages/admin/SuperAdminBackups'))
 const SuperAdminRoles = lazy(() => import('@/pages/admin/SuperAdminRoles'))
 const SuperAdminAnnouncements = lazy(() => import('@/pages/admin/SuperAdminAnnouncements'))
 const SuperAdminBroadcasts = lazy(() => import('@/pages/admin/SuperAdminBroadcasts'))
+const SuperAdminVersions = lazy(() => import('@/pages/admin/SuperAdminVersions'))
 const AdminUsers = lazy(() => import('@/pages/admin/AdminUsers'))
 const AdminFiscalRequests = lazy(() => import('@/pages/admin/AdminFiscalRequests'))
 const Checkout = lazy(() => import('@/pages/Checkout'))
@@ -214,6 +215,7 @@ export default function App() {
             <Route path="support" element={<AdminSupport />} />
             <Route path="announcements" element={<SuperAdminAnnouncements />} />
             <Route path="broadcasts" element={<SuperAdminBroadcasts />} />
+            <Route path="versions" element={<SuperAdminVersions />} />
             <Route path="audit-logs" element={<SuperAdminAudit />} />
             <Route path="compliance" element={<SuperAdminCompliance />} />
             <Route path="backups" element={<SuperAdminBackups />} />
@@ -237,6 +239,7 @@ export default function App() {
             <Route path="fiscal-requests" element={<AdminFiscalRequests />} />
             <Route path="support" element={<AdminSupport />} />
             <Route path="announcements" element={<SuperAdminAnnouncements />} />
+            <Route path="versions" element={<SuperAdminVersions />} />
             <Route path="pricing" element={<SuperAdminPricing />} />
             <Route path="reports" element={<AdminReports />} />
             <Route path="profile" element={<AdminSettings />} />

@@ -58,7 +58,7 @@ export default function Notifications() {
                     <span className="text-sm font-semibold text-slate-900 dark:text-white">{n.text}</span>
                     {n.unread && <span className="h-2 w-2 flex-shrink-0 rounded-full bg-brand-500" />}
                   </div>
-                  {n.body && <p className="mt-0.5 text-sm text-slate-600 dark:text-slate-400">{n.body}</p>}
+                  {n.body && <p className="mt-0.5 whitespace-pre-line text-sm text-slate-600 dark:text-slate-400">{n.body}</p>}
                 </div>
                 <span className="flex-shrink-0 text-xs text-slate-400">{n.time}</span>
               </button>

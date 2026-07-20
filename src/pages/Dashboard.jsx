@@ -221,7 +221,7 @@ export default function Dashboard() {
               <Megaphone className="mt-0.5 h-4 w-4 flex-shrink-0 text-indigo-600 dark:text-indigo-400" />
               <div className="flex-1">
                 <p className="text-sm font-semibold text-indigo-900 dark:text-indigo-200">{a.title}</p>
-                <p className="text-sm text-indigo-800 dark:text-indigo-300">{a.body}</p>
+                <p className="whitespace-pre-line text-sm text-indigo-800 dark:text-indigo-300">{a.body}</p>
                 <button
                   onClick={() => dismissForever(a.id)}
                   className="mt-1.5 text-xs font-semibold text-indigo-600 hover:text-indigo-800 dark:text-indigo-400 dark:hover:text-indigo-200"
