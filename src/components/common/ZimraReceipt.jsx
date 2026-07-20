@@ -69,24 +69,24 @@ export default function ZimraReceipt({ receipt, onClose }) {
   const paperWidthChars = paperWidthToChars(receiptConfig.paperWidthMm || 80)
   const showPosPrintButton = receiptConfig.showPosPrint !== false
 
-  // Footer: the tenant's custom message always wins. Otherwise the standard
-  // footer — branded to the tenant's white-label identity when that add-on
-  // is active (their name + support contacts, never tengaPOS), or the
-  // default tengaPOS lines for everyone else.
+  // Footer: the tenant's custom message (if any) replaces only the thank-you
+  // line — the "Powered by" + contact lines are permanent and always print
+  // after it. White-label tenants get their own brand's lines there instead
+  // of tengaPOS (or nothing, if hide_powered_by is set for them).
   const whitelabel = tenant?.whitelabel?.enabled ? tenant.whitelabel : null
-  const footerLines = receiptConfig.footerMessage
-    ? receiptConfig.footerMessage.split('\n').filter(Boolean)
-    : [
-        'Thank You For Your Purchase',
-        ...(whitelabel
-          ? [
-              ...(whitelabel.hide_powered_by || !whitelabel.brand_name ? [] : [`Powered by ${whitelabel.brand_name}`]),
-              ...((whitelabel.support_email || whitelabel.support_phone)
-                ? [[whitelabel.support_email, whitelabel.support_phone].filter(Boolean).join(' | ')]
-                : []),
-            ]
-          : ['Powered by tengaPOS', 'info@globalspaceweb.co.zw | +263773909307']),
-      ]
+  const footerLines = [
+    ...(receiptConfig.footerMessage
+      ? receiptConfig.footerMessage.split('\n').filter(Boolean)
+      : ['Thank You For Your Purchase']),
+    ...(whitelabel
+      ? [
+          ...(whitelabel.hide_powered_by || !whitelabel.brand_name ? [] : [`Powered by ${whitelabel.brand_name}`]),
+          ...((whitelabel.support_email || whitelabel.support_phone)
+            ? [[whitelabel.support_email, whitelabel.support_phone].filter(Boolean).join(' | ')]
+            : []),
+        ]
+      : ['Powered by tengaPOS', 'info@globalspaceweb.co.zw | +263773909307']),
+  ]
 
   const zimraPaymentType = ZIMRA_PAYMENT_MAP[receipt.paymentMethod] || 'Cash'
 

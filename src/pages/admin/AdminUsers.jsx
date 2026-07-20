@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import {
   Users, Search, Plus, X, KeyRound, Trash2, Ban, CheckCircle,
-  Pencil, Building2, Eye, EyeOff, Loader2, LockKeyholeOpen,
+  Pencil, Building2, Eye, EyeOff, Loader2, LockKeyholeOpen, LogOut,
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/stores/authStore'
@@ -143,50 +143,83 @@ function CreateUserModal({ tenants, onClose, onDone }) {
   )
 }
 
-function EditUserModal({ user, onClose, onDone }) {
+function EditUserModal({ user, tenants, onClose, onDone }) {
   const { role: myRole } = useAuthStore()
-  const [name, setName] = useState(user.name || '')
-  const [userRole, setUserRole] = useState(user.role)
+  const isSuper = myRole === 'super_admin'
+  const [form, setForm] = useState({
+    name: user.name || '',
+    username: user.username || '',
+    email: user.email || '',
+    phone: user.phone || '',
+    role: user.role,
+    tenant_id: user.tenant_id,
+    branch_id: user.branch_id || '',
+    is_active: user.is_active !== false,
+  })
+  const [branches, setBranches] = useState([])
+  const [authInfo, setAuthInfo] = useState(null)
   const [newPassword, setNewPassword] = useState('')
   const [showPw, setShowPw] = useState(false)
   const [saving, setSaving] = useState(false)
+  const setF = (key, val) => setForm((f) => ({ ...f, [key]: val }))
 
-  const save = async (e) => {
-    e.preventDefault()
+  // Branch options follow the selected business (matters when moving tenants)
+  useEffect(() => {
+    supabase.from('branches').select('id, name').eq('tenant_id', form.tenant_id)
+      .then(({ data }) => setBranches(data || []))
+  }, [form.tenant_id])
+
+  // Auth-level detail (last sign-in, ban state, providers) via service role
+  useEffect(() => {
+    invokeManageUser({ action: 'get_auth_info', user_id: user.id })
+      .then((res) => setAuthInfo(res.auth))
+      .catch(() => {})
+  }, [user.id])
+
+  const isBanned = authInfo?.banned_until && new Date(authInfo.banned_until) > new Date()
+
+  const runAction = async (fn, doneMsg, { confirm } = {}) => {
+    if (confirm && !window.confirm(confirm)) return
     setSaving(true)
     try {
-      const { error } = await supabase
-        .from('users')
-        .update({ name: name.trim(), role: userRole })
-        .eq('id', user.id)
-      if (error) throw error
+      await fn()
+      toast.success(doneMsg)
+      onDone()
+    } catch (err) {
+      toast.error(err.message)
+      setSaving(false)
+    }
+  }
+
+  const save = (e) => {
+    e.preventDefault()
+    runAction(async () => {
+      await invokeManageUser({
+        action: 'update_user',
+        user_id: user.id,
+        name: form.name.trim(),
+        username: form.username.trim() || null,
+        phone: form.phone.trim() || null,
+        role: form.role,
+        branch_id: form.branch_id || null,
+        is_active: form.is_active,
+        // Email/tenant moves are Super Admin powers — only send when changed
+        // so Admin saves don't trip the server-side permission check.
+        ...(isSuper && form.email.trim() !== user.email ? { email: form.email.trim() } : {}),
+        ...(isSuper && form.tenant_id !== user.tenant_id ? { tenant_id: form.tenant_id } : {}),
+      })
       if (newPassword) {
         await invokeManageUser({ action: 'reset_password', user_id: user.id, new_password: newPassword })
       }
-      toast.success('User updated')
-      onDone()
-    } catch (err) {
-      toast.error(err.message)
-      setSaving(false)
-    }
+    }, 'User updated')
   }
 
-  const remove = async () => {
-    if (!window.confirm(`Permanently delete ${user.name || user.email}? This cannot be undone.`)) return
-    setSaving(true)
-    try {
-      await invokeManageUser({ action: 'delete', user_id: user.id })
-      toast.success('Account deleted')
-      onDone()
-    } catch (err) {
-      toast.error(err.message)
-      setSaving(false)
-    }
-  }
+  const inputClass = 'w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-indigo-500 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/10 dark:bg-slate-800 dark:text-white'
+  const fmtDate = (iso) => iso ? new Date(iso).toLocaleString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—'
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4 py-6 backdrop-blur-sm">
-      <form onSubmit={save} className="max-h-full w-full max-w-md overflow-y-auto rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl dark:border-white/10 dark:bg-slate-900">
+      <form onSubmit={save} className="max-h-full w-full max-w-lg overflow-y-auto rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl dark:border-white/10 dark:bg-slate-900">
         <div className="mb-4 flex items-center justify-between">
           <div>
             <h2 className="font-bold text-slate-900 dark:text-white">Edit User</h2>
@@ -197,37 +230,69 @@ function EditUserModal({ user, onClose, onDone }) {
           </button>
         </div>
 
-        <div className="space-y-3">
-          <FieldInput label="Full Name" value={name} onChange={(e) => setName(e.target.value)} required />
+        {/* Account activity — service-role auth data */}
+        <div className="mb-4 grid grid-cols-2 gap-x-4 gap-y-1.5 rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs dark:border-white/10 dark:bg-white/5 sm:grid-cols-3">
+          <div><span className="block text-slate-400">Last sign-in</span><span className="font-semibold text-slate-700 dark:text-slate-200">{fmtDate(authInfo?.last_sign_in_at)}</span></div>
+          <div><span className="block text-slate-400">Created</span><span className="font-semibold text-slate-700 dark:text-slate-200">{fmtDate(authInfo?.created_at)}</span></div>
+          <div>
+            <span className="block text-slate-400">Status</span>
+            <span className={`font-semibold ${isBanned ? 'text-red-500' : form.is_active ? 'text-green-500' : 'text-amber-500'}`}>
+              {isBanned ? 'Banned' : form.is_active ? 'Active' : 'Suspended'}
+            </span>
+          </div>
+        </div>
+
+        <div className="grid gap-3 sm:grid-cols-2">
+          <FieldInput label="Full Name" value={form.name} onChange={(e) => setF('name', e.target.value)} required />
+          <FieldInput label="Username" value={form.username} onChange={(e) => setF('username', e.target.value)} placeholder="Optional" />
+          <div>
+            <label className="mb-1 block text-xs font-semibold text-slate-500">Email {!isSuper && '(Super Admin only)'}</label>
+            <input type="email" value={form.email} onChange={(e) => setF('email', e.target.value)} disabled={!isSuper} className={inputClass} />
+          </div>
+          <FieldInput label="Phone" value={form.phone} onChange={(e) => setF('phone', e.target.value)} placeholder="+263…" />
           <div>
             <label className="mb-1 block text-xs font-semibold text-slate-500">Role</label>
-            <select
-              value={userRole}
-              onChange={(e) => setUserRole(e.target.value)}
-              className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-indigo-500 focus:outline-none dark:border-white/10 dark:bg-slate-800 dark:text-white"
-            >
-              {TENANT_ROLES.map((r) => (
-                <option key={r.key} value={r.key}>{r.label}</option>
-              ))}
+            <select value={form.role} onChange={(e) => setF('role', e.target.value)} className={inputClass}>
+              {TENANT_ROLES.map((r) => <option key={r.key} value={r.key}>{r.label}</option>)}
             </select>
           </div>
           <div>
-            <label className="mb-1 flex items-center gap-1.5 text-xs font-semibold text-slate-500">
-              <KeyRound className="h-3 w-3" /> Reset Password (leave blank to keep current)
+            <label className="mb-1 block text-xs font-semibold text-slate-500">Business {!isSuper && '(Super Admin only)'}</label>
+            <select value={form.tenant_id} onChange={(e) => { setF('tenant_id', e.target.value); setF('branch_id', '') }} disabled={!isSuper} className={inputClass}>
+              {tenants.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-semibold text-slate-500">Branch</label>
+            <select value={form.branch_id} onChange={(e) => setF('branch_id', e.target.value)} className={inputClass}>
+              <option value="">No branch assigned</option>
+              {branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+            </select>
+          </div>
+          <div className="flex items-end pb-1">
+            <label className="flex cursor-pointer items-center gap-2 text-sm font-medium text-slate-700 dark:text-slate-300">
+              <input type="checkbox" checked={form.is_active} onChange={(e) => setF('is_active', e.target.checked)} className="h-4 w-4 rounded" />
+              Account active
             </label>
-            <div className="relative">
-              <input
-                type={showPw ? 'text' : 'password'}
-                value={newPassword}
-                onChange={(e) => setNewPassword(e.target.value)}
-                minLength={8}
-                placeholder="New password (min 8 chars)"
-                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 pr-10 text-sm text-slate-900 focus:border-indigo-500 focus:outline-none dark:border-white/10 dark:bg-white/5 dark:text-white"
-              />
-              <button type="button" onClick={() => setShowPw((s) => !s)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400">
-                {showPw ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-              </button>
-            </div>
+          </div>
+        </div>
+
+        <div className="mt-3">
+          <label className="mb-1 flex items-center gap-1.5 text-xs font-semibold text-slate-500">
+            <KeyRound className="h-3 w-3" /> Reset Password (leave blank to keep current)
+          </label>
+          <div className="relative">
+            <input
+              type={showPw ? 'text' : 'password'}
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+              minLength={8}
+              placeholder="New password (min 8 chars)"
+              className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 pr-10 text-sm text-slate-900 focus:border-indigo-500 focus:outline-none dark:border-white/10 dark:bg-white/5 dark:text-white"
+            />
+            <button type="button" onClick={() => setShowPw((s) => !s)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400">
+              {showPw ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+            </button>
           </div>
         </div>
 
@@ -240,16 +305,52 @@ function EditUserModal({ user, onClose, onDone }) {
           Save Changes
         </button>
 
-        {myRole === 'super_admin' && (
-          <button
-            type="button"
-            onClick={remove}
-            disabled={saving}
-            className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl bg-red-600/10 py-2.5 text-sm font-semibold text-red-500 hover:bg-red-600/20 disabled:opacity-60"
-          >
-            <Trash2 className="h-4 w-4" />
-            Delete Account Permanently
-          </button>
+        {isSuper && (
+          <div className="mt-3 space-y-2 border-t border-slate-200 pt-3 dark:border-white/10">
+            <p className="text-xs font-bold uppercase tracking-widest text-slate-400">Super Admin Controls</p>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                disabled={saving}
+                onClick={() => runAction(
+                  () => invokeManageUser({ action: 'force_logout', user_id: user.id }),
+                  'All sessions revoked — user signed out everywhere',
+                )}
+                className="flex items-center justify-center gap-1.5 rounded-xl border border-slate-200 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-60 dark:border-white/10 dark:text-slate-300 dark:hover:bg-white/5"
+              >
+                <LogOut className="h-3.5 w-3.5" /> Force Logout Everywhere
+              </button>
+              <button
+                type="button"
+                disabled={saving}
+                onClick={() => runAction(
+                  () => invokeManageUser({ action: isBanned ? 'unban' : 'ban', user_id: user.id }),
+                  isBanned ? 'Ban lifted' : 'User banned — sign-in blocked',
+                  { confirm: isBanned ? null : `Ban ${user.name || user.email}? They will be blocked from signing in until unbanned.` },
+                )}
+                className={`flex items-center justify-center gap-1.5 rounded-xl py-2 text-xs font-semibold disabled:opacity-60 ${
+                  isBanned
+                    ? 'bg-green-600/10 text-green-500 hover:bg-green-600/20'
+                    : 'bg-amber-600/10 text-amber-500 hover:bg-amber-600/20'
+                }`}
+              >
+                <Ban className="h-3.5 w-3.5" /> {isBanned ? 'Lift Ban' : 'Ban Account'}
+              </button>
+            </div>
+            <button
+              type="button"
+              disabled={saving}
+              onClick={() => runAction(
+                () => invokeManageUser({ action: 'delete', user_id: user.id }),
+                'Account deleted',
+                { confirm: `Permanently delete ${user.name || user.email}? This cannot be undone.` },
+              )}
+              className="flex w-full items-center justify-center gap-2 rounded-xl bg-red-600/10 py-2.5 text-sm font-semibold text-red-500 hover:bg-red-600/20 disabled:opacity-60"
+            >
+              <Trash2 className="h-4 w-4" />
+              Delete Account Permanently
+            </button>
+          </div>
         )}
       </form>
     </div>
@@ -464,6 +565,7 @@ export default function AdminUsers() {
       {editing && (
         <EditUserModal
           user={editing}
+          tenants={tenants}
           onClose={() => setEditing(null)}
           onDone={() => { setEditing(null); load() }}
         />

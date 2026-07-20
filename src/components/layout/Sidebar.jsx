@@ -3,7 +3,7 @@ import { AnimatePresence, motion } from 'framer-motion'
 import {
   LayoutDashboard, ShoppingCart, Package, ClipboardList, BarChart3,
   Settings, Users, ChefHat, ListTodo, LogOut, ChevronLeft, ChevronRight,
-  Store, Receipt, Cpu, X, Sparkles, CreditCard, BriefcaseBusiness, FileText,
+  Store, Receipt, Cpu, X, Sparkles, CreditCard, BriefcaseBusiness, FileText, Inbox,
 } from 'lucide-react'
 import { useState } from 'react'
 import { useThemeStore } from '@/stores/themeStore'
@@ -12,6 +12,7 @@ import posIcon from '@/assets/pos-icon.png'
 
 const ALL_NAV_ITEMS = [
   { key: 'dashboard', icon: LayoutDashboard, label: 'Dashboard', path: '/app/dashboard' },
+  { key: 'requests', icon: Inbox, label: 'Requests', path: '/app/requests' },
   { key: 'pos', icon: ShoppingCart, label: 'POS', path: '/app/pos' },
   { key: 'inventory', icon: Package, label: 'Inventory', path: '/app/inventory' },
   { key: 'orders', icon: ClipboardList, label: 'Orders', path: '/app/orders' },

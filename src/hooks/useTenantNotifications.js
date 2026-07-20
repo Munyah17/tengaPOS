@@ -2,7 +2,7 @@
 // ready to serve, and platform announcements. Shared by TopBar and the
 // full Notifications page so the two never drift out of sync.
 import { useState, useEffect, useCallback } from 'react'
-import { Package, UtensilsCrossed, Megaphone } from 'lucide-react'
+import { Package, UtensilsCrossed, Megaphone, Inbox } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 
 function timeAgo(iso) {
@@ -43,6 +43,19 @@ export function useTenantNotifications({ tenantId, posMode, role, limit = 20, po
         : Promise.resolve({ data: [] }),
     ])
 
+    // Vendors also get a bell entry for approvals waiting on them — cheap
+    // head-only counts, not full fetches, since this polls every minute.
+    let pendingApprovals = 0
+    if (role === 'vendor') {
+      const counts = await Promise.all([
+        supabase.from('receipt_configs').select('id', { count: 'exact', head: true }).eq('tenant_id', tenantId).eq('pending_approval', true),
+        supabase.from('voids').select('id', { count: 'exact', head: true }).eq('tenant_id', tenantId).in('status', ['requested', 'approved']),
+        supabase.from('returns').select('id', { count: 'exact', head: true }).eq('tenant_id', tenantId).in('status', ['requested', 'approved']),
+        supabase.from('payment_sessions').select('id', { count: 'exact', head: true }).eq('tenant_id', tenantId).in('status', ['pending', 'awaiting_delivery']),
+      ]).catch(() => [])
+      pendingApprovals = (counts || []).reduce((s, r) => s + (r?.count || 0), 0)
+    }
+
     const lowStock = (products || [])
       .filter((p) => p.stock_qty <= (p.low_stock_threshold ?? 10))
       .map((p) => ({
@@ -70,7 +83,17 @@ export function useTenantNotifications({ tenantId, posMode, role, limit = 20, po
       icon: Megaphone,
     }))
 
-    const all = [...lowStock, ...orderNotes, ...announcementNotes]
+    const approvalNotes = pendingApprovals > 0 ? [{
+      // Keyed by count so a NEW request re-flags unread even if an earlier
+      // batch was marked read
+      id: `requests-${pendingApprovals}`,
+      text: `${pendingApprovals} approval${pendingApprovals !== 1 ? 's' : ''} waiting for you — open Requests`,
+      time: 'now',
+      ts: new Date().toISOString(),
+      icon: Inbox,
+    }] : []
+
+    const all = [...approvalNotes, ...lowStock, ...orderNotes, ...announcementNotes]
       .sort((a, b) => new Date(b.ts) - new Date(a.ts))
       .slice(0, limit)
       .map((n) => ({ ...n, unread: !readIds.has(n.id) }))

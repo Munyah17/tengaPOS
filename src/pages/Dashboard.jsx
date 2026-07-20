@@ -10,10 +10,10 @@ import {
   ResponsiveContainer, PieChart, Pie, Cell,
 } from 'recharts'
 import { Link } from 'react-router-dom'
-import { Megaphone, Sparkles, Bell, ChevronRight, X } from 'lucide-react'
+import { Megaphone, Sparkles, Bell, ChevronRight, X, Inbox } from 'lucide-react'
 import { useThemeStore } from '@/stores/themeStore'
 import { useAuthStore } from '@/stores/authStore'
-import { fetchDashboardMetrics } from '@/lib/db'
+import { fetchDashboardMetrics, fetchVendorRequests } from '@/lib/db'
 import { formatCurrency } from '@/utils/formatters'
 import { supabase } from '@/lib/supabase'
 import { withOfflineCache, seedFromOfflineCache } from '@/lib/offlineCache'
@@ -50,7 +50,7 @@ const colorMap = {
 
 export default function Dashboard() {
   const { posMode } = useThemeStore()
-  const { profile, tenant, user } = useAuthStore()
+  const { profile, tenant, user, role } = useAuthStore()
   const isRestaurant = posMode === 'restaurant'
   const accentColor = isRestaurant ? '#22c55e' : '#3b82f6'
   const { notifications } = useTenantNotifications({ tenantId: tenant?.id, posMode, limit: 5 })
@@ -90,6 +90,17 @@ export default function Dashboard() {
     enabled: !!tenant?.id,
     staleTime: 60000,
   })
+
+  // Approvals waiting on the Vendor — surfaced here so requests from staff
+  // never pile up unseen on the Requests page.
+  const { data: pendingRequests = null } = useQuery({
+    queryKey: ['vendorRequests', tenant?.id],
+    queryFn: withOfflineCache(['vendorRequests', tenant?.id], () => fetchVendorRequests(tenant.id)),
+    enabled: !!tenant?.id && role === 'vendor',
+    staleTime: 60000,
+  })
+  // Re-shows when the pending count changes, even if dismissed this session
+  const requestsNoticeId = `pending-requests-${pendingRequests?.total || 0}`
 
   const { data: announcements = [] } = useQuery({
     queryKey: ['announcements', user?.id],
@@ -166,6 +177,39 @@ export default function Dashboard() {
           >
             Choose a Plan
           </Link>
+        </div>
+      )}
+
+      {/* Approvals waiting on the Vendor */}
+      {role === 'vendor' && pendingRequests?.total > 0 && !sessionDismissed.has(requestsNoticeId) && (
+        <div className="relative mb-6 flex items-start gap-3 rounded-2xl border border-amber-300 bg-amber-50 p-4 pr-10 dark:border-amber-700/60 dark:bg-amber-900/20">
+          <Inbox className="mt-0.5 h-5 w-5 flex-shrink-0 text-amber-600 dark:text-amber-400" />
+          <div className="flex-1">
+            <p className="font-semibold text-amber-900 dark:text-amber-200">
+              {pendingRequests.total} request{pendingRequests.total !== 1 ? 's' : ''} awaiting your approval
+            </p>
+            <p className="text-sm text-amber-800 dark:text-amber-300">
+              {[
+                pendingRequests.receiptConfigs.length > 0 && `${pendingRequests.receiptConfigs.length} receipt config change${pendingRequests.receiptConfigs.length !== 1 ? 's' : ''}`,
+                pendingRequests.voids.length > 0 && `${pendingRequests.voids.length} void${pendingRequests.voids.length !== 1 ? 's' : ''}`,
+                pendingRequests.returns.length > 0 && `${pendingRequests.returns.length} return${pendingRequests.returns.length !== 1 ? 's' : ''}`,
+                pendingRequests.payments.length > 0 && `${pendingRequests.payments.length} payment review${pendingRequests.payments.length !== 1 ? 's' : ''}`,
+              ].filter(Boolean).join(' · ')}
+            </p>
+            <Link
+              to="/app/requests"
+              className="mt-2 inline-flex items-center gap-1 rounded-xl bg-amber-600 px-4 py-1.5 text-sm font-bold text-white hover:bg-amber-700"
+            >
+              Review Requests <ChevronRight className="h-3.5 w-3.5" />
+            </Link>
+          </div>
+          <button
+            onClick={() => dismissForSession(requestsNoticeId)}
+            aria-label="Close"
+            className="absolute right-3 top-3 text-amber-400 hover:text-amber-600 dark:hover:text-amber-200"
+          >
+            <X className="h-4 w-4" />
+          </button>
         </div>
       )}
 

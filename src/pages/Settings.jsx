@@ -86,8 +86,14 @@ export default function Settings() {
 
   // Populate the form from whatever config already exists for the selected
   // scope (tenant default, or a specific branch) — blank/defaults otherwise.
+  // A scope can now hold two rows: the approved config plus a pending draft.
+  // Shop managers see their own pending submission first (that's what they're
+  // editing); vendors see the approved config that's actually printing.
   useEffect(() => {
-    const existing = receiptConfigs.find((c) => (c.branch_id || '') === (scopeBranchId || ''))
+    const scopeRows = receiptConfigs.filter((c) => (c.branch_id || '') === (scopeBranchId || ''))
+    const existing = role === 'shop_manager'
+      ? (scopeRows.find((c) => c.pending_approval) || scopeRows.find((c) => !c.pending_approval))
+      : (scopeRows.find((c) => !c.pending_approval) || scopeRows[0])
     setReceiptForm({
       templateMode: existing?.template_mode || 'zimra_default',
       storeName: existing?.store_name || '',
@@ -1362,7 +1368,7 @@ export default function Settings() {
                   <textarea
                     value={receiptForm.footerMessage}
                     onChange={(e) => setReceiptForm((f) => ({ ...f, footerMessage: e.target.value }))}
-                    placeholder="Leave blank to use the default 'Thank you for your business!' footer"
+                    placeholder="Leave blank for the default 'Thank You For Your Purchase' line. The 'Powered by' line always prints after your footer."
                     rows={2}
                     className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
                   />

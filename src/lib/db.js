@@ -997,6 +997,27 @@ export async function submitReceiptConfig(config) {
   return data
 }
 
+/** Everything currently waiting on the Vendor's decision, in one call —
+ *  receipt-config drafts, void/return requests and validations, and Paynow
+ *  sessions needing manual review. Powers the Requests page and the
+ *  dashboard notice. */
+export async function fetchVendorRequests(tenantId) {
+  const [configs, voids, returns, sessions] = await Promise.all([
+    fetchReceiptConfigs(tenantId).catch(() => []),
+    fetchVoids(tenantId).catch(() => []),
+    fetchReturns(tenantId).catch(() => []),
+    fetchPaymentSessions(tenantId).catch(() => []),
+  ])
+  const result = {
+    receiptConfigs: (configs || []).filter((c) => c.pending_approval),
+    voids: (voids || []).filter((v) => ['requested', 'approved'].includes(v.status)),
+    returns: (returns || []).filter((r) => ['requested', 'approved'].includes(r.status)),
+    payments: (sessions || []).filter((s) => ['pending', 'awaiting_delivery'].includes(s.status)),
+  }
+  result.total = result.receiptConfigs.length + result.voids.length + result.returns.length + result.payments.length
+  return result
+}
+
 export async function approveReceiptConfig(configId) {
   const { error } = await supabase.rpc('approve_receipt_config', { p_config_id: configId })
   if (error) throw error
