@@ -12,6 +12,7 @@ import AdminLayout from '@/components/admin/AdminLayout'
 // of which single page they actually landed on.
 const Landing = lazy(() => import('@/pages/Landing'))
 const Login = lazy(() => import('@/pages/Login'))
+const StaffLogin = lazy(() => import('@/pages/StaffLogin'))
 const Register = lazy(() => import('@/pages/Register'))
 const Dashboard = lazy(() => import('@/pages/Dashboard'))
 const POS = lazy(() => import('@/pages/POS'))
@@ -112,9 +113,12 @@ function RequireNav({ navKey, children }) {
   return children
 }
 
+// Staff portals have their own sign-in pages, separate from the client
+// /login: unauthenticated visitors to /admin/* land on the staff login,
+// and /admin/super/* on the Super Admin one.
 function AdminRoute({ children }) {
   const { isAuthenticated, userType, role } = useAuthStore()
-  if (!isAuthenticated) return <Navigate to="/login" replace />
+  if (!isAuthenticated) return <Navigate to="/admin/login" replace />
   if (userType !== 'app_owner') return <Navigate to="/app/dashboard" replace />
   // Super Admin redirects to super admin portal
   if (role === 'super_admin') return <Navigate to="/admin/super/dashboard" replace />
@@ -124,7 +128,7 @@ function AdminRoute({ children }) {
 
 function SuperAdminRoute({ children }) {
   const { isAuthenticated, userType, role } = useAuthStore()
-  if (!isAuthenticated) return <Navigate to="/login" replace />
+  if (!isAuthenticated) return <Navigate to="/super-admin" replace />
   if (userType !== 'app_owner') return <Navigate to="/app/dashboard" replace />
   if (role !== 'super_admin') return <Navigate to="/admin/dashboard" replace />
   return children
@@ -146,6 +150,10 @@ export default function App() {
         <Routes>
           <Route path="/" element={<Landing />} />
           <Route path="/login" element={<Login />} />
+          {/* Staff sign-in — separate from client /login. /super-admin is
+              Super Admin only; /admin (unauthenticated) lands here too. */}
+          <Route path="/super-admin" element={<StaffLogin variant="super" />} />
+          <Route path="/admin/login" element={<StaffLogin variant="staff" />} />
           <Route path="/register" element={<Register />} />
           <Route path="/dining" element={<Dining />} />
           <Route path="/pending" element={<PendingApproval />} />

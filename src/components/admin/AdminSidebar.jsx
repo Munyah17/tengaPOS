@@ -174,8 +174,10 @@ export default function AdminSidebar({ open = false, onClose }) {
   const initial = displayName[0]?.toUpperCase() || 'A'
 
   const handleSignOut = async () => {
+    // Staff return to their own portal's sign-in, not the public site
+    const dest = role === 'super_admin' ? '/super-admin' : '/admin/login'
     await clearAuth()
-    navigate('/')
+    navigate(dest)
   }
 
   return (

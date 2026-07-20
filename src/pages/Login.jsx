@@ -17,7 +17,7 @@ export default function Login() {
   const [resetSent, setResetSent] = useState(false)
   const [resetLoading, setResetLoading] = useState(false)
   const navigate = useNavigate()
-  const { signIn } = useAuthStore()
+  const { signIn, clearAuth } = useAuthStore()
 
   const handleResetPassword = async (e) => {
     e.preventDefault()
@@ -42,15 +42,16 @@ export default function Login() {
     setLoading(true)
     try {
       const userType = await signIn(email, password)
-      toast.success('Welcome back!')
+      // This page signs in client businesses only — platform staff have
+      // their own portals and are dropped straight back out here.
       if (userType === 'app_owner') {
-        const { role } = useAuthStore.getState()
-        navigate(role === 'super_admin' ? '/admin/super/dashboard' : '/admin/dashboard')
-      } else {
-        const store = useAuthStore.getState()
-        const status = store.tenantStatus
-        navigate(status === 'pending' || status === 'suspended' ? '/pending' : '/app/dashboard')
+        await clearAuth()
+        throw new Error('This sign-in is for client businesses. Staff must use their designated portal.')
       }
+      toast.success('Welcome back!')
+      const store = useAuthStore.getState()
+      const status = store.tenantStatus
+      navigate(status === 'pending' || status === 'suspended' ? '/pending' : '/app/dashboard')
     } catch (err) {
       toast.error(err.message || 'Sign in failed')
     } finally {

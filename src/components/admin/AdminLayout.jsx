@@ -41,8 +41,10 @@ export default function AdminLayout() {
 
   const signOut = async () => {
     setMenuOpen(false)
+    // Staff return to their own portal's sign-in, not the public site
+    const dest = role === 'super_admin' ? '/super-admin' : '/admin/login'
     await clearAuth()
-    navigate('/')
+    navigate(dest)
   }
 
   return (
