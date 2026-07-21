@@ -60,17 +60,23 @@ serve(async (req) => {
 
     if (paid && checkout.status !== 'paid') {
       const isFiscal = String(checkout.plan_type).startsWith('fiscal_')
-      const isHR = String(checkout.plan_type).startsWith('hr_')
+      const isAccountingCrm = String(checkout.plan_type).startsWith('crm_')
+      const isAiInsights = String(checkout.plan_type).startsWith('ai_')
       const FISCAL_MONTHS: Record<string, number> = {
         fiscal_monthly: 1, fiscal_quarterly: 3, fiscal_halfyear: 6, fiscal_yearly: 12,
       }
-      const HR_MONTHS: Record<string, number> = {
-        hr_monthly: 1, hr_quarterly: 3, hr_halfyear: 6, hr_yearly: 12,
+      const CRM_MONTHS: Record<string, number> = {
+        crm_monthly: 1, crm_quarterly: 3, crm_halfyear: 6, crm_yearly: 12,
+      }
+      const AI_MONTHS: Record<string, number> = {
+        ai_monthly: 1, ai_quarterly: 3, ai_halfyear: 6, ai_yearly: 12,
       }
       const months = isFiscal
         ? (FISCAL_MONTHS[checkout.plan_type] || 1)
-        : isHR
-        ? (HR_MONTHS[checkout.plan_type] || 1)
+        : isAccountingCrm
+        ? (CRM_MONTHS[checkout.plan_type] || 1)
+        : isAiInsights
+        ? (AI_MONTHS[checkout.plan_type] || 1)
         : (PLAN_MONTHS[checkout.plan_type] || 6)
       const now = new Date()
       const renewal = new Date(now)
@@ -83,12 +89,19 @@ serve(async (req) => {
           features: { ...(t?.features || {}), fiscalisation: true },
           fiscal_expires_at: renewal.toISOString(),
         }).eq('id', checkout.tenant_id)
-      } else if (isHR) {
-        // Unlock the HR & Payroll add-on for the paid period
+      } else if (isAccountingCrm) {
+        // Unlock the Accounting & CRM bundle (HR & Payroll, Invoicing) for the paid period
         const { data: t } = await admin.from('tenants').select('features').eq('id', checkout.tenant_id).maybeSingle()
         await admin.from('tenants').update({
-          features: { ...(t?.features || {}), hr_payroll: true },
-          hr_payroll_expires_at: renewal.toISOString(),
+          features: { ...(t?.features || {}), accounting_crm: true },
+          accounting_crm_expires_at: renewal.toISOString(),
+        }).eq('id', checkout.tenant_id)
+      } else if (isAiInsights) {
+        // Unlock AI Insights for the paid period
+        const { data: t } = await admin.from('tenants').select('features').eq('id', checkout.tenant_id).maybeSingle()
+        await admin.from('tenants').update({
+          features: { ...(t?.features || {}), ai_insights: true },
+          ai_insights_expires_at: renewal.toISOString(),
         }).eq('id', checkout.tenant_id)
       } else {
         await admin.from('tenants').update({

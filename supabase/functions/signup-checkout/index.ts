@@ -25,9 +25,10 @@ const FALLBACK_FISCAL_PRICES: Record<string, { price: number; months: number; la
   halfyear:  { price: 90,  months: 6,  label: '6 Months' },
   yearly:    { price: 170, months: 12, label: 'Yearly' },
 }
-const HR_PAYROLL_PRICE_PER_HEAD = 5
-const HR_PERIOD_MONTHS: Record<string, number> = { monthly: 1, quarterly: 3, halfyear: 6, yearly: 12 }
-const HR_PERIOD_LABEL: Record<string, string> = { monthly: 'Monthly', quarterly: '3 Months', halfyear: '6 Months', yearly: 'Yearly' }
+const PERIOD_MONTHS: Record<string, number> = { monthly: 1, quarterly: 3, halfyear: 6, yearly: 12 }
+const PERIOD_LABEL: Record<string, string> = { monthly: 'Monthly', quarterly: '3 Months', halfyear: '6 Months', yearly: 'Yearly' }
+const ACCOUNTING_CRM_PRICES: Record<string, number> = { monthly: 5, quarterly: 13, halfyear: 24, yearly: 45 }
+const AI_INSIGHTS_PRICES: Record<string, number> = { monthly: 1, quarterly: 3, halfyear: 5, yearly: 9 }
 const PLAN_LABELS: Record<string, string> = {
   byod_monthly: 'tengaPOS BYOD Monthly (1 month)',
   standard_plan: 'tengaPOS Standard Plan (once-off, 6 months included)',
@@ -63,11 +64,12 @@ serve(async (req) => {
     const { data: { user: caller }, error: authErr } = await admin.auth.getUser(jwt)
     if (authErr || !caller) return json({ error: 'Not authenticated' }, 401)
 
-    const { plan_type, provider, return_url, type, period, headcount } = await req.json()
+    const { plan_type, provider, return_url, type, period } = await req.json()
     if (!['stripe', 'paynow'].includes(provider)) return json({ error: 'provider must be stripe or paynow' }, 400)
 
     const isFiscal = type === 'fiscalisation'
-    const isHR = type === 'hr_payroll'
+    const isAccountingCrm = type === 'accounting_crm'
+    const isAiInsights = type === 'ai_insights'
 
     // Live pricing from platform_settings (Super Admin controlled)
     let plan: { amount: number; label: string; months: number } | null = null
@@ -77,16 +79,16 @@ serve(async (req) => {
       const p = table[period as string]
       if (!p) return json({ error: 'Invalid fiscalisation period' }, 400)
       plan = { amount: p.price, label: `ZIMRA Fiscalisation — ${p.label}`, months: p.months }
-    } else if (isHR) {
-      const months = HR_PERIOD_MONTHS[period as string]
-      const head = Number(headcount)
-      if (!months) return json({ error: 'Invalid HR & Payroll period' }, 400)
-      if (!head || head < 1) return json({ error: 'Invalid headcount' }, 400)
-      plan = {
-        amount: HR_PAYROLL_PRICE_PER_HEAD * head * months,
-        label: `HR & Payroll — ${head} ${head === 1 ? 'person' : 'people'}, ${HR_PERIOD_LABEL[period as string]}`,
-        months,
-      }
+    } else if (isAccountingCrm) {
+      const months = PERIOD_MONTHS[period as string]
+      const price = ACCOUNTING_CRM_PRICES[period as string]
+      if (!months || !price) return json({ error: 'Invalid Accounting & CRM period' }, 400)
+      plan = { amount: price, label: `Accounting & CRM — ${PERIOD_LABEL[period as string]}`, months }
+    } else if (isAiInsights) {
+      const months = PERIOD_MONTHS[period as string]
+      const price = AI_INSIGHTS_PRICES[period as string]
+      if (!months || !price) return json({ error: 'Invalid AI Insights period' }, 400)
+      plan = { amount: price, label: `AI Insights — ${PERIOD_LABEL[period as string]}`, months }
     } else {
       const { data: pp } = await admin.from('platform_settings').select('value').eq('key', 'plan_pricing').maybeSingle()
       const table = { ...FALLBACK_PLAN_PRICES, ...((pp?.value as Record<string, { price: number; renewalMonths: number }>) || {}) }
@@ -104,9 +106,10 @@ serve(async (req) => {
     if (!userRow?.tenant_id) return json({ error: 'No tenant found for this account' }, 400)
 
     const tenantId = userRow.tenant_id
-    const checkoutKind = isFiscal ? 'fiscalisation' : isHR ? 'hr_payroll' : 'plan'
-    const planKey = isFiscal ? `fiscal_${period}` : isHR ? `hr_${period}` : plan_type
-    const reference = `${isFiscal ? 'FIS' : isHR ? 'HR' : 'SUB'}-${Date.now()}-${Math.random().toString(36).slice(2, 7).toUpperCase()}`
+    const checkoutKind = isFiscal ? 'fiscalisation' : isAccountingCrm ? 'accounting_crm' : isAiInsights ? 'ai_insights' : 'plan'
+    const planKey = isFiscal ? `fiscal_${period}` : isAccountingCrm ? `crm_${period}` : isAiInsights ? `ai_${period}` : plan_type
+    const refPrefix = isFiscal ? 'FIS' : isAccountingCrm ? 'CRM' : isAiInsights ? 'AI' : 'SUB'
+    const reference = `${refPrefix}-${Date.now()}-${Math.random().toString(36).slice(2, 7).toUpperCase()}`
     const amountStr = plan.amount.toFixed(2)
     const returnUrl = return_url || 'https://www.tengapos.co.zw/checkout'
 

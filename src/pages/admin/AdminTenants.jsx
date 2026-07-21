@@ -141,6 +141,10 @@ const STATUS_BADGE = {
 const TEAM_SIZE_LABELS = { '1-5': '1–5', '6-15': '6–15', '16-30': '16–30', '31-50': '31–50', '50+': '50+' }
 const PLAN_PREF_LABELS = { byod: 'BYOD (own device)', combo: 'Hardware Combo', undecided: 'Not sure yet' }
 
+// Every paid add-on's unlock flag is included here too, so a custom
+// Enterprise/Business plan can grant or revoke any single feature by hand —
+// independent of that add-on's own request/approve flow — instead of being
+// limited to whatever the plan-tier defaults bundle together.
 const BOOL_FEATURES = [
   { key: 'pos',            label: 'POS / Sales' },
   { key: 'inventory',      label: 'Inventory Management' },
@@ -152,6 +156,9 @@ const BOOL_FEATURES = [
   { key: 'dining_board',   label: 'Customer Dining Board' },
   { key: 'drive_through',  label: 'Drive-Through Mode' },
   { key: 'fiscalisation',  label: 'Fiscalisation (ZIMRA)' },
+  { key: 'vat',            label: 'VAT' },
+  { key: 'accounting_crm', label: 'Accounting & CRM (HR, Payroll, Invoicing)' },
+  { key: 'ai_insights',    label: 'AI Insights' },
   { key: 'api_access',     label: 'API Access' },
   { key: 'custom_integrations', label: 'Custom Integrations' },
 ]

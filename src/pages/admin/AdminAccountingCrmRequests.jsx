@@ -1,26 +1,24 @@
 import { useEffect, useState } from 'react'
-import { Users, CheckCircle, XCircle, Clock, Banknote, Zap } from 'lucide-react'
+import { Calculator, CheckCircle, XCircle, Clock, Banknote, Zap } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/stores/authStore'
 import toast from 'react-hot-toast'
 
 const PERIOD_MONTHS = { monthly: 1, quarterly: 3, halfyear: 6, yearly: 12 }
 const PERIOD_LABEL = { monthly: 'Monthly', quarterly: '3 Months', halfyear: '6 Months', yearly: 'Yearly' }
-const PRICE_PER_HEAD = 5
 
-export default function AdminHRRequests() {
+export default function AdminAccountingCrmRequests() {
   const { user } = useAuthStore()
   const [requests, setRequests] = useState([])
   const [tenants, setTenants] = useState([])
   const [loading, setLoading] = useState(true)
   const [assignTenant, setAssignTenant] = useState('')
   const [assignPeriod, setAssignPeriod] = useState('monthly')
-  const [assignHeadcount, setAssignHeadcount] = useState(1)
   const [working, setWorking] = useState(false)
 
   const load = async () => {
     const [{ data: reqs }, { data: tenantData }] = await Promise.all([
-      supabase.from('hr_payroll_requests').select('*, tenants(name, slug, features)').order('created_at', { ascending: false }).limit(100),
+      supabase.from('accounting_crm_requests').select('*, tenants(name, slug, features)').order('created_at', { ascending: false }).limit(100),
       supabase.from('tenants').select('id, name, features').eq('status', 'active').order('name'),
     ])
     setRequests(reqs || [])
@@ -30,20 +28,20 @@ export default function AdminHRRequests() {
 
   useEffect(() => { load() }, [])
 
-  const activateHR = async (tenantId, months, tenantName) => {
+  const activate = async (tenantId, months, tenantName) => {
     const { data: t } = await supabase.from('tenants').select('features').eq('id', tenantId).single()
     const expires = new Date()
     expires.setMonth(expires.getMonth() + months)
     const { data: updated, error } = await supabase
       .from('tenants')
-      .update({ features: { ...(t?.features || {}), hr_payroll: true }, hr_payroll_expires_at: expires.toISOString() })
+      .update({ features: { ...(t?.features || {}), accounting_crm: true }, accounting_crm_expires_at: expires.toISOString() })
       .eq('id', tenantId)
       .select('id')
     if (error || !updated?.length) throw new Error(error?.message || 'Update blocked')
     await supabase.from('audit_logs').insert({
       actor_id: user?.id,
       actor_email: user?.email,
-      action: 'hr_payroll_activated',
+      action: 'accounting_crm_activated',
       target_type: 'tenant',
       target_id: tenantId,
       details: { tenant_name: tenantName, months },
@@ -54,13 +52,13 @@ export default function AdminHRRequests() {
     setWorking(true)
     try {
       if (approve) {
-        await activateHR(req.tenant_id, PERIOD_MONTHS[req.period] || 1, req.tenants?.name)
+        await activate(req.tenant_id, PERIOD_MONTHS[req.period] || 1, req.tenants?.name)
       }
       await supabase
-        .from('hr_payroll_requests')
+        .from('accounting_crm_requests')
         .update({ status: approve ? 'approved' : 'rejected', decided_at: new Date().toISOString(), decided_by: user?.id })
         .eq('id', req.id)
-      toast.success(approve ? `HR & Payroll unlocked for ${req.tenants?.name}` : 'Request rejected')
+      toast.success(approve ? `Accounting & CRM unlocked for ${req.tenants?.name}` : 'Request rejected')
       load()
     } catch (err) {
       toast.error(err.message)
@@ -74,8 +72,8 @@ export default function AdminHRRequests() {
     setWorking(true)
     try {
       const t = tenants.find((x) => x.id === assignTenant)
-      await activateHR(assignTenant, PERIOD_MONTHS[assignPeriod], t?.name)
-      toast.success(`HR & Payroll manually activated for ${t?.name}`)
+      await activate(assignTenant, PERIOD_MONTHS[assignPeriod], t?.name)
+      toast.success(`Accounting & CRM manually activated for ${t?.name}`)
       load()
     } catch (err) {
       toast.error(err.message)
@@ -84,23 +82,23 @@ export default function AdminHRRequests() {
     }
   }
 
-  const suspendHR = async (tenantId, name) => {
+  const suspend = async (tenantId, name) => {
     setWorking(true)
     try {
       const { data: t } = await supabase.from('tenants').select('features').eq('id', tenantId).single()
       await supabase
         .from('tenants')
-        .update({ features: { ...(t?.features || {}), hr_payroll: false }, hr_payroll_expires_at: null })
+        .update({ features: { ...(t?.features || {}), accounting_crm: false }, accounting_crm_expires_at: null })
         .eq('id', tenantId)
       await supabase.from('audit_logs').insert({
         actor_id: user?.id,
         actor_email: user?.email,
-        action: 'hr_payroll_suspended',
+        action: 'accounting_crm_suspended',
         target_type: 'tenant',
         target_id: tenantId,
         details: { tenant_name: name },
       })
-      toast.success(`HR & Payroll suspended for ${name}`)
+      toast.success(`Accounting & CRM suspended for ${name}`)
       load()
     } catch (err) {
       toast.error(err.message)
@@ -110,18 +108,17 @@ export default function AdminHRRequests() {
   }
 
   const pending = requests.filter((r) => r.status === 'pending')
-  const hrActive = tenants.filter((t) => t.features?.hr_payroll === true)
+  const active = tenants.filter((t) => t.features?.accounting_crm === true)
 
   return (
     <div className="p-4 sm:p-6">
       <div className="mb-6">
-        <h1 className="text-2xl font-extrabold text-slate-900 dark:text-white">HR & Payroll Requests</h1>
+        <h1 className="text-2xl font-extrabold text-slate-900 dark:text-white">Accounting & CRM Requests</h1>
         <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-          Cash payment approvals + manual activation of the HR & Payroll add-on (${PRICE_PER_HEAD}/person/month)
+          Cash payment approvals + manual activation ($5/month) — covers HR & Payroll and Invoicing.
         </p>
       </div>
 
-      {/* Pending cash requests */}
       <div className="mb-6 rounded-2xl border border-slate-200 bg-white p-5 dark:border-white/10 dark:bg-white/5">
         <div className="mb-3 flex items-center gap-2">
           <Banknote className="h-5 w-5 text-amber-500" />
@@ -138,7 +135,7 @@ export default function AdminHRRequests() {
                 <div className="min-w-0 flex-1">
                   <p className="font-semibold text-slate-900 dark:text-white">{req.tenants?.name}</p>
                   <p className="text-xs text-slate-500">
-                    {req.headcount} {req.headcount === 1 ? 'person' : 'people'} · {PERIOD_LABEL[req.period]} · ${Number(req.amount).toFixed(2)} cash ·
+                    {PERIOD_LABEL[req.period]} · ${Number(req.amount).toFixed(2)} cash ·
                     requested {new Date(req.created_at).toLocaleDateString('en-GB')}
                   </p>
                 </div>
@@ -162,7 +159,6 @@ export default function AdminHRRequests() {
         )}
       </div>
 
-      {/* Manual assignment */}
       <div className="mb-6 rounded-2xl border border-slate-200 bg-white p-5 dark:border-white/10 dark:bg-white/5">
         <div className="mb-3 flex items-center gap-2">
           <Zap className="h-5 w-5 text-indigo-500" />
@@ -177,18 +173,10 @@ export default function AdminHRRequests() {
             <option value="">— Select business —</option>
             {tenants.map((t) => (
               <option key={t.id} value={t.id}>
-                {t.name}{t.features?.hr_payroll ? ' (already active)' : ''}
+                {t.name}{t.features?.accounting_crm ? ' (already active)' : ''}
               </option>
             ))}
           </select>
-          <input
-            type="number"
-            min={1}
-            value={assignHeadcount}
-            onChange={(e) => setAssignHeadcount(e.target.value)}
-            className="w-24 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:outline-none dark:border-white/10 dark:bg-slate-800 dark:text-white"
-            title="Headcount (informational)"
-          />
           <select
             value={assignPeriod}
             onChange={(e) => setAssignPeriod(e.target.value)}
@@ -208,21 +196,20 @@ export default function AdminHRRequests() {
         </div>
       </div>
 
-      {/* Active tenants */}
       <div className="rounded-2xl border border-slate-200 bg-white p-5 dark:border-white/10 dark:bg-white/5">
         <div className="mb-3 flex items-center gap-2">
-          <Users className="h-5 w-5 text-green-500" />
-          <h2 className="font-bold text-slate-900 dark:text-white">Active HR & Payroll ({hrActive.length})</h2>
+          <Calculator className="h-5 w-5 text-green-500" />
+          <h2 className="font-bold text-slate-900 dark:text-white">Active Accounting & CRM ({active.length})</h2>
         </div>
-        {hrActive.length === 0 ? (
+        {active.length === 0 ? (
           <p className="py-4 text-center text-sm text-slate-500">No tenants have the add-on active yet.</p>
         ) : (
           <div className="space-y-2">
-            {hrActive.map((t) => (
+            {active.map((t) => (
               <div key={t.id} className="flex items-center gap-3 rounded-xl border border-slate-100 px-4 py-2.5 dark:border-white/5">
                 <span className="min-w-0 flex-1 truncate text-sm font-semibold text-slate-900 dark:text-white">{t.name}</span>
                 <button
-                  onClick={() => suspendHR(t.id, t.name)}
+                  onClick={() => suspend(t.id, t.name)}
                   disabled={working}
                   className="rounded-lg bg-red-600/10 px-3 py-1.5 text-xs font-semibold text-red-500 hover:bg-red-600/20 disabled:opacity-60"
                 >
@@ -234,7 +221,6 @@ export default function AdminHRRequests() {
         )}
       </div>
 
-      {/* History */}
       {requests.filter((r) => r.status !== 'pending').length > 0 && (
         <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-5 dark:border-white/10 dark:bg-white/5">
           <div className="mb-3 flex items-center gap-2">
@@ -245,11 +231,9 @@ export default function AdminHRRequests() {
             {requests.filter((r) => r.status !== 'pending').slice(0, 20).map((r) => (
               <div key={r.id} className="flex items-center gap-3 text-xs text-slate-500">
                 <span className={`rounded-full px-2 py-0.5 font-bold ${
-                  r.status === 'approved' || r.status === 'paid'
-                    ? 'bg-green-500/15 text-green-500'
-                    : 'bg-red-500/15 text-red-500'
+                  r.status === 'approved' ? 'bg-green-500/15 text-green-500' : 'bg-red-500/15 text-red-500'
                 }`}>{r.status}</span>
-                <span className="min-w-0 flex-1 truncate">{r.tenants?.name} · {r.headcount} people · {PERIOD_LABEL[r.period]} · ${Number(r.amount).toFixed(2)}</span>
+                <span className="min-w-0 flex-1 truncate">{r.tenants?.name} · {PERIOD_LABEL[r.period]} · ${Number(r.amount).toFixed(2)}</span>
                 <span>{new Date(r.created_at).toLocaleDateString('en-GB')}</span>
               </div>
             ))}

@@ -57,8 +57,9 @@ const SuperAdminBroadcasts = lazy(() => import('@/pages/admin/SuperAdminBroadcas
 const SuperAdminVersions = lazy(() => import('@/pages/admin/SuperAdminVersions'))
 const AdminUsers = lazy(() => import('@/pages/admin/AdminUsers'))
 const AdminFiscalRequests = lazy(() => import('@/pages/admin/AdminFiscalRequests'))
-const AdminHRRequests = lazy(() => import('@/pages/admin/AdminHRRequests'))
+const AdminAccountingCrmRequests = lazy(() => import('@/pages/admin/AdminAccountingCrmRequests'))
 const AdminVatRequests = lazy(() => import('@/pages/admin/AdminVatRequests'))
+const AdminAiInsightsRequests = lazy(() => import('@/pages/admin/AdminAiInsightsRequests'))
 const Checkout = lazy(() => import('@/pages/Checkout'))
 
 function RouteLoading() {
@@ -212,8 +213,9 @@ export default function App() {
             <Route path="marketing" element={<AdminMarketing />} />
             <Route path="users" element={<AdminUsers />} />
             <Route path="fiscal-requests" element={<AdminFiscalRequests />} />
-            <Route path="hr-requests" element={<AdminHRRequests />} />
+            <Route path="accounting-crm-requests" element={<AdminAccountingCrmRequests />} />
             <Route path="vat-requests" element={<AdminVatRequests />} />
+            <Route path="ai-insights-requests" element={<AdminAiInsightsRequests />} />
             <Route path="subscriptions" element={<SuperAdminSubscriptions />} />
             <Route path="billing" element={<SuperAdminBilling />} />
             <Route path="pricing" element={<SuperAdminPricing />} />
@@ -244,8 +246,9 @@ export default function App() {
             <Route path="marketing" element={<AdminMarketing />} />
             <Route path="users" element={<AdminUsers />} />
             <Route path="fiscal-requests" element={<AdminFiscalRequests />} />
-            <Route path="hr-requests" element={<AdminHRRequests />} />
+            <Route path="accounting-crm-requests" element={<AdminAccountingCrmRequests />} />
             <Route path="vat-requests" element={<AdminVatRequests />} />
+            <Route path="ai-insights-requests" element={<AdminAiInsightsRequests />} />
             <Route path="support" element={<AdminSupport />} />
             <Route path="announcements" element={<SuperAdminAnnouncements />} />
             <Route path="versions" element={<SuperAdminVersions />} />

@@ -248,6 +248,24 @@ export default function Insights() {
     toast.success('PDF downloaded')
   }
 
+  const aiUnlocked = tenant?.features?.ai_insights === true
+  if (!aiUnlocked) {
+    return (
+      <div className="p-4 sm:p-6">
+        <div className="mb-6">
+          <h1 className="text-2xl font-extrabold text-slate-900 dark:text-white">AI Insights</h1>
+          <p className="text-sm text-slate-500">AI-powered sales, pricing, and stock recommendations</p>
+        </div>
+        <div className="rounded-2xl border-2 border-amber-300 bg-amber-50 p-6 dark:border-amber-700/50 dark:bg-amber-900/20">
+          <h4 className="font-bold text-amber-900 dark:text-amber-200">AI Insights isn't active yet</h4>
+          <p className="mt-1 text-sm text-amber-800 dark:text-amber-300">
+            This is a paid add-on ($1/month). Request it from Settings and it'll unlock here once approved.
+          </p>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="p-4 sm:p-6">
       {/* Header */}

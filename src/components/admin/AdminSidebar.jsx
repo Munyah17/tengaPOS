@@ -4,6 +4,7 @@ import {
   LayoutDashboard, Building2, Users, LifeBuoy, BarChart3,
   Settings, LogOut, Shield, X, ChevronLeft, ChevronRight, Bell,
   DollarSign, Tag, Database, Activity, Mail, Lock, Eye, Megaphone, Phone, Rocket, Percent,
+  Calculator, Sparkles,
 } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import { useAuthStore } from '@/stores/authStore'
@@ -100,8 +101,9 @@ const NAV_BY_ROLE = {
     { icon: Phone, label: 'Marketing Database', path: '/admin/super/marketing', group: 'TENANTS' },
     { icon: Users, label: 'User Management', path: '/admin/super/users', group: 'TENANTS' },
     { icon: Eye, label: 'Fiscal Requests', path: '/admin/super/fiscal-requests', group: 'TENANTS' },
-    { icon: Users, label: 'HR & Payroll Requests', path: '/admin/super/hr-requests', group: 'TENANTS' },
+    { icon: Calculator, label: 'Accounting & CRM Requests', path: '/admin/super/accounting-crm-requests', group: 'TENANTS' },
     { icon: Percent, label: 'VAT Requests', path: '/admin/super/vat-requests', group: 'TENANTS' },
+    { icon: Sparkles, label: 'AI Insights Requests', path: '/admin/super/ai-insights-requests', group: 'TENANTS' },
     { icon: DollarSign, label: 'Subscriptions', path: '/admin/super/subscriptions', group: 'TENANTS' },
     { icon: BarChart3, label: 'Billing & Revenue', path: '/admin/super/billing', group: 'TENANTS' },
     { icon: Tag, label: 'Pricing Tiers', path: '/admin/super/pricing', group: 'TENANTS' },
@@ -133,8 +135,9 @@ const NAV_BY_ROLE = {
     { icon: Phone, label: 'Marketing Database', path: '/admin/marketing', group: 'OPERATIONS' },
     { icon: Users, label: 'User Management', path: '/admin/users', group: 'OPERATIONS' },
     { icon: Eye, label: 'Fiscal Requests', path: '/admin/fiscal-requests', group: 'OPERATIONS' },
-    { icon: Users, label: 'HR & Payroll Requests', path: '/admin/hr-requests', group: 'OPERATIONS' },
+    { icon: Calculator, label: 'Accounting & CRM Requests', path: '/admin/accounting-crm-requests', group: 'OPERATIONS' },
     { icon: Percent, label: 'VAT Requests', path: '/admin/vat-requests', group: 'OPERATIONS' },
+    { icon: Sparkles, label: 'AI Insights Requests', path: '/admin/ai-insights-requests', group: 'OPERATIONS' },
     { icon: LifeBuoy, label: 'Support Tickets', path: '/admin/support', group: 'OPERATIONS' },
     { icon: Bell, label: 'Notifications', path: '/admin/notifications', group: 'OPERATIONS', badge: true },
     { icon: Rocket, label: 'Version Tracker', path: '/admin/versions', group: 'COMMS' },

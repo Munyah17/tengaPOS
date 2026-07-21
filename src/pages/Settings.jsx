@@ -23,7 +23,7 @@ import {
 import { loadWithOfflineCache } from '@/lib/offlineCache'
 import { INDUSTRIES } from '@/lib/whitelabelTheme'
 import { PAPER_SIZES, PRINTER_CONNECTIONS } from '@/lib/posPrinter'
-import { Download, Clock, Printer, BriefcaseBusiness } from 'lucide-react'
+import { Download, Clock, Printer, BriefcaseBusiness, Sparkles } from 'lucide-react'
 import toast from 'react-hot-toast'
 
 const sections = [
@@ -32,7 +32,8 @@ const sections = [
   { id: 'payments', label: 'Payments', icon: CreditCard },
   { id: 'receipts', label: 'Receipts', icon: Receipt },
   { id: 'fiscalisation', label: 'ZIMRA Fiscal', icon: Cpu },
-  { id: 'hr', label: 'HR & Payroll', icon: BriefcaseBusiness },
+  { id: 'accounting_crm', label: 'Accounting & CRM', icon: BriefcaseBusiness },
+  { id: 'ai_insights_addon', label: 'AI Insights', icon: Sparkles },
   { id: 'notifications', label: 'Notifications', icon: Bell },
   { id: 'security', label: 'Security', icon: Shield },
   { id: 'appearance', label: 'Appearance', icon: Palette },
@@ -40,9 +41,9 @@ const sections = [
 ]
 
 // Shop managers run day-to-day operations but don't own the business —
-// payment gateway credentials, ZIMRA fiscal device registration, and the
-// account-security/data-export tools stay Vendor-only.
-const SHOP_MANAGER_HIDDEN_SECTIONS = ['payments', 'fiscalisation', 'security', 'hr']
+// payment gateway credentials, ZIMRA fiscal device registration, add-on
+// billing decisions, and the account-security/data-export tools stay Vendor-only.
+const SHOP_MANAGER_HIDDEN_SECTIONS = ['payments', 'fiscalisation', 'security', 'accounting_crm', 'ai_insights_addon']
 
 export default function Settings() {
   const [activeSection, setActiveSection] = useState('general')
@@ -256,24 +257,20 @@ export default function Settings() {
     }
   }
 
-  // ─── HR & Payroll add-on subscription ($5/person/month) ───
-  const HR_PRICE_PER_HEAD = 5
-  const HR_PERIOD_LABEL = { monthly: 'Monthly', quarterly: '3 Months', halfyear: '6 Months', yearly: 'Yearly' }
-  const HR_PERIOD_MONTHS = { monthly: 1, quarterly: 3, halfyear: 6, yearly: 12 }
-  const hrUnlocked = tenant?.features?.hr_payroll === true
-  const [hrPeriod, setHrPeriod] = useState('monthly')
-  const [hrHeadcount, setHrHeadcount] = useState(1)
-  const [hrPayMethod, setHrPayMethod] = useState('paynow')
-  const [hrRequesting, setHrRequesting] = useState(false)
-  const [pendingHrRequest, setPendingHrRequest] = useState(null)
-  const hrPrice = HR_PRICE_PER_HEAD * (Number(hrHeadcount) || 0) * (HR_PERIOD_MONTHS[hrPeriod] || 1)
+  // ─── Accounting & CRM add-on ($5/month flat — houses HR & Payroll and Invoicing) ───
+  const CRM_PRICING = { monthly: { price: 5, label: 'Monthly' }, quarterly: { price: 13, label: '3 Months' }, halfyear: { price: 24, label: '6 Months' }, yearly: { price: 45, label: 'Yearly' } }
+  const crmUnlocked = tenant?.features?.accounting_crm === true
+  const [crmPeriod, setCrmPeriod] = useState('monthly')
+  const [crmPayMethod, setCrmPayMethod] = useState('paynow')
+  const [crmRequesting, setCrmRequesting] = useState(false)
+  const [pendingCrmRequest, setPendingCrmRequest] = useState(null)
 
-  const loadPendingHrRequest = () => {
+  const loadPendingCrmRequest = () => {
     if (!tenant?.id) return
     loadWithOfflineCache(
-      ['pendingHrRequest', tenant.id],
+      ['pendingCrmRequest', tenant.id],
       () => supabase
-        .from('hr_payroll_requests')
+        .from('accounting_crm_requests')
         .select('*')
         .eq('tenant_id', tenant.id)
         .eq('status', 'pending')
@@ -281,34 +278,32 @@ export default function Settings() {
         .limit(1)
         .maybeSingle()
         .then(({ data, error }) => { if (error) throw error; return data }),
-      { onData: setPendingHrRequest },
+      { onData: setPendingCrmRequest },
     )
   }
-  useEffect(loadPendingHrRequest, [tenant?.id])
+  useEffect(loadPendingCrmRequest, [tenant?.id])
 
-  const requestHRPayroll = async () => {
-    if (!hrHeadcount || hrHeadcount < 1) { toast.error('Enter how many people need payroll'); return }
-    setHrRequesting(true)
+  const requestAccountingCrm = async () => {
+    setCrmRequesting(true)
     try {
-      if (hrPayMethod === 'cash') {
-        const { error } = await supabase.from('hr_payroll_requests').insert({
+      const price = CRM_PRICING[crmPeriod]?.price
+      if (crmPayMethod === 'cash') {
+        const { error } = await supabase.from('accounting_crm_requests').insert({
           tenant_id: tenant.id,
-          headcount: hrHeadcount,
-          period: hrPeriod,
+          period: crmPeriod,
           method: 'cash',
-          amount: hrPrice,
+          amount: price,
         })
         if (error) throw error
-        toast.success('Request sent! Our team will confirm your cash payment and activate HR & Payroll.')
-        setPendingHrRequest({ status: 'pending', period: hrPeriod, method: 'cash', headcount: hrHeadcount })
+        toast.success('Request sent! Our team will confirm your cash payment and activate Accounting & CRM.')
+        setPendingCrmRequest({ status: 'pending', period: crmPeriod, method: 'cash' })
       } else {
         const { data: { session } } = await supabase.auth.getSession()
         const { data, error } = await supabase.functions.invoke('signup-checkout', {
           body: {
-            type: 'hr_payroll',
-            period: hrPeriod,
-            headcount: hrHeadcount,
-            provider: hrPayMethod,
+            type: 'accounting_crm',
+            period: crmPeriod,
+            provider: crmPayMethod,
             return_url: `${window.location.origin}/app/settings`,
           },
           headers: { Authorization: `Bearer ${session?.access_token}` },
@@ -329,7 +324,78 @@ export default function Settings() {
     } catch (err) {
       toast.error(err.message || 'Could not submit request')
     } finally {
-      setHrRequesting(false)
+      setCrmRequesting(false)
+    }
+  }
+
+  // ─── AI Insights add-on ($1/month) ───
+  const AI_PRICING = { monthly: { price: 1, label: 'Monthly' }, quarterly: { price: 3, label: '3 Months' }, halfyear: { price: 5, label: '6 Months' }, yearly: { price: 9, label: 'Yearly' } }
+  const aiUnlocked = tenant?.features?.ai_insights === true
+  const [aiPeriod, setAiPeriod] = useState('monthly')
+  const [aiPayMethod, setAiPayMethod] = useState('paynow')
+  const [aiRequesting, setAiRequesting] = useState(false)
+  const [pendingAiRequest, setPendingAiRequest] = useState(null)
+
+  const loadPendingAiRequest = () => {
+    if (!tenant?.id) return
+    loadWithOfflineCache(
+      ['pendingAiRequest', tenant.id],
+      () => supabase
+        .from('ai_insights_requests')
+        .select('*')
+        .eq('tenant_id', tenant.id)
+        .eq('status', 'pending')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+        .then(({ data, error }) => { if (error) throw error; return data }),
+      { onData: setPendingAiRequest },
+    )
+  }
+  useEffect(loadPendingAiRequest, [tenant?.id])
+
+  const requestAiInsights = async () => {
+    setAiRequesting(true)
+    try {
+      const price = AI_PRICING[aiPeriod]?.price
+      if (aiPayMethod === 'cash') {
+        const { error } = await supabase.from('ai_insights_requests').insert({
+          tenant_id: tenant.id,
+          period: aiPeriod,
+          method: 'cash',
+          amount: price,
+        })
+        if (error) throw error
+        toast.success('Request sent! Our team will confirm your cash payment and activate AI Insights.')
+        setPendingAiRequest({ status: 'pending', period: aiPeriod, method: 'cash' })
+      } else {
+        const { data: { session } } = await supabase.auth.getSession()
+        const { data, error } = await supabase.functions.invoke('signup-checkout', {
+          body: {
+            type: 'ai_insights',
+            period: aiPeriod,
+            provider: aiPayMethod,
+            return_url: `${window.location.origin}/app/settings`,
+          },
+          headers: { Authorization: `Bearer ${session?.access_token}` },
+        })
+        if (error) {
+          let msg = error.message
+          try {
+            const ctx = await error.context?.json()
+            if (ctx?.error) msg = ctx.error
+          } catch { /* keep default */ }
+          throw new Error(msg)
+        }
+        if (data?.error) throw new Error(data.error)
+        if (!data?.url) throw new Error('No checkout URL returned')
+        window.location.href = data.url
+        return
+      }
+    } catch (err) {
+      toast.error(err.message || 'Could not submit request')
+    } finally {
+      setAiRequesting(false)
     }
   }
 
@@ -1371,16 +1437,16 @@ export default function Settings() {
               </div>
             )}
 
-            {activeSection === 'hr' && (
+            {activeSection === 'accounting_crm' && (
               <div className="space-y-6">
                 <div className="flex items-start justify-between">
                   <div>
-                    <h3 className="text-lg font-bold text-slate-900 dark:text-white">HR & Payroll</h3>
+                    <h3 className="text-lg font-bold text-slate-900 dark:text-white">Accounting & CRM</h3>
                     <p className="text-sm text-slate-500">
-                      Optional add-on — manage staff pay rates and run payroll. ${HR_PRICE_PER_HEAD}/person/month.
+                      Optional add-on — HR & Payroll and Invoicing, in one bundle. ${CRM_PRICING.monthly.price}/month.
                     </p>
                   </div>
-                  {hrUnlocked && (
+                  {crmUnlocked && (
                     <span className="flex items-center gap-1.5 rounded-full bg-green-100 px-3 py-1 text-xs font-semibold text-green-700 dark:bg-green-950 dark:text-green-400">
                       <CheckCircle className="h-3.5 w-3.5" />
                       Active
@@ -1388,48 +1454,36 @@ export default function Settings() {
                   )}
                 </div>
 
-                {!hrUnlocked && (
+                {!crmUnlocked && (
                   <div className="rounded-2xl border-2 border-amber-300 bg-amber-50 p-5 dark:border-amber-700/50 dark:bg-amber-900/20">
-                    <h4 className="font-bold text-amber-900 dark:text-amber-200">Activate HR & Payroll</h4>
-                    {pendingHrRequest ? (
+                    <h4 className="font-bold text-amber-900 dark:text-amber-200">Activate Accounting & CRM</h4>
+                    {pendingCrmRequest ? (
                       <p className="mt-2 text-sm text-amber-800 dark:text-amber-300">
                         Your cash payment request is <b>awaiting confirmation</b> by our team.
-                        HR & Payroll unlocks as soon as it's approved.
+                        Accounting & CRM unlocks as soon as it's approved.
                       </p>
                     ) : (
                       <>
                         <p className="mt-1 text-sm text-amber-800 dark:text-amber-300">
-                          Tell us how many people need payroll, choose a period, pay online or by cash, and it unlocks automatically.
+                          Choose a period, pay online or by cash, and it unlocks automatically.
                         </p>
-                        <div className="mt-3 flex flex-wrap items-end gap-3">
-                          <div>
-                            <label className="mb-1 block text-xs font-medium text-amber-800 dark:text-amber-300">People</label>
-                            <input
-                              type="number"
-                              min={1}
-                              value={hrHeadcount}
-                              onChange={(e) => setHrHeadcount(e.target.value)}
-                              className="w-20 rounded-xl border border-amber-200 bg-white px-3 py-2 text-sm dark:border-amber-800/40 dark:bg-slate-900 dark:text-white"
-                            />
-                          </div>
-                          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                            {Object.entries(HR_PERIOD_LABEL).map(([key, label]) => (
-                              <button
-                                key={key}
-                                onClick={() => setHrPeriod(key)}
-                                className={`rounded-xl border px-3 py-2.5 text-left transition-colors ${
-                                  hrPeriod === key
-                                    ? 'border-amber-600 bg-white dark:bg-slate-900'
-                                    : 'border-amber-200 bg-white/60 hover:border-amber-400 dark:border-amber-800/40 dark:bg-white/5'
-                                }`}
-                              >
-                                <p className="text-xs text-slate-500">{label}</p>
-                              </button>
-                            ))}
-                          </div>
+                        <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+                          {Object.entries(CRM_PRICING).map(([key, p]) => (
+                            <button
+                              key={key}
+                              onClick={() => setCrmPeriod(key)}
+                              className={`rounded-xl border px-3 py-2.5 text-left transition-colors ${
+                                crmPeriod === key
+                                  ? 'border-amber-600 bg-white dark:bg-slate-900'
+                                  : 'border-amber-200 bg-white/60 hover:border-amber-400 dark:border-amber-800/40 dark:bg-white/5'
+                              }`}
+                            >
+                              <p className="text-lg font-extrabold text-slate-900 dark:text-white">${p.price}</p>
+                              <p className="text-xs text-slate-500">{p.label}</p>
+                            </button>
+                          ))}
                         </div>
-                        <p className="mt-3 text-lg font-extrabold text-slate-900 dark:text-white">${hrPrice.toFixed(2)}</p>
-                        <div className="mt-2 flex flex-wrap gap-2">
+                        <div className="mt-3 flex flex-wrap gap-2">
                           {[
                             { key: 'paynow', label: 'Paynow · EcoCash' },
                             { key: 'stripe', label: 'Card · Stripe' },
@@ -1437,9 +1491,9 @@ export default function Settings() {
                           ].map((m) => (
                             <button
                               key={m.key}
-                              onClick={() => setHrPayMethod(m.key)}
+                              onClick={() => setCrmPayMethod(m.key)}
                               className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${
-                                hrPayMethod === m.key
+                                crmPayMethod === m.key
                                   ? 'bg-amber-600 text-white'
                                   : 'bg-white text-slate-600 hover:bg-amber-100 dark:bg-white/10 dark:text-slate-300'
                               }`}
@@ -1449,31 +1503,132 @@ export default function Settings() {
                           ))}
                         </div>
                         <button
-                          onClick={requestHRPayroll}
-                          disabled={hrRequesting}
+                          onClick={requestAccountingCrm}
+                          disabled={crmRequesting}
                           className="mt-4 w-full rounded-xl bg-amber-600 py-2.5 text-sm font-bold text-white hover:bg-amber-700 disabled:opacity-60 sm:w-auto sm:px-6"
                         >
-                          {hrRequesting
+                          {crmRequesting
                             ? 'Processing…'
-                            : hrPayMethod === 'cash'
-                              ? `Request HR & Payroll — $${hrPrice.toFixed(2)} cash`
-                              : `Request HR & Payroll — pay $${hrPrice.toFixed(2)} now`}
+                            : crmPayMethod === 'cash'
+                              ? `Request Accounting & CRM — $${CRM_PRICING[crmPeriod]?.price} cash`
+                              : `Request Accounting & CRM — pay $${CRM_PRICING[crmPeriod]?.price} now`}
                         </button>
                       </>
                     )}
                   </div>
                 )}
 
-                {hrUnlocked && tenant?.hr_payroll_expires_at && (
+                {crmUnlocked && tenant?.accounting_crm_expires_at && (
                   <div className="flex items-center gap-2 rounded-xl border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800 dark:border-green-800/50 dark:bg-green-900/20 dark:text-green-300">
                     <CheckCircle className="h-4 w-4 flex-shrink-0" />
-                    HR & Payroll add-on active until {new Date(tenant.hr_payroll_expires_at).toLocaleDateString('en-GB')}
+                    Accounting & CRM add-on active until {new Date(tenant.accounting_crm_expires_at).toLocaleDateString('en-GB')}
                   </div>
                 )}
 
-                {hrUnlocked && (
-                  <Button variant="secondary" onClick={() => window.location.assign('/app/hr')}>
-                    Open HR & Payroll
+                {crmUnlocked && (
+                  <div className="flex flex-wrap gap-2">
+                    <Button variant="secondary" onClick={() => window.location.assign('/app/hr')}>
+                      Open HR & Payroll
+                    </Button>
+                    <Button variant="secondary" onClick={() => window.location.assign('/app/invoicing')}>
+                      Open Invoicing
+                    </Button>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {activeSection === 'ai_insights_addon' && (
+              <div className="space-y-6">
+                <div className="flex items-start justify-between">
+                  <div>
+                    <h3 className="text-lg font-bold text-slate-900 dark:text-white">AI Insights</h3>
+                    <p className="text-sm text-slate-500">
+                      Optional add-on — AI-powered sales, pricing, and stock recommendations. ${AI_PRICING.monthly.price}/month.
+                    </p>
+                  </div>
+                  {aiUnlocked && (
+                    <span className="flex items-center gap-1.5 rounded-full bg-green-100 px-3 py-1 text-xs font-semibold text-green-700 dark:bg-green-950 dark:text-green-400">
+                      <CheckCircle className="h-3.5 w-3.5" />
+                      Active
+                    </span>
+                  )}
+                </div>
+
+                {!aiUnlocked && (
+                  <div className="rounded-2xl border-2 border-amber-300 bg-amber-50 p-5 dark:border-amber-700/50 dark:bg-amber-900/20">
+                    <h4 className="font-bold text-amber-900 dark:text-amber-200">Activate AI Insights</h4>
+                    {pendingAiRequest ? (
+                      <p className="mt-2 text-sm text-amber-800 dark:text-amber-300">
+                        Your cash payment request is <b>awaiting confirmation</b> by our team.
+                        AI Insights unlocks as soon as it's approved.
+                      </p>
+                    ) : (
+                      <>
+                        <p className="mt-1 text-sm text-amber-800 dark:text-amber-300">
+                          Choose a period, pay online or by cash, and it unlocks automatically.
+                        </p>
+                        <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+                          {Object.entries(AI_PRICING).map(([key, p]) => (
+                            <button
+                              key={key}
+                              onClick={() => setAiPeriod(key)}
+                              className={`rounded-xl border px-3 py-2.5 text-left transition-colors ${
+                                aiPeriod === key
+                                  ? 'border-amber-600 bg-white dark:bg-slate-900'
+                                  : 'border-amber-200 bg-white/60 hover:border-amber-400 dark:border-amber-800/40 dark:bg-white/5'
+                              }`}
+                            >
+                              <p className="text-lg font-extrabold text-slate-900 dark:text-white">${p.price}</p>
+                              <p className="text-xs text-slate-500">{p.label}</p>
+                            </button>
+                          ))}
+                        </div>
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          {[
+                            { key: 'paynow', label: 'Paynow · EcoCash' },
+                            { key: 'stripe', label: 'Card · Stripe' },
+                            { key: 'cash', label: 'Cash (approved by our team)' },
+                          ].map((m) => (
+                            <button
+                              key={m.key}
+                              onClick={() => setAiPayMethod(m.key)}
+                              className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${
+                                aiPayMethod === m.key
+                                  ? 'bg-amber-600 text-white'
+                                  : 'bg-white text-slate-600 hover:bg-amber-100 dark:bg-white/10 dark:text-slate-300'
+                              }`}
+                            >
+                              {m.label}
+                            </button>
+                          ))}
+                        </div>
+                        <button
+                          onClick={requestAiInsights}
+                          disabled={aiRequesting}
+                          className="mt-4 w-full rounded-xl bg-amber-600 py-2.5 text-sm font-bold text-white hover:bg-amber-700 disabled:opacity-60 sm:w-auto sm:px-6"
+                        >
+                          {aiRequesting
+                            ? 'Processing…'
+                            : aiPayMethod === 'cash'
+                              ? `Request AI Insights — $${AI_PRICING[aiPeriod]?.price} cash`
+                              : `Request AI Insights — pay $${AI_PRICING[aiPeriod]?.price} now`}
+                        </button>
+                      </>
+                    )}
+                  </div>
+                )}
+
+                {aiUnlocked && tenant?.ai_insights_expires_at && (
+                  <div className="flex items-center gap-2 rounded-xl border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800 dark:border-green-800/50 dark:bg-green-900/20 dark:text-green-300">
+                    <CheckCircle className="h-4 w-4 flex-shrink-0" />
+                    AI Insights add-on active until {new Date(tenant.ai_insights_expires_at).toLocaleDateString('en-GB')}
+                  </div>
+                )}
+
+                {aiUnlocked && (
+                  <Button variant="secondary" onClick={() => window.location.assign('/app/insights')}>
+                    Open AI Insights
                   </Button>
                 )}
               </div>

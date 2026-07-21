@@ -19,14 +19,14 @@ const ALL_NAV_ITEMS = [
   { key: 'kitchen', icon: ChefHat, label: 'Kitchen', path: '/app/kitchen', restaurantOnly: true },
   { key: 'transactions', icon: Receipt, label: 'Transactions', path: '/app/transactions' },
   { key: 'reports', icon: BarChart3, label: 'Reports', path: '/app/reports' },
-  { key: 'insights', icon: Sparkles, label: 'AI Insights', path: '/app/insights' },
+  { key: 'insights', icon: Sparkles, label: 'AI Insights', path: '/app/insights', addonFeature: 'ai_insights', addonTitle: 'AI Insights is an optional add-on — request it in Settings' },
   { key: 'staff', icon: Users, label: 'Staff Management', path: '/app/staff' },
   { key: 'tasks', icon: ListTodo, label: 'Tasks', path: '/app/tasks' },
   { key: 'branches', icon: Store, label: 'Branches', path: '/app/branches' },
   { key: 'fiscalisation', icon: Cpu, label: 'Fiscalisation', path: '/app/fiscalisation', addonFeature: 'fiscalisation', addonTitle: 'ZIMRA Fiscalisation is an optional add-on — request it in Settings' },
   { key: 'payments', icon: CreditCard, label: 'Payments', path: '/app/payments' },
-  { key: 'hr', icon: BriefcaseBusiness, label: 'HR & Payroll', path: '/app/hr', addonFeature: 'hr_payroll', addonTitle: 'HR & Payroll is an optional add-on — request it in Settings' },
-  { key: 'invoicing', icon: FileText, label: 'Invoicing', path: '/app/invoicing' },
+  { key: 'hr', icon: BriefcaseBusiness, label: 'HR & Payroll', path: '/app/hr', addonFeature: 'accounting_crm', addonTitle: 'HR & Payroll is part of the Accounting & CRM add-on — request it in Settings' },
+  { key: 'invoicing', icon: FileText, label: 'Invoicing', path: '/app/invoicing', addonFeature: 'accounting_crm', addonTitle: 'Invoicing is part of the Accounting & CRM add-on — request it in Settings' },
   { key: 'settings', icon: Settings, label: 'Settings', path: '/app/settings' },
 ]
 
