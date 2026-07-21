@@ -6,6 +6,7 @@ import {
   CheckSquare, Square, Upload, Send, Edit3, Trash2, Info, MessageCircle,
 } from 'lucide-react'
 import Modal from '@/components/common/Modal'
+import DateInput from '@/components/common/DateInput'
 import { useThemeStore } from '@/stores/themeStore'
 import { useAuthStore } from '@/stores/authStore'
 import {
@@ -580,11 +581,9 @@ export default function Tasks() {
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="mb-1.5 block text-sm font-semibold text-slate-700 dark:text-slate-300">Deadline</label>
-              <input
-                type="date"
+              <DateInput
                 value={newTask.deadline}
                 onChange={(e) => setNewTask({ ...newTask, deadline: e.target.value })}
-                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
               />
             </div>
             <div>

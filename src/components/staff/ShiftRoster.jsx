@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { Plus, Trash2, Clock, RefreshCw } from 'lucide-react'
 import Button from '@/components/common/Button'
 import Modal from '@/components/common/Modal'
+import DateInput from '@/components/common/DateInput'
 import { fetchShifts, insertShift, deleteShift } from '@/lib/db'
 import { loadWithOfflineCache } from '@/lib/offlineCache'
 import toast from 'react-hot-toast'
@@ -190,11 +191,9 @@ export default function ShiftRoster({ tenant, branch, staffList, userId }) {
           </div>
           <div>
             <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">Date</label>
-            <input
-              type="date"
+            <DateInput
               value={form.shiftDate}
               onChange={(e) => setForm((f) => ({ ...f, shiftDate: e.target.value }))}
-              className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
               required
             />
           </div>

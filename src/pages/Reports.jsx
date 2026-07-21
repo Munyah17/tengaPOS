@@ -8,6 +8,7 @@ import {
 } from 'recharts'
 import { useThemeStore } from '@/stores/themeStore'
 import { useAuthStore } from '@/stores/authStore'
+import DateInput from '@/components/common/DateInput'
 import { fetchReportMetrics, fetchTransactionsInRange } from '@/lib/db'
 import { withOfflineCache, seedFromOfflineCache } from '@/lib/offlineCache'
 import { formatCurrency } from '@/utils/formatters'
@@ -38,10 +39,29 @@ export default function Reports() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tenant?.id])
 
+  // ─── Period selector for the summary cards / branch breakdown below ───
+  const [reportPreset, setReportPreset] = useState('this_month')
+  const [reportCustomStart, setReportCustomStart] = useState('')
+  const [reportCustomEnd, setReportCustomEnd] = useState('')
+
+  const reportRange = (() => {
+    if (reportPreset === 'custom') {
+      if (!reportCustomStart || !reportCustomEnd) return null
+      const start = new Date(reportCustomStart)
+      const end = new Date(reportCustomEnd)
+      end.setHours(23, 59, 59, 999)
+      return { start, end }
+    }
+    return getPresetRange(reportPreset)
+  })()
+
   const metricsQuery = useQuery({
-    queryKey: ['reportMetrics', tenant?.id],
-    queryFn: withOfflineCache(['reportMetrics', tenant?.id], () => fetchReportMetrics(tenant.id)),
-    enabled: !!tenant?.id,
+    queryKey: ['reportMetrics', tenant?.id, reportRange?.start?.toISOString(), reportRange?.end?.toISOString()],
+    queryFn: withOfflineCache(
+      ['reportMetrics', tenant?.id, reportRange?.start?.toISOString(), reportRange?.end?.toISOString()],
+      () => fetchReportMetrics(tenant.id, reportRange ? { startDate: reportRange.start.toISOString(), endDate: reportRange.end.toISOString() } : {}),
+    ),
+    enabled: !!tenant?.id && !!reportRange,
     staleTime: 60000,
   })
   const metrics = metricsQuery.data || null
@@ -92,10 +112,11 @@ export default function Reports() {
   const monthlyData = metrics?.monthlyData ?? []
   const branchData  = metrics?.branchData  ?? []
   const hasData = metrics && metrics.mtdOrders > 0
+  const periodLabel = DATE_PRESETS.find((p) => p.key === reportPreset)?.label || 'Selected Period'
 
   const summaryCards = [
-    { label: 'Total Revenue (MTD)', value: formatCurrency(metrics?.mtdRevenue ?? 0), icon: DollarSign },
-    { label: 'Total Orders (MTD)', value: String(metrics?.mtdOrders ?? 0), icon: BarChart3 },
+    { label: `Total Revenue (${periodLabel})`, value: formatCurrency(metrics?.mtdRevenue ?? 0), icon: DollarSign },
+    { label: `Total Orders (${periodLabel})`, value: String(metrics?.mtdOrders ?? 0), icon: BarChart3 },
     { label: 'Avg Order Value', value: formatCurrency(metrics?.avgOrderValue ?? 0), icon: TrendingUp },
     { label: 'Products Sold', value: String(metrics?.productsSold ?? 0), icon: Package },
   ]
@@ -145,21 +166,11 @@ export default function Reports() {
                 <div className="mt-3 grid grid-cols-2 gap-2">
                   <div>
                     <label className="mb-1 block text-[10px] font-semibold text-slate-500">From</label>
-                    <input
-                      type="date"
-                      value={customStart}
-                      onChange={(e) => setCustomStart(e.target.value)}
-                      className="w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs dark:border-slate-700 dark:bg-slate-800 dark:text-white"
-                    />
+                    <DateInput value={customStart} onChange={(e) => setCustomStart(e.target.value)} />
                   </div>
                   <div>
                     <label className="mb-1 block text-[10px] font-semibold text-slate-500">To</label>
-                    <input
-                      type="date"
-                      value={customEnd}
-                      onChange={(e) => setCustomEnd(e.target.value)}
-                      className="w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs dark:border-slate-700 dark:bg-slate-800 dark:text-white"
-                    />
+                    <DateInput value={customEnd} onChange={(e) => setCustomEnd(e.target.value)} />
                   </div>
                 </div>
               )}
@@ -191,6 +202,40 @@ export default function Reports() {
             </div>
           )}
         </div>
+      </div>
+
+      {/* Period selector — filters the summary cards and branch breakdown below */}
+      <div className="mb-4 flex flex-wrap items-center gap-2">
+        {DATE_PRESETS.filter((p) => p.key !== 'custom').map((p) => (
+          <button
+            key={p.key}
+            onClick={() => setReportPreset(p.key)}
+            className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${
+              reportPreset === p.key
+                ? 'bg-brand-600 text-white'
+                : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-400'
+            }`}
+          >
+            {p.label}
+          </button>
+        ))}
+        <button
+          onClick={() => setReportPreset('custom')}
+          className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${
+            reportPreset === 'custom'
+              ? 'bg-brand-600 text-white'
+              : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-400'
+          }`}
+        >
+          Custom Range
+        </button>
+        {reportPreset === 'custom' && (
+          <>
+            <DateInput value={reportCustomStart} onChange={(e) => setReportCustomStart(e.target.value)} placeholder="From" className="w-36" />
+            <span className="text-xs text-slate-400">—</span>
+            <DateInput value={reportCustomEnd} onChange={(e) => setReportCustomEnd(e.target.value)} placeholder="To" className="w-36" />
+          </>
+        )}
       </div>
 
       {/* Summary Cards */}

@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { motion } from 'framer-motion'
 import { Eye, Bell, CheckCircle, Clock, Flame, Timer, Car, Store, X } from 'lucide-react'
 import ExportMenu from '@/components/common/ExportMenu'
+import DateInput from '@/components/common/DateInput'
 import { formatCurrency, formatDateTime } from '@/utils/formatters'
 import { useThemeStore } from '@/stores/themeStore'
 import { useAuthStore } from '@/stores/authStore'
@@ -238,15 +239,12 @@ export default function Orders() {
         </div>
         {!isRestaurant && (
           <div className="flex flex-wrap items-center gap-2">
-            <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-800">
-              <span className="text-xs text-slate-500 whitespace-nowrap">From</span>
-              <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)}
-                className="bg-transparent text-sm text-slate-900 focus:outline-none dark:text-white" />
+            <div className="flex items-center gap-2">
+              <DateInput value={dateFrom} onChange={e => setDateFrom(e.target.value)} placeholder="From" className="w-36" />
               <span className="text-xs text-slate-400">—</span>
-              <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)}
-                className="bg-transparent text-sm text-slate-900 focus:outline-none dark:text-white" />
+              <DateInput value={dateTo} onChange={e => setDateTo(e.target.value)} placeholder="To" className="w-36" />
               {dateFiltered && (
-                <button onClick={() => { setDateFrom(''); setDateTo('') }} className="ml-1 text-slate-400 hover:text-red-500">
+                <button onClick={() => { setDateFrom(''); setDateTo('') }} className="text-slate-400 hover:text-red-500">
                   <X className="h-3.5 w-3.5" />
                 </button>
               )}

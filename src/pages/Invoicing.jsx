@@ -3,6 +3,7 @@ import { motion } from 'framer-motion'
 import { Plus, FileText, Receipt, Download, Printer, ArrowRightLeft, Trash2, X, RefreshCw } from 'lucide-react'
 import Button from '@/components/common/Button'
 import Modal from '@/components/common/Modal'
+import DateInput from '@/components/common/DateInput'
 import { useAuthStore } from '@/stores/authStore'
 import { useReceiptConfigStore } from '@/stores/receiptConfigStore'
 import {
@@ -296,11 +297,9 @@ export default function Invoicing() {
             </div>
             <div>
               <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">{docType === 'invoice' ? 'Due Date' : 'Valid Until'}</label>
-              <input
-                type="date"
+              <DateInput
                 value={docType === 'invoice' ? form.dueDate : form.validUntil}
                 onChange={(e) => setForm((f) => ({ ...f, [docType === 'invoice' ? 'dueDate' : 'validUntil']: e.target.value }))}
-                className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
               />
             </div>
           </div>

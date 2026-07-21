@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import { Users, DollarSign, Calendar, ChevronDown, ChevronUp, Edit2, Trash2, Download } from 'lucide-react'
 import { useAuthStore } from '@/stores/authStore'
+import DateInput from '@/components/common/DateInput'
 import { loadWithOfflineCache } from '@/lib/offlineCache'
 import {
   fetchStaffPayroll, updateStaffPay,
@@ -346,17 +347,17 @@ export default function HR() {
               </div>
               <div>
                 <label className="mb-1.5 block text-xs font-medium text-slate-600 dark:text-slate-400">Start Date</label>
-                <input type="date" value={run.period_start} className={inp}
+                <DateInput value={run.period_start}
                   onChange={e => setRun(r => ({ ...r, period_start: e.target.value }))} />
               </div>
               <div>
                 <label className="mb-1.5 block text-xs font-medium text-slate-600 dark:text-slate-400">End Date</label>
-                <input type="date" value={run.period_end} className={inp}
+                <DateInput value={run.period_end}
                   onChange={e => setRun(r => ({ ...r, period_end: e.target.value }))} />
               </div>
               <div>
                 <label className="mb-1.5 block text-xs font-medium text-slate-600 dark:text-slate-400">Pay Date</label>
-                <input type="date" value={run.pay_date} className={inp}
+                <DateInput value={run.pay_date}
                   onChange={e => setRun(r => ({ ...r, pay_date: e.target.value }))} />
               </div>
             </div>

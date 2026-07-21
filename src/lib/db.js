@@ -575,21 +575,28 @@ export async function unassignProductBranch(productId, branchId) {
 
 // ─── Reports metrics ──────────────────────────────────────────────────────────
 
-export async function fetchReportMetrics(tenantId) {
+// Summary cards + branch breakdown respect the selected period (defaults to
+// month-to-date when no range is given); the 6-month trend chart stays a
+// fixed rolling window regardless, since it's a trend, not a period total.
+export async function fetchReportMetrics(tenantId, { startDate, endDate } = {}) {
   const now = new Date()
   const mtdStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString()
   const sixMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 5, 1).toISOString()
+  const periodStart = startDate || mtdStart
+  const periodEnd = endDate || now.toISOString()
 
   const [mtdTx, monthlyTx, branchTx, productsSoldRes] = await Promise.all([
-    // MTD summary
+    // Period summary (MTD by default, or the selected range)
     supabase
       .from('transactions')
       .select('amount')
       .eq('tenant_id', tenantId)
       .eq('status', 'completed')
-      .gte('created_at', mtdStart),
+      .gte('created_at', periodStart)
+      .lte('created_at', periodEnd),
 
-    // Last 6 months, grouped by month (fetch raw, group client-side)
+    // Last 6 months, grouped by month (fetch raw, group client-side) —
+    // always the rolling window, independent of the period filter
     supabase
       .from('transactions')
       .select('amount, created_at')
@@ -597,20 +604,22 @@ export async function fetchReportMetrics(tenantId) {
       .eq('status', 'completed')
       .gte('created_at', sixMonthsAgo),
 
-    // Branch breakdown this month
+    // Branch breakdown for the same period
     supabase
       .from('transactions')
       .select('amount, branches(name)')
       .eq('tenant_id', tenantId)
       .eq('status', 'completed')
-      .gte('created_at', mtdStart),
+      .gte('created_at', periodStart)
+      .lte('created_at', periodEnd),
 
-    // Products sold MTD via order_items
+    // Products sold in the same period, via order_items
     supabase
       .from('order_items')
       .select('qty, orders!inner(tenant_id, created_at)')
       .eq('orders.tenant_id', tenantId)
-      .gte('orders.created_at', mtdStart),
+      .gte('orders.created_at', periodStart)
+      .lte('orders.created_at', periodEnd),
   ])
 
   const mtd = mtdTx.data ?? []
