@@ -11,6 +11,14 @@ import { cacheProductsForOffline, processSyncQueue } from '@/lib/offlineSync'
 // to reload (via a shared event), and drains/refreshes the offline sync
 // layer — instead of waiting for staleTime windows or the background
 // sync's own interval.
+//
+// invalidateQueries() only actually refetches queries that are currently
+// mounted/observed — anything not on screen right now just gets marked
+// stale, not refetched, and any plain useState page whose own
+// force-refresh listener has a subtle bug shows the same false-positive:
+// a successful-looking "Up to date" toast with a screen that hasn't
+// actually changed. A full reload sidesteps all of that — it always shows
+// exactly what the server has right now, with no page-by-page guessing.
 export default function RefreshOnlineButton() {
   const [refreshing, setRefreshing] = useState(false)
   const queryClient = useQueryClient()
@@ -29,11 +37,10 @@ export default function RefreshOnlineButton() {
         await cacheProductsForOffline(tenant.id)
         await processSyncQueue()
       }
-      toast.success('Up to date')
     } catch {
-      toast.error('Refresh failed — check your connection')
+      // Non-fatal — the reload below still pulls a fully fresh copy of the page
     } finally {
-      setRefreshing(false)
+      window.location.reload()
     }
   }
 
