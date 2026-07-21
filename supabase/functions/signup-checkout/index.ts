@@ -27,7 +27,7 @@ const FALLBACK_FISCAL_PRICES: Record<string, { price: number; months: number; la
 }
 const PERIOD_MONTHS: Record<string, number> = { monthly: 1, quarterly: 3, halfyear: 6, yearly: 12 }
 const PERIOD_LABEL: Record<string, string> = { monthly: 'Monthly', quarterly: '3 Months', halfyear: '6 Months', yearly: 'Yearly' }
-const ACCOUNTING_CRM_PRICES: Record<string, number> = { monthly: 5, quarterly: 13, halfyear: 24, yearly: 45 }
+const ACCOUNTING_ERP_PRICES: Record<string, number> = { monthly: 5, quarterly: 13, halfyear: 24, yearly: 45 }
 const AI_INSIGHTS_PRICES: Record<string, number> = { monthly: 1, quarterly: 3, halfyear: 5, yearly: 9 }
 const PLAN_LABELS: Record<string, string> = {
   byod_monthly: 'tengaPOS BYOD Monthly (1 month)',
@@ -68,7 +68,7 @@ serve(async (req) => {
     if (!['stripe', 'paynow'].includes(provider)) return json({ error: 'provider must be stripe or paynow' }, 400)
 
     const isFiscal = type === 'fiscalisation'
-    const isAccountingCrm = type === 'accounting_crm'
+    const isAccountingErp = type === 'accounting_erp'
     const isAiInsights = type === 'ai_insights'
 
     // Live pricing from platform_settings (Super Admin controlled)
@@ -79,11 +79,11 @@ serve(async (req) => {
       const p = table[period as string]
       if (!p) return json({ error: 'Invalid fiscalisation period' }, 400)
       plan = { amount: p.price, label: `ZIMRA Fiscalisation — ${p.label}`, months: p.months }
-    } else if (isAccountingCrm) {
+    } else if (isAccountingErp) {
       const months = PERIOD_MONTHS[period as string]
-      const price = ACCOUNTING_CRM_PRICES[period as string]
-      if (!months || !price) return json({ error: 'Invalid Accounting & CRM period' }, 400)
-      plan = { amount: price, label: `Accounting & CRM — ${PERIOD_LABEL[period as string]}`, months }
+      const price = ACCOUNTING_ERP_PRICES[period as string]
+      if (!months || !price) return json({ error: 'Invalid Accounting & ERP period' }, 400)
+      plan = { amount: price, label: `Accounting & ERP — ${PERIOD_LABEL[period as string]}`, months }
     } else if (isAiInsights) {
       const months = PERIOD_MONTHS[period as string]
       const price = AI_INSIGHTS_PRICES[period as string]
@@ -106,9 +106,9 @@ serve(async (req) => {
     if (!userRow?.tenant_id) return json({ error: 'No tenant found for this account' }, 400)
 
     const tenantId = userRow.tenant_id
-    const checkoutKind = isFiscal ? 'fiscalisation' : isAccountingCrm ? 'accounting_crm' : isAiInsights ? 'ai_insights' : 'plan'
-    const planKey = isFiscal ? `fiscal_${period}` : isAccountingCrm ? `crm_${period}` : isAiInsights ? `ai_${period}` : plan_type
-    const refPrefix = isFiscal ? 'FIS' : isAccountingCrm ? 'CRM' : isAiInsights ? 'AI' : 'SUB'
+    const checkoutKind = isFiscal ? 'fiscalisation' : isAccountingErp ? 'accounting_erp' : isAiInsights ? 'ai_insights' : 'plan'
+    const planKey = isFiscal ? `fiscal_${period}` : isAccountingErp ? `erp_${period}` : isAiInsights ? `ai_${period}` : plan_type
+    const refPrefix = isFiscal ? 'FIS' : isAccountingErp ? 'ERP' : isAiInsights ? 'AI' : 'SUB'
     const reference = `${refPrefix}-${Date.now()}-${Math.random().toString(36).slice(2, 7).toUpperCase()}`
     const amountStr = plan.amount.toFixed(2)
     const returnUrl = return_url || 'https://www.tengapos.co.zw/checkout'

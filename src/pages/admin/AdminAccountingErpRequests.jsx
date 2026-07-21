@@ -7,7 +7,7 @@ import toast from 'react-hot-toast'
 const PERIOD_MONTHS = { monthly: 1, quarterly: 3, halfyear: 6, yearly: 12 }
 const PERIOD_LABEL = { monthly: 'Monthly', quarterly: '3 Months', halfyear: '6 Months', yearly: 'Yearly' }
 
-export default function AdminAccountingCrmRequests() {
+export default function AdminAccountingErpRequests() {
   const { user } = useAuthStore()
   const [requests, setRequests] = useState([])
   const [tenants, setTenants] = useState([])
@@ -18,7 +18,7 @@ export default function AdminAccountingCrmRequests() {
 
   const load = async () => {
     const [{ data: reqs }, { data: tenantData }] = await Promise.all([
-      supabase.from('accounting_crm_requests').select('*, tenants(name, slug, features)').order('created_at', { ascending: false }).limit(100),
+      supabase.from('accounting_erp_requests').select('*, tenants(name, slug, features)').order('created_at', { ascending: false }).limit(100),
       supabase.from('tenants').select('id, name, features').eq('status', 'active').order('name'),
     ])
     setRequests(reqs || [])
@@ -34,14 +34,14 @@ export default function AdminAccountingCrmRequests() {
     expires.setMonth(expires.getMonth() + months)
     const { data: updated, error } = await supabase
       .from('tenants')
-      .update({ features: { ...(t?.features || {}), accounting_crm: true }, accounting_crm_expires_at: expires.toISOString() })
+      .update({ features: { ...(t?.features || {}), accounting_erp: true }, accounting_erp_expires_at: expires.toISOString() })
       .eq('id', tenantId)
       .select('id')
     if (error || !updated?.length) throw new Error(error?.message || 'Update blocked')
     await supabase.from('audit_logs').insert({
       actor_id: user?.id,
       actor_email: user?.email,
-      action: 'accounting_crm_activated',
+      action: 'accounting_erp_activated',
       target_type: 'tenant',
       target_id: tenantId,
       details: { tenant_name: tenantName, months },
@@ -55,10 +55,10 @@ export default function AdminAccountingCrmRequests() {
         await activate(req.tenant_id, PERIOD_MONTHS[req.period] || 1, req.tenants?.name)
       }
       await supabase
-        .from('accounting_crm_requests')
+        .from('accounting_erp_requests')
         .update({ status: approve ? 'approved' : 'rejected', decided_at: new Date().toISOString(), decided_by: user?.id })
         .eq('id', req.id)
-      toast.success(approve ? `Accounting & CRM unlocked for ${req.tenants?.name}` : 'Request rejected')
+      toast.success(approve ? `Accounting & ERP unlocked for ${req.tenants?.name}` : 'Request rejected')
       load()
     } catch (err) {
       toast.error(err.message)
@@ -73,7 +73,7 @@ export default function AdminAccountingCrmRequests() {
     try {
       const t = tenants.find((x) => x.id === assignTenant)
       await activate(assignTenant, PERIOD_MONTHS[assignPeriod], t?.name)
-      toast.success(`Accounting & CRM manually activated for ${t?.name}`)
+      toast.success(`Accounting & ERP manually activated for ${t?.name}`)
       load()
     } catch (err) {
       toast.error(err.message)
@@ -88,17 +88,17 @@ export default function AdminAccountingCrmRequests() {
       const { data: t } = await supabase.from('tenants').select('features').eq('id', tenantId).single()
       await supabase
         .from('tenants')
-        .update({ features: { ...(t?.features || {}), accounting_crm: false }, accounting_crm_expires_at: null })
+        .update({ features: { ...(t?.features || {}), accounting_erp: false }, accounting_erp_expires_at: null })
         .eq('id', tenantId)
       await supabase.from('audit_logs').insert({
         actor_id: user?.id,
         actor_email: user?.email,
-        action: 'accounting_crm_suspended',
+        action: 'accounting_erp_suspended',
         target_type: 'tenant',
         target_id: tenantId,
         details: { tenant_name: name },
       })
-      toast.success(`Accounting & CRM suspended for ${name}`)
+      toast.success(`Accounting & ERP suspended for ${name}`)
       load()
     } catch (err) {
       toast.error(err.message)
@@ -108,12 +108,12 @@ export default function AdminAccountingCrmRequests() {
   }
 
   const pending = requests.filter((r) => r.status === 'pending')
-  const active = tenants.filter((t) => t.features?.accounting_crm === true)
+  const active = tenants.filter((t) => t.features?.accounting_erp === true)
 
   return (
     <div className="p-4 sm:p-6">
       <div className="mb-6">
-        <h1 className="text-2xl font-extrabold text-slate-900 dark:text-white">Accounting & CRM Requests</h1>
+        <h1 className="text-2xl font-extrabold text-slate-900 dark:text-white">Accounting & ERP Requests</h1>
         <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
           Cash payment approvals + manual activation ($5/month) — covers HR & Payroll and Invoicing.
         </p>
@@ -173,7 +173,7 @@ export default function AdminAccountingCrmRequests() {
             <option value="">— Select business —</option>
             {tenants.map((t) => (
               <option key={t.id} value={t.id}>
-                {t.name}{t.features?.accounting_crm ? ' (already active)' : ''}
+                {t.name}{t.features?.accounting_erp ? ' (already active)' : ''}
               </option>
             ))}
           </select>
@@ -199,7 +199,7 @@ export default function AdminAccountingCrmRequests() {
       <div className="rounded-2xl border border-slate-200 bg-white p-5 dark:border-white/10 dark:bg-white/5">
         <div className="mb-3 flex items-center gap-2">
           <Calculator className="h-5 w-5 text-green-500" />
-          <h2 className="font-bold text-slate-900 dark:text-white">Active Accounting & CRM ({active.length})</h2>
+          <h2 className="font-bold text-slate-900 dark:text-white">Active Accounting & ERP ({active.length})</h2>
         </div>
         {active.length === 0 ? (
           <p className="py-4 text-center text-sm text-slate-500">No tenants have the add-on active yet.</p>

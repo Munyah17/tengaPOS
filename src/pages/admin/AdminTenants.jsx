@@ -157,7 +157,7 @@ const BOOL_FEATURES = [
   { key: 'drive_through',  label: 'Drive-Through Mode' },
   { key: 'fiscalisation',  label: 'Fiscalisation (ZIMRA)' },
   { key: 'vat',            label: 'VAT' },
-  { key: 'accounting_crm', label: 'Accounting & CRM (HR, Payroll, Invoicing)' },
+  { key: 'accounting_erp', label: 'Accounting & ERP (HR, Payroll, Invoicing)' },
   { key: 'ai_insights',    label: 'AI Insights' },
   { key: 'api_access',     label: 'API Access' },
   { key: 'custom_integrations', label: 'Custom Integrations' },

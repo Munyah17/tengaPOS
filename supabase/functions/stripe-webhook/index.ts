@@ -74,12 +74,12 @@ serve(async (req) => {
         features: { ...(t?.features || {}), fiscalisation: true },
         fiscal_expires_at: renewal.toISOString(),
       }).eq('id', tenantId)
-    } else if (kind === 'accounting_crm') {
-      // Unlock the Accounting & CRM bundle (HR & Payroll, Invoicing) for the paid period
+    } else if (kind === 'accounting_erp') {
+      // Unlock the Accounting & ERP bundle (HR & Payroll, Invoicing) for the paid period
       const { data: t } = await admin.from('tenants').select('features').eq('id', tenantId).maybeSingle()
       await admin.from('tenants').update({
-        features: { ...(t?.features || {}), accounting_crm: true },
-        accounting_crm_expires_at: renewal.toISOString(),
+        features: { ...(t?.features || {}), accounting_erp: true },
+        accounting_erp_expires_at: renewal.toISOString(),
       }).eq('id', tenantId)
     } else if (kind === 'ai_insights') {
       // Unlock AI Insights for the paid period

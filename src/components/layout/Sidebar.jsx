@@ -2,8 +2,8 @@ import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import {
   LayoutDashboard, ShoppingCart, Package, ClipboardList, BarChart3,
-  Settings, Users, ChefHat, ListTodo, LogOut, ChevronLeft, ChevronRight,
-  Store, Receipt, Cpu, X, Sparkles, CreditCard, BriefcaseBusiness, FileText, Inbox,
+  Settings, Users, ChefHat, ListTodo, LogOut, ChevronLeft, ChevronRight, ChevronDown,
+  Store, Receipt, Cpu, X, Sparkles, CreditCard, BriefcaseBusiness, FileText, Inbox, Calculator,
 } from 'lucide-react'
 import { useState } from 'react'
 import { useThemeStore } from '@/stores/themeStore'
@@ -25,13 +25,20 @@ const ALL_NAV_ITEMS = [
   { key: 'branches', icon: Store, label: 'Branches', path: '/app/branches' },
   { key: 'fiscalisation', icon: Cpu, label: 'Fiscalisation', path: '/app/fiscalisation', addonFeature: 'fiscalisation', addonTitle: 'ZIMRA Fiscalisation is an optional add-on — request it in Settings' },
   { key: 'payments', icon: CreditCard, label: 'Payments', path: '/app/payments' },
-  { key: 'hr', icon: BriefcaseBusiness, label: 'HR & Payroll', path: '/app/hr', addonFeature: 'accounting_crm', addonTitle: 'HR & Payroll is part of the Accounting & CRM add-on — request it in Settings' },
-  { key: 'invoicing', icon: FileText, label: 'Invoicing', path: '/app/invoicing', addonFeature: 'accounting_crm', addonTitle: 'Invoicing is part of the Accounting & CRM add-on — request it in Settings' },
+  {
+    key: 'accounting_erp', icon: Calculator, label: 'Accounting & ERP',
+    addonFeature: 'accounting_erp', addonTitle: 'Accounting & ERP is an optional add-on — request it in Settings',
+    children: [
+      { key: 'hr', icon: BriefcaseBusiness, label: 'HR & Payroll', path: '/app/hr' },
+      { key: 'invoicing', icon: FileText, label: 'Invoicing', path: '/app/invoicing' },
+    ],
+  },
   { key: 'settings', icon: Settings, label: 'Settings', path: '/app/settings' },
 ]
 
 export default function Sidebar({ open = false, onClose }) {
   const [collapsed, setCollapsed] = useState(false)
+  const [expandedGroups, setExpandedGroups] = useState([])
   const { posMode } = useThemeStore()
   const { clearAuth, role, profile, tenant } = useAuthStore()
   const location = useLocation()
@@ -39,11 +46,22 @@ export default function Sidebar({ open = false, onClose }) {
   const isRestaurant = posMode === 'restaurant'
 
   const allowedKeys = NAV_PERMISSIONS[role] || NAV_PERMISSIONS.vendor
-  const visibleItems = ALL_NAV_ITEMS.filter((item) => {
+  const visibleItems = ALL_NAV_ITEMS.map((item) => {
+    if (!item.children) return item
+    const children = item.children.filter((c) => allowedKeys.includes(c.key))
+    return children.length ? { ...item, children } : null
+  }).filter((item) => {
+    if (!item) return false
+    if (item.children) return true
     if (!allowedKeys.includes(item.key)) return false
     if (item.restaurantOnly && !isRestaurant) return false
     return true
   })
+
+  const isGroupOpen = (item) => expandedGroups.includes(item.key)
+    || item.children?.some((c) => location.pathname === c.path)
+  const toggleGroup = (key) => setExpandedGroups((prev) =>
+    prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key])
 
   const colors = ROLE_COLORS[role] || ROLE_COLORS.vendor
   const roleLabel = ROLE_LABELS[role] || role
@@ -183,11 +201,13 @@ export default function Sidebar({ open = false, onClose }) {
           <div className="space-y-0.5">
             {visibleItems.map((item) => {
               const isActive = location.pathname === item.path
-              // Paid add-ons (fiscalisation, HR & Payroll): greyed out until unlocked
-              if (item.addonFeature && tenant?.features?.[item.addonFeature] !== true) {
+              const locked = item.addonFeature && tenant?.features?.[item.addonFeature] !== true
+
+              // Paid add-ons (Fiscalisation, AI Insights, Accounting & ERP): greyed out until unlocked
+              if (locked) {
                 return (
                   <NavLink
-                    key={item.path}
+                    key={item.key}
                     to="/app/settings"
                     onClick={handleNavClick}
                     title={item.addonTitle}
@@ -203,6 +223,63 @@ export default function Sidebar({ open = false, onClose }) {
                   </NavLink>
                 )
               }
+
+              // Collapsible group (unlocked) — a parent that expands to reveal
+              // its own pages underneath, instead of being a link itself.
+              if (item.children) {
+                const open = isGroupOpen(item)
+                return (
+                  <div key={item.key}>
+                    <button
+                      type="button"
+                      onClick={() => toggleGroup(item.key)}
+                      className="group flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-slate-600 transition-all hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
+                      title={collapsed ? item.label : undefined}
+                    >
+                      <item.icon className="h-5 w-5 flex-shrink-0 text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-300" />
+                      {!collapsed && (
+                        <>
+                          <span className="flex-1 truncate text-left">{item.label}</span>
+                          <ChevronDown className={`h-4 w-4 flex-shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} />
+                        </>
+                      )}
+                    </button>
+                    {!collapsed && open && (
+                      <div className="ml-4 mt-0.5 space-y-0.5 border-l border-slate-200 pl-3 dark:border-slate-800">
+                        {item.children.map((child) => {
+                          const childActive = location.pathname === child.path
+                          return (
+                            <NavLink
+                              key={child.path}
+                              to={child.path}
+                              onClick={handleNavClick}
+                              className={`group flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm font-medium transition-all ${
+                                childActive
+                                  ? isRestaurant
+                                    ? 'bg-green-50 text-green-700 dark:bg-green-950 dark:text-green-400'
+                                    : 'bg-brand-50 text-brand-700 dark:bg-brand-950 dark:text-brand-400'
+                                  : 'text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800'
+                              }`}
+                            >
+                              <child.icon
+                                className={`h-4 w-4 flex-shrink-0 ${
+                                  childActive
+                                    ? isRestaurant
+                                      ? 'text-green-600 dark:text-green-400'
+                                      : 'text-brand-600 dark:text-brand-400'
+                                    : 'text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-300'
+                                }`}
+                              />
+                              <span className="truncate">{child.label}</span>
+                            </NavLink>
+                          )
+                        })}
+                      </div>
+                    )}
+                  </div>
+                )
+              }
+
               return (
                 <NavLink
                   key={item.path}

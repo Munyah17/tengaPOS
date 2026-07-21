@@ -57,7 +57,7 @@ const SuperAdminBroadcasts = lazy(() => import('@/pages/admin/SuperAdminBroadcas
 const SuperAdminVersions = lazy(() => import('@/pages/admin/SuperAdminVersions'))
 const AdminUsers = lazy(() => import('@/pages/admin/AdminUsers'))
 const AdminFiscalRequests = lazy(() => import('@/pages/admin/AdminFiscalRequests'))
-const AdminAccountingCrmRequests = lazy(() => import('@/pages/admin/AdminAccountingCrmRequests'))
+const AdminAccountingErpRequests = lazy(() => import('@/pages/admin/AdminAccountingErpRequests'))
 const AdminVatRequests = lazy(() => import('@/pages/admin/AdminVatRequests'))
 const AdminAiInsightsRequests = lazy(() => import('@/pages/admin/AdminAiInsightsRequests'))
 const Checkout = lazy(() => import('@/pages/Checkout'))
@@ -213,7 +213,7 @@ export default function App() {
             <Route path="marketing" element={<AdminMarketing />} />
             <Route path="users" element={<AdminUsers />} />
             <Route path="fiscal-requests" element={<AdminFiscalRequests />} />
-            <Route path="accounting-crm-requests" element={<AdminAccountingCrmRequests />} />
+            <Route path="accounting-erp-requests" element={<AdminAccountingErpRequests />} />
             <Route path="vat-requests" element={<AdminVatRequests />} />
             <Route path="ai-insights-requests" element={<AdminAiInsightsRequests />} />
             <Route path="subscriptions" element={<SuperAdminSubscriptions />} />
@@ -246,7 +246,7 @@ export default function App() {
             <Route path="marketing" element={<AdminMarketing />} />
             <Route path="users" element={<AdminUsers />} />
             <Route path="fiscal-requests" element={<AdminFiscalRequests />} />
-            <Route path="accounting-crm-requests" element={<AdminAccountingCrmRequests />} />
+            <Route path="accounting-erp-requests" element={<AdminAccountingErpRequests />} />
             <Route path="vat-requests" element={<AdminVatRequests />} />
             <Route path="ai-insights-requests" element={<AdminAiInsightsRequests />} />
             <Route path="support" element={<AdminSupport />} />

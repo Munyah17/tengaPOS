@@ -180,8 +180,8 @@ export default function Invoicing() {
     form.items.filter((i) => i.description.trim() && i.qty > 0),
   )
 
-  const crmUnlocked = tenant?.features?.accounting_crm === true
-  if (!crmUnlocked) {
+  const erpUnlocked = tenant?.features?.accounting_erp === true
+  if (!erpUnlocked) {
     return (
       <div className="p-4 sm:p-6">
         <div className="mb-6">
@@ -191,7 +191,7 @@ export default function Invoicing() {
         <div className="rounded-2xl border-2 border-amber-300 bg-amber-50 p-6 dark:border-amber-700/50 dark:bg-amber-900/20">
           <h4 className="font-bold text-amber-900 dark:text-amber-200">Invoicing isn't active yet</h4>
           <p className="mt-1 text-sm text-amber-800 dark:text-amber-300">
-            This is part of the Accounting & CRM add-on ($5/month). Request it from Settings and it'll unlock here once approved.
+            This is part of the Accounting & ERP add-on ($5/month). Request it from Settings and it'll unlock here once approved.
           </p>
         </div>
       </div>

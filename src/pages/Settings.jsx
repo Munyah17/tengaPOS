@@ -32,7 +32,7 @@ const sections = [
   { id: 'payments', label: 'Payments', icon: CreditCard },
   { id: 'receipts', label: 'Receipts', icon: Receipt },
   { id: 'fiscalisation', label: 'ZIMRA Fiscal', icon: Cpu },
-  { id: 'accounting_crm', label: 'Accounting & CRM', icon: BriefcaseBusiness },
+  { id: 'accounting_erp', label: 'Accounting & ERP', icon: BriefcaseBusiness },
   { id: 'ai_insights_addon', label: 'AI Insights', icon: Sparkles },
   { id: 'notifications', label: 'Notifications', icon: Bell },
   { id: 'security', label: 'Security', icon: Shield },
@@ -43,7 +43,7 @@ const sections = [
 // Shop managers run day-to-day operations but don't own the business —
 // payment gateway credentials, ZIMRA fiscal device registration, add-on
 // billing decisions, and the account-security/data-export tools stay Vendor-only.
-const SHOP_MANAGER_HIDDEN_SECTIONS = ['payments', 'fiscalisation', 'security', 'accounting_crm', 'ai_insights_addon']
+const SHOP_MANAGER_HIDDEN_SECTIONS = ['payments', 'fiscalisation', 'security', 'accounting_erp', 'ai_insights_addon']
 
 export default function Settings() {
   const [activeSection, setActiveSection] = useState('general')
@@ -257,20 +257,20 @@ export default function Settings() {
     }
   }
 
-  // ─── Accounting & CRM add-on ($5/month flat — houses HR & Payroll and Invoicing) ───
-  const CRM_PRICING = { monthly: { price: 5, label: 'Monthly' }, quarterly: { price: 13, label: '3 Months' }, halfyear: { price: 24, label: '6 Months' }, yearly: { price: 45, label: 'Yearly' } }
-  const crmUnlocked = tenant?.features?.accounting_crm === true
-  const [crmPeriod, setCrmPeriod] = useState('monthly')
-  const [crmPayMethod, setCrmPayMethod] = useState('paynow')
-  const [crmRequesting, setCrmRequesting] = useState(false)
-  const [pendingCrmRequest, setPendingCrmRequest] = useState(null)
+  // ─── Accounting & ERP add-on ($5/month flat — houses HR & Payroll and Invoicing) ───
+  const ERP_PRICING = { monthly: { price: 5, label: 'Monthly' }, quarterly: { price: 13, label: '3 Months' }, halfyear: { price: 24, label: '6 Months' }, yearly: { price: 45, label: 'Yearly' } }
+  const erpUnlocked = tenant?.features?.accounting_erp === true
+  const [erpPeriod, setErpPeriod] = useState('monthly')
+  const [erpPayMethod, setErpPayMethod] = useState('paynow')
+  const [erpRequesting, setErpRequesting] = useState(false)
+  const [pendingErpRequest, setPendingErpRequest] = useState(null)
 
-  const loadPendingCrmRequest = () => {
+  const loadPendingErpRequest = () => {
     if (!tenant?.id) return
     loadWithOfflineCache(
-      ['pendingCrmRequest', tenant.id],
+      ['pendingErpRequest', tenant.id],
       () => supabase
-        .from('accounting_crm_requests')
+        .from('accounting_erp_requests')
         .select('*')
         .eq('tenant_id', tenant.id)
         .eq('status', 'pending')
@@ -278,32 +278,32 @@ export default function Settings() {
         .limit(1)
         .maybeSingle()
         .then(({ data, error }) => { if (error) throw error; return data }),
-      { onData: setPendingCrmRequest },
+      { onData: setPendingErpRequest },
     )
   }
-  useEffect(loadPendingCrmRequest, [tenant?.id])
+  useEffect(loadPendingErpRequest, [tenant?.id])
 
-  const requestAccountingCrm = async () => {
-    setCrmRequesting(true)
+  const requestAccountingErp = async () => {
+    setErpRequesting(true)
     try {
-      const price = CRM_PRICING[crmPeriod]?.price
-      if (crmPayMethod === 'cash') {
-        const { error } = await supabase.from('accounting_crm_requests').insert({
+      const price = ERP_PRICING[erpPeriod]?.price
+      if (erpPayMethod === 'cash') {
+        const { error } = await supabase.from('accounting_erp_requests').insert({
           tenant_id: tenant.id,
-          period: crmPeriod,
+          period: erpPeriod,
           method: 'cash',
           amount: price,
         })
         if (error) throw error
-        toast.success('Request sent! Our team will confirm your cash payment and activate Accounting & CRM.')
-        setPendingCrmRequest({ status: 'pending', period: crmPeriod, method: 'cash' })
+        toast.success('Request sent! Our team will confirm your cash payment and activate Accounting & ERP.')
+        setPendingErpRequest({ status: 'pending', period: erpPeriod, method: 'cash' })
       } else {
         const { data: { session } } = await supabase.auth.getSession()
         const { data, error } = await supabase.functions.invoke('signup-checkout', {
           body: {
-            type: 'accounting_crm',
-            period: crmPeriod,
-            provider: crmPayMethod,
+            type: 'accounting_erp',
+            period: erpPeriod,
+            provider: erpPayMethod,
             return_url: `${window.location.origin}/app/settings`,
           },
           headers: { Authorization: `Bearer ${session?.access_token}` },
@@ -324,7 +324,7 @@ export default function Settings() {
     } catch (err) {
       toast.error(err.message || 'Could not submit request')
     } finally {
-      setCrmRequesting(false)
+      setErpRequesting(false)
     }
   }
 
@@ -1437,16 +1437,16 @@ export default function Settings() {
               </div>
             )}
 
-            {activeSection === 'accounting_crm' && (
+            {activeSection === 'accounting_erp' && (
               <div className="space-y-6">
                 <div className="flex items-start justify-between">
                   <div>
-                    <h3 className="text-lg font-bold text-slate-900 dark:text-white">Accounting & CRM</h3>
+                    <h3 className="text-lg font-bold text-slate-900 dark:text-white">Accounting & ERP</h3>
                     <p className="text-sm text-slate-500">
-                      Optional add-on — HR & Payroll and Invoicing, in one bundle. ${CRM_PRICING.monthly.price}/month.
+                      Optional add-on — HR & Payroll and Invoicing, in one bundle. ${ERP_PRICING.monthly.price}/month.
                     </p>
                   </div>
-                  {crmUnlocked && (
+                  {erpUnlocked && (
                     <span className="flex items-center gap-1.5 rounded-full bg-green-100 px-3 py-1 text-xs font-semibold text-green-700 dark:bg-green-950 dark:text-green-400">
                       <CheckCircle className="h-3.5 w-3.5" />
                       Active
@@ -1454,13 +1454,13 @@ export default function Settings() {
                   )}
                 </div>
 
-                {!crmUnlocked && (
+                {!erpUnlocked && (
                   <div className="rounded-2xl border-2 border-amber-300 bg-amber-50 p-5 dark:border-amber-700/50 dark:bg-amber-900/20">
-                    <h4 className="font-bold text-amber-900 dark:text-amber-200">Activate Accounting & CRM</h4>
-                    {pendingCrmRequest ? (
+                    <h4 className="font-bold text-amber-900 dark:text-amber-200">Activate Accounting & ERP</h4>
+                    {pendingErpRequest ? (
                       <p className="mt-2 text-sm text-amber-800 dark:text-amber-300">
                         Your cash payment request is <b>awaiting confirmation</b> by our team.
-                        Accounting & CRM unlocks as soon as it's approved.
+                        Accounting & ERP unlocks as soon as it's approved.
                       </p>
                     ) : (
                       <>
@@ -1468,12 +1468,12 @@ export default function Settings() {
                           Choose a period, pay online or by cash, and it unlocks automatically.
                         </p>
                         <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
-                          {Object.entries(CRM_PRICING).map(([key, p]) => (
+                          {Object.entries(ERP_PRICING).map(([key, p]) => (
                             <button
                               key={key}
-                              onClick={() => setCrmPeriod(key)}
+                              onClick={() => setErpPeriod(key)}
                               className={`rounded-xl border px-3 py-2.5 text-left transition-colors ${
-                                crmPeriod === key
+                                erpPeriod === key
                                   ? 'border-amber-600 bg-white dark:bg-slate-900'
                                   : 'border-amber-200 bg-white/60 hover:border-amber-400 dark:border-amber-800/40 dark:bg-white/5'
                               }`}
@@ -1491,9 +1491,9 @@ export default function Settings() {
                           ].map((m) => (
                             <button
                               key={m.key}
-                              onClick={() => setCrmPayMethod(m.key)}
+                              onClick={() => setErpPayMethod(m.key)}
                               className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${
-                                crmPayMethod === m.key
+                                erpPayMethod === m.key
                                   ? 'bg-amber-600 text-white'
                                   : 'bg-white text-slate-600 hover:bg-amber-100 dark:bg-white/10 dark:text-slate-300'
                               }`}
@@ -1503,29 +1503,29 @@ export default function Settings() {
                           ))}
                         </div>
                         <button
-                          onClick={requestAccountingCrm}
-                          disabled={crmRequesting}
+                          onClick={requestAccountingErp}
+                          disabled={erpRequesting}
                           className="mt-4 w-full rounded-xl bg-amber-600 py-2.5 text-sm font-bold text-white hover:bg-amber-700 disabled:opacity-60 sm:w-auto sm:px-6"
                         >
-                          {crmRequesting
+                          {erpRequesting
                             ? 'Processing…'
-                            : crmPayMethod === 'cash'
-                              ? `Request Accounting & CRM — $${CRM_PRICING[crmPeriod]?.price} cash`
-                              : `Request Accounting & CRM — pay $${CRM_PRICING[crmPeriod]?.price} now`}
+                            : erpPayMethod === 'cash'
+                              ? `Request Accounting & ERP — $${ERP_PRICING[erpPeriod]?.price} cash`
+                              : `Request Accounting & ERP — pay $${ERP_PRICING[erpPeriod]?.price} now`}
                         </button>
                       </>
                     )}
                   </div>
                 )}
 
-                {crmUnlocked && tenant?.accounting_crm_expires_at && (
+                {erpUnlocked && tenant?.accounting_erp_expires_at && (
                   <div className="flex items-center gap-2 rounded-xl border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800 dark:border-green-800/50 dark:bg-green-900/20 dark:text-green-300">
                     <CheckCircle className="h-4 w-4 flex-shrink-0" />
-                    Accounting & CRM add-on active until {new Date(tenant.accounting_crm_expires_at).toLocaleDateString('en-GB')}
+                    Accounting & ERP add-on active until {new Date(tenant.accounting_erp_expires_at).toLocaleDateString('en-GB')}
                   </div>
                 )}
 
-                {crmUnlocked && (
+                {erpUnlocked && (
                   <div className="flex flex-wrap gap-2">
                     <Button variant="secondary" onClick={() => window.location.assign('/app/hr')}>
                       Open HR & Payroll

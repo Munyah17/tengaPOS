@@ -60,21 +60,21 @@ serve(async (req) => {
 
     if (paid && checkout.status !== 'paid') {
       const isFiscal = String(checkout.plan_type).startsWith('fiscal_')
-      const isAccountingCrm = String(checkout.plan_type).startsWith('crm_')
+      const isAccountingErp = String(checkout.plan_type).startsWith('erp_')
       const isAiInsights = String(checkout.plan_type).startsWith('ai_')
       const FISCAL_MONTHS: Record<string, number> = {
         fiscal_monthly: 1, fiscal_quarterly: 3, fiscal_halfyear: 6, fiscal_yearly: 12,
       }
-      const CRM_MONTHS: Record<string, number> = {
-        crm_monthly: 1, crm_quarterly: 3, crm_halfyear: 6, crm_yearly: 12,
+      const ERP_MONTHS: Record<string, number> = {
+        erp_monthly: 1, erp_quarterly: 3, erp_halfyear: 6, erp_yearly: 12,
       }
       const AI_MONTHS: Record<string, number> = {
         ai_monthly: 1, ai_quarterly: 3, ai_halfyear: 6, ai_yearly: 12,
       }
       const months = isFiscal
         ? (FISCAL_MONTHS[checkout.plan_type] || 1)
-        : isAccountingCrm
-        ? (CRM_MONTHS[checkout.plan_type] || 1)
+        : isAccountingErp
+        ? (ERP_MONTHS[checkout.plan_type] || 1)
         : isAiInsights
         ? (AI_MONTHS[checkout.plan_type] || 1)
         : (PLAN_MONTHS[checkout.plan_type] || 6)
@@ -89,12 +89,12 @@ serve(async (req) => {
           features: { ...(t?.features || {}), fiscalisation: true },
           fiscal_expires_at: renewal.toISOString(),
         }).eq('id', checkout.tenant_id)
-      } else if (isAccountingCrm) {
-        // Unlock the Accounting & CRM bundle (HR & Payroll, Invoicing) for the paid period
+      } else if (isAccountingErp) {
+        // Unlock the Accounting & ERP bundle (HR & Payroll, Invoicing) for the paid period
         const { data: t } = await admin.from('tenants').select('features').eq('id', checkout.tenant_id).maybeSingle()
         await admin.from('tenants').update({
-          features: { ...(t?.features || {}), accounting_crm: true },
-          accounting_crm_expires_at: renewal.toISOString(),
+          features: { ...(t?.features || {}), accounting_erp: true },
+          accounting_erp_expires_at: renewal.toISOString(),
         }).eq('id', checkout.tenant_id)
       } else if (isAiInsights) {
         // Unlock AI Insights for the paid period
