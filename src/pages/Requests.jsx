@@ -9,13 +9,14 @@ import { useState, useEffect, useCallback } from 'react'
 import { Link } from 'react-router-dom'
 import {
   Inbox, Printer, Ban, Undo2, CreditCard, CheckCircle, XCircle,
-  ShieldCheck, ChevronRight, RefreshCw,
+  ShieldCheck, ChevronRight, RefreshCw, ClipboardEdit,
 } from 'lucide-react'
 import { useAuthStore } from '@/stores/authStore'
 import {
   fetchVendorRequests, approveReceiptConfig, rejectReceiptConfig,
   approveVoid, validateVoid, rejectVoid,
   approveReturn, validateReturn, rejectReturn,
+  approveConfigChange, rejectConfigChange,
 } from '@/lib/db'
 import { loadWithOfflineCache } from '@/lib/offlineCache'
 import { formatCurrency } from '@/utils/formatters'
@@ -25,6 +26,23 @@ const TEMPLATE_LABELS = {
   zimra_default: 'ZIMRA Default Receipt',
   zimra_customized: 'ZIMRA + Customisation',
   fully_customized: 'Fully Customized Receipt',
+}
+
+const CONFIG_AREA_LABEL = { general: 'General Settings', receipts_config: 'Receipts Config' }
+const CONFIG_FIELD_LABEL = {
+  name: 'Business Name', currency: 'Currency', template_mode: 'Template', store_name: 'Store Name',
+  store_address: 'Store Address', store_contacts: 'Store Contacts', tin: 'TIN', vat_number: 'VAT Reg No.',
+  footer_message: 'Footer Message', header_message: 'Header Message', paper_width_mm: 'Paper Size',
+  printer_connection: 'Printer Connection', show_pos_print: 'POS Printer Button',
+}
+
+// Only the fields that actually changed, old → new — so the Vendor can see
+// what's different at a glance instead of a full dump of every field.
+function diffValues(oldValues, newValues) {
+  const keys = [...new Set([...Object.keys(oldValues || {}), ...Object.keys(newValues || {})])]
+  return keys
+    .filter((k) => CONFIG_FIELD_LABEL[k] && JSON.stringify(oldValues?.[k]) !== JSON.stringify(newValues?.[k]))
+    .map((k) => ({ label: CONFIG_FIELD_LABEL[k], from: oldValues?.[k], to: newValues?.[k] }))
 }
 
 function Section({ icon: Icon, title, count, children }) {
@@ -65,7 +83,7 @@ function ActionButton({ onClick, tone, children }) {
 
 export default function Requests() {
   const { tenant } = useAuthStore()
-  const [requests, setRequests] = useState({ receiptConfigs: [], voids: [], returns: [], payments: [], total: 0 })
+  const [requests, setRequests] = useState({ receiptConfigs: [], voids: [], returns: [], payments: [], configChanges: [], total: 0 })
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
 
@@ -133,6 +151,39 @@ export default function Requests() {
         <div className="flex h-40 items-center justify-center text-slate-500">Loading…</div>
       ) : (
         <div className="space-y-5">
+          {/* Shop Manager config changes — applied immediately, revert automatically if not approved within 48h */}
+          <Section icon={ClipboardEdit} title="Config Changes" count={requests.configChanges.length}>
+            {requests.configChanges.map((c) => {
+              const diff = diffValues(c.old_values, c.new_values)
+              const hoursLeft = Math.max(0, Math.round((new Date(c.expires_at) - Date.now()) / 3600000))
+              return (
+                <div key={c.id} className="flex flex-wrap items-center gap-3 px-5 py-4">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-semibold text-slate-900 dark:text-white">
+                      {CONFIG_AREA_LABEL[c.config_area] || c.config_area} · by {c.submitter?.name || 'Unknown'}
+                    </p>
+                    {diff.length > 0 && (
+                      <div className="mt-1 space-y-0.5">
+                        {diff.map((d) => (
+                          <p key={d.label} className="text-xs text-slate-500">
+                            {d.label}: <span className="line-through">{String(d.from ?? '—')}</span> → <span className="font-medium text-slate-700 dark:text-slate-300">{String(d.to ?? '—')}</span>
+                          </p>
+                        ))}
+                      </div>
+                    )}
+                    <p className="mt-0.5 text-xs text-amber-500">
+                      Already live — reverts automatically in {hoursLeft}h if not approved · submitted {when(c.created_at)}
+                    </p>
+                  </div>
+                  <div className="flex flex-shrink-0 gap-2">
+                    <ActionButton tone="approve" onClick={() => act(approveConfigChange, 'Approved')(c.id)}>Approve</ActionButton>
+                    <ActionButton tone="reject" onClick={() => act(rejectConfigChange, 'Rejected — reverted')(c.id)}>Reject</ActionButton>
+                  </div>
+                </div>
+              )
+            })}
+          </Section>
+
           {/* Receipt config changes */}
           <Section icon={Printer} title="Receipt Config Changes" count={requests.receiptConfigs.length}>
             {requests.receiptConfigs.map((c) => (

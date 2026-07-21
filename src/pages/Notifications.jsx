@@ -4,10 +4,10 @@ import { useThemeStore } from '@/stores/themeStore'
 import { useTenantNotifications } from '@/hooks/useTenantNotifications'
 
 export default function Notifications() {
-  const { tenant, role } = useAuthStore()
+  const { tenant, role, profile } = useAuthStore()
   const { posMode } = useThemeStore()
   const { notifications, markAllRead, markRead } = useTenantNotifications({
-    tenantId: tenant?.id, posMode, role, limit: 100,
+    tenantId: tenant?.id, posMode, role, userId: profile?.id, limit: 100,
   })
   const unread = notifications.filter((n) => n.unread).length
 

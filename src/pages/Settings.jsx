@@ -18,6 +18,7 @@ import { CURRENCIES, PAYMENT_PROVIDERS } from '@/utils/constants'
 import {
   fetchAllTenantData, fetchBranches, fetchReceiptConfigs,
   submitReceiptConfig, approveReceiptConfig, rejectReceiptConfig,
+  submitConfigChange, fetchPendingConfigChanges,
 } from '@/lib/db'
 import { loadWithOfflineCache } from '@/lib/offlineCache'
 import { INDUSTRIES } from '@/lib/whitelabelTheme'
@@ -51,11 +52,26 @@ export default function Settings() {
   const visibleSections = role === 'shop_manager'
     ? sections.filter((s) => !SHOP_MANAGER_HIDDEN_SECTIONS.includes(s.id))
     : sections
+  const isShopManager = role === 'shop_manager'
 
   useEffect(() => {
     if (!visibleSections.some((s) => s.id === activeSection)) setActiveSection('general')
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [role])
+
+  // Shop Manager edits apply immediately but revert automatically if the
+  // Vendor hasn't approved within 48 hours — this tracks anything still
+  // awaiting that decision so the editor can see their own submission status.
+  const [pendingChanges, setPendingChanges] = useState([])
+  const loadPendingChanges = () => {
+    if (!tenant?.id) return
+    fetchPendingConfigChanges(tenant.id).then(setPendingChanges).catch(() => {})
+  }
+  useEffect(loadPendingChanges, [tenant?.id])
+  const findPendingChange = (configArea, receiptBranchId = null) =>
+    pendingChanges.find((c) => c.status === 'pending' && c.config_area === configArea
+      && (configArea !== 'receipts_config' || (c.receipt_branch_id || null) === (receiptBranchId || null)))
+  const hoursLeft = (expiresAt) => Math.max(0, Math.round((new Date(expiresAt) - new Date()) / 3600000))
 
   // ─── Receipts Config: real, persisted receipt branding/paper/template ───
   const RECEIPT_TEMPLATES = [
@@ -114,12 +130,29 @@ export default function Settings() {
   const handleSaveReceiptConfig = async () => {
     setSavingReceiptConfig(true)
     try {
-      await submitReceiptConfig({ ...receiptForm, branchId: scopeBranchId || null })
-      toast.success(
-        role === 'shop_manager'
-          ? 'Submitted — awaiting the business owner\'s approval'
-          : 'Receipt config saved',
-      )
+      if (isShopManager) {
+        // Applies immediately and reverts automatically if the Vendor
+        // hasn't approved it within 48 hours — see submit_config_change.
+        await submitConfigChange(tenant.id, homeBranch?.id, 'receipts_config', scopeBranchId || null, {
+          template_mode: receiptForm.templateMode,
+          store_name: receiptForm.storeName,
+          store_address: receiptForm.storeAddress,
+          store_contacts: receiptForm.storeContacts,
+          tin: receiptForm.tin,
+          vat_number: receiptForm.vatNumber,
+          footer_message: receiptForm.footerMessage,
+          paper_width_mm: receiptForm.paperWidthMm,
+          printer_connection: receiptForm.printerConnection,
+          show_pos_print: receiptForm.showPosPrint,
+          header_message: receiptForm.headerMessage,
+          custom_lines: receiptForm.customLines,
+        })
+        toast.success("Receipt config updated — awaiting the owner's approval (reverts automatically in 48h if not approved)")
+        loadPendingChanges()
+      } else {
+        await submitReceiptConfig({ ...receiptForm, branchId: scopeBranchId || null })
+        toast.success('Receipt config saved')
+      }
       loadReceiptConfigs()
     } catch (err) {
       toast.error(err.message || 'Failed to save receipt config')
@@ -426,15 +459,72 @@ export default function Settings() {
     }
   }, [tenant])
 
+  // ─── VAT: free platform-gated request — Vendor requests, Super Admin
+  // approves. Once unlocked, the toggle above is a normal free switch,
+  // Vendor-only (Shop Managers see it but can't touch it). ───
+  const vatUnlocked = tenant?.features?.vat === true
+  const [vatNumberInput, setVatNumberInput] = useState('')
+  const [vatRequestNotes, setVatRequestNotes] = useState('')
+  const [vatRequesting, setVatRequesting] = useState(false)
+  const [pendingVatRequest, setPendingVatRequest] = useState(null)
+
+  const loadPendingVatRequest = () => {
+    if (!tenant?.id) return
+    loadWithOfflineCache(
+      ['pendingVatRequest', tenant.id],
+      () => supabase
+        .from('vat_requests')
+        .select('*')
+        .eq('tenant_id', tenant.id)
+        .eq('status', 'pending')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+        .then(({ data, error }) => { if (error) throw error; return data }),
+      { onData: setPendingVatRequest },
+    )
+  }
+  useEffect(loadPendingVatRequest, [tenant?.id])
+
+  const requestVat = async () => {
+    setVatRequesting(true)
+    try {
+      const { error } = await supabase.from('vat_requests').insert({
+        tenant_id: tenant.id,
+        vat_number: vatNumberInput.trim() || null,
+        notes: vatRequestNotes.trim() || null,
+      })
+      if (error) throw error
+      toast.success('Request sent! Our team will verify and enable VAT on your account.')
+      setPendingVatRequest({ status: 'pending' })
+    } catch (err) {
+      toast.error(err.message || 'Could not submit request')
+    } finally {
+      setVatRequesting(false)
+    }
+  }
+
   const handleSaveGeneral = async () => {
     setGeneralSaving(true)
     try {
-      const { error } = await supabase
-        .from('tenants')
-        .update({ name: businessName.trim(), currency, vat_enabled: vatEnabled, vat_rate: Number(vatRate) || 15.5 })
-        .eq('id', tenant.id)
-      if (error) throw error
-      toast.success('Settings saved')
+      if (isShopManager) {
+        // Applies immediately and reverts automatically if the Vendor
+        // hasn't approved it within 48 hours. VAT never goes through this
+        // path — Shop Managers can't see or edit it at all (see below).
+        await submitConfigChange(tenant.id, homeBranch?.id, 'general', null, {
+          name: businessName.trim(),
+          currency,
+        })
+        toast.success("Settings updated — awaiting the owner's approval (reverts automatically in 48h if not approved)")
+        loadPendingChanges()
+      } else {
+        const { error } = await supabase
+          .from('tenants')
+          .update({ name: businessName.trim(), currency, vat_enabled: vatEnabled, vat_rate: Number(vatRate) || 15.5 })
+          .eq('id', tenant.id)
+        if (error) throw error
+        toast.success('Settings saved')
+      }
       await initAuth()
     } catch (err) {
       toast.error(err.message || 'Failed to save settings')
@@ -650,6 +740,13 @@ export default function Settings() {
             {activeSection === 'general' && (
               <div className="space-y-6">
                 <h3 className="text-lg font-bold text-slate-900 dark:text-white">General Settings</h3>
+
+                {isShopManager && findPendingChange('general') && (
+                  <div className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-700/60 dark:bg-amber-900/20 dark:text-amber-300">
+                    Awaiting the owner's approval — reverts automatically in {hoursLeft(findPendingChange('general').expires_at)}h if not approved.
+                  </div>
+                )}
+
                 <div>
                   <label className="mb-1.5 block text-sm font-medium text-slate-700 dark:text-slate-300">Business Name</label>
                   <input
@@ -672,41 +769,87 @@ export default function Settings() {
                   </select>
                 </div>
 
-                {/* VAT — inclusive pricing, tenant can switch off entirely */}
-                <div className="rounded-xl border border-slate-200 p-4 dark:border-slate-700">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <span className="text-sm font-semibold text-slate-900 dark:text-white">VAT (Value Added Tax)</span>
-                      <p className="text-xs text-slate-500">Shelf prices already include VAT — nothing is added at checkout.</p>
+                {/* VAT — free, but platform-gated: the Vendor must request it
+                    and have it verified/approved before it can be turned on.
+                    Once unlocked, it's a normal free switch — Vendor-only,
+                    Shop Managers see it greyed out, never editable. */}
+                {!vatUnlocked ? (
+                  !isShopManager && (
+                    <div className="rounded-2xl border-2 border-amber-300 bg-amber-50 p-5 dark:border-amber-700/50 dark:bg-amber-900/20">
+                      <h4 className="font-bold text-amber-900 dark:text-amber-200">Enable VAT</h4>
+                      {pendingVatRequest ? (
+                        <p className="mt-2 text-sm text-amber-800 dark:text-amber-300">
+                          Your request is <b>awaiting verification</b> by our team.
+                        </p>
+                      ) : (
+                        <>
+                          <p className="mt-1 text-sm text-amber-800 dark:text-amber-300">
+                            Free — we just verify your VAT registration first.
+                          </p>
+                          <div className="mt-3 space-y-2">
+                            <input
+                              type="text"
+                              value={vatNumberInput}
+                              onChange={(e) => setVatNumberInput(e.target.value)}
+                              placeholder="Your VAT registration number"
+                              className="w-full rounded-xl border border-amber-200 bg-white px-3 py-2 text-sm dark:border-amber-800/40 dark:bg-slate-900 dark:text-white"
+                            />
+                            <textarea
+                              value={vatRequestNotes}
+                              onChange={(e) => setVatRequestNotes(e.target.value)}
+                              placeholder="Anything else we should know? (optional)"
+                              rows={2}
+                              className="w-full rounded-xl border border-amber-200 bg-white px-3 py-2 text-sm dark:border-amber-800/40 dark:bg-slate-900 dark:text-white"
+                            />
+                          </div>
+                          <button
+                            onClick={requestVat}
+                            disabled={vatRequesting}
+                            className="mt-3 w-full rounded-xl bg-amber-600 py-2.5 text-sm font-bold text-white hover:bg-amber-700 disabled:opacity-60 sm:w-auto sm:px-6"
+                          >
+                            {vatRequesting ? 'Sending…' : 'Request VAT'}
+                          </button>
+                        </>
+                      )}
                     </div>
-                    <label className="relative inline-flex cursor-pointer items-center">
+                  )
+                ) : (
+                  <div className="rounded-xl border border-slate-200 p-4 dark:border-slate-700">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <span className="text-sm font-semibold text-slate-900 dark:text-white">VAT (Value Added Tax)</span>
+                        <p className="text-xs text-slate-500">Shelf prices already include VAT — nothing is added at checkout.</p>
+                      </div>
+                      <label className={`relative inline-flex items-center ${isShopManager ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}`}>
+                        <input
+                          type="checkbox"
+                          checked={vatEnabled}
+                          disabled={isShopManager}
+                          onChange={(e) => !isShopManager && setVatEnabledLocal(e.target.checked)}
+                          className="peer sr-only"
+                        />
+                        <div className="peer h-5 w-9 rounded-full bg-slate-300 after:absolute after:left-[2px] after:top-[2px] after:h-4 after:w-4 after:rounded-full after:bg-white after:transition-all peer-checked:bg-brand-600 peer-checked:after:translate-x-full dark:bg-slate-600" />
+                      </label>
+                    </div>
+                    {/* Rate field stays visible but locked while VAT is off, or for Shop Managers always */}
+                    <div className="mt-3">
+                      <label className="mb-1 block text-xs font-medium text-slate-500">VAT Rate (%)</label>
                       <input
-                        type="checkbox"
-                        checked={vatEnabled}
-                        onChange={(e) => setVatEnabledLocal(e.target.checked)}
-                        className="peer sr-only"
+                        type="number"
+                        step="0.1"
+                        value={vatRate}
+                        onChange={(e) => setVatRate(e.target.value)}
+                        disabled={!vatEnabled || isShopManager}
+                        className="w-32 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm disabled:cursor-not-allowed disabled:bg-slate-100 disabled:opacity-60 dark:border-slate-700 dark:bg-slate-800 dark:text-white dark:disabled:bg-slate-900"
                       />
-                      <div className="peer h-5 w-9 rounded-full bg-slate-300 after:absolute after:left-[2px] after:top-[2px] after:h-4 after:w-4 after:rounded-full after:bg-white after:transition-all peer-checked:bg-brand-600 peer-checked:after:translate-x-full dark:bg-slate-600" />
-                    </label>
+                    </div>
+                    {!vatEnabled && (
+                      <p className="mt-2 text-xs text-amber-600 dark:text-amber-400">
+                        VAT is disabled.
+                      </p>
+                    )}
                   </div>
-                  {/* Rate field stays visible but locked while VAT is off */}
-                  <div className="mt-3">
-                    <label className="mb-1 block text-xs font-medium text-slate-500">VAT Rate (%)</label>
-                    <input
-                      type="number"
-                      step="0.1"
-                      value={vatRate}
-                      onChange={(e) => setVatRate(e.target.value)}
-                      disabled={!vatEnabled}
-                      className="w-32 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm disabled:cursor-not-allowed disabled:bg-slate-100 disabled:opacity-60 dark:border-slate-700 dark:bg-slate-800 dark:text-white dark:disabled:bg-slate-900"
-                    />
-                  </div>
-                  {!vatEnabled && (
-                    <p className="mt-2 text-xs text-amber-600 dark:text-amber-400">
-                      VAT is disabled.
-                    </p>
-                  )}
-                </div>
+                )}
 
                 <Button onClick={handleSaveGeneral} disabled={generalSaving}>
                   {generalSaving ? 'Saving…' : 'Save Changes'}
@@ -1426,9 +1569,15 @@ export default function Settings() {
                   <h3 className="text-lg font-bold text-slate-900 dark:text-white">Receipts Config</h3>
                   <p className="mt-1 text-sm text-slate-500">
                     What actually prints on the receipt — store details, TIN, paper size, and layout.
-                    {role === 'shop_manager' && ' Changes to your branch need the business owner\'s approval before they take effect.'}
+                    {role === 'shop_manager' && " Changes take effect right away, but revert automatically if the business owner hasn't approved them within 48 hours."}
                   </p>
                 </div>
+
+                {isShopManager && findPendingChange('receipts_config', scopeBranchId || null) && (
+                  <div className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-700/60 dark:bg-amber-900/20 dark:text-amber-300">
+                    Awaiting the owner's approval — reverts automatically in {hoursLeft(findPendingChange('receipts_config', scopeBranchId || null).expires_at)}h if not approved.
+                  </div>
+                )}
 
                 {/* Vendor: pending approval queue */}
                 {role === 'vendor' && pendingConfigs.length > 0 && (

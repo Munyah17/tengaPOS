@@ -14,7 +14,7 @@ import { useAuthStore } from '@/stores/authStore'
 import { PAYMENT_METHODS } from '@/utils/constants'
 import { formatCurrency, generateReceiptNumber } from '@/utils/formatters'
 import { initiatePaynowCheckout } from '@/lib/paynow'
-import { fetchProducts, saveCheckout } from '@/lib/db'
+import { fetchProducts, saveCheckout, fetchStaff } from '@/lib/db'
 import { getOfflineProducts, queueOfflineSale } from '@/lib/offlineSync'
 import { supabase } from '@/lib/supabase'
 import { useFiscalStore } from '@/stores/fiscalStore'
@@ -44,6 +44,12 @@ export default function POS() {
   const [searchFocused, setSearchFocused] = useState(false)
   const [checkingOut, setCheckingOut] = useState(false)
   const [amountTendered, setAmountTendered] = useState('')
+  const [staffList, setStaffList] = useState([])
+  const [showSalesperson, setShowSalesperson] = useState(false)
+  const [salespersonMode, setSalespersonMode] = useState('staff') // 'staff' | 'manual'
+  const [salespersonStaffId, setSalespersonStaffId] = useState('')
+  const [salespersonManualName, setSalespersonManualName] = useState('')
+  const [salespersonManualEmpNo, setSalespersonManualEmpNo] = useState('')
   const videoRef = useRef(null)
   const scanStreamRef = useRef(null)
   const fmt = (n) => formatCurrency(n, tenant?.currency)
@@ -82,6 +88,15 @@ export default function POS() {
     if (tenant) cart.setVatConfig(tenant.vat_enabled, tenant.vat_rate)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tenant?.vat_enabled, tenant?.vat_rate])
+
+  // Staff available to pick as Salesperson — scoped to this branch when one
+  // is set, otherwise every staff member on the tenant.
+  useEffect(() => {
+    if (!tenant?.id) return
+    fetchStaff(tenant.id)
+      .then((rows) => setStaffList(branch?.id ? rows.filter((r) => r.branch_id === branch.id) : rows))
+      .catch(() => {})
+  }, [tenant?.id, branch?.id])
 
   // ─── Camera barcode scanning (phone/tablet camera via BarcodeDetector) ───
   const stopScanner = () => {
@@ -173,6 +188,25 @@ export default function POS() {
   const changeDue = Math.max(0, tenderedAmount - cart.getGrandTotal())
   const cashShortfall = cart.paymentMethod === 'cash' && amountTendered !== '' && tenderedAmount < cart.getGrandTotal()
 
+  // Resolved only if the cashier actually opened the Salesperson section and
+  // it has a name either way (picked from staff, or typed in). Left blank
+  // otherwise so the receipt stays silent about it — no "Salesperson: —" line.
+  const selectedSalesperson = staffList.find((s) => s.id === salespersonStaffId)
+  const salespersonName = !showSalesperson ? ''
+    : salespersonMode === 'staff' ? (selectedSalesperson?.name || '')
+    : salespersonManualName.trim()
+  const salespersonEmployeeNo = !showSalesperson ? ''
+    : salespersonMode === 'staff' ? (selectedSalesperson?.employee_no || '')
+    : salespersonManualEmpNo.trim()
+
+  const resetSalesperson = () => {
+    setShowSalesperson(false)
+    setSalespersonMode('staff')
+    setSalespersonStaffId('')
+    setSalespersonManualName('')
+    setSalespersonManualEmpNo('')
+  }
+
   const handleCheckout = async () => {
     if (cart.items.length === 0) {
       toast.error('Cart is empty')
@@ -205,6 +239,13 @@ export default function POS() {
         total,
         posMode,
         orderType: isRestaurant ? (cart.orderType || 'counter') : 'sale',
+        // Generated once, up front, and reused on every retry (live retry
+        // via the offline queue, or a background sync replay) so a retried
+        // sale is recognized as the same sale server-side instead of being
+        // processed — and stock-decremented — a second time.
+        receiptNo: receiptNumber,
+        salespersonName: salespersonName || null,
+        salespersonEmployeeNo: salespersonEmployeeNo || null,
       }
 
       if (!navigator.onLine) {
@@ -296,12 +337,15 @@ export default function POS() {
       currency: tenant?.currency,
       amountTendered: cart.paymentMethod === 'cash' && tenderedAmount > 0 ? tenderedAmount : null,
       changeDue: cart.paymentMethod === 'cash' && tenderedAmount > 0 ? changeDue : null,
+      salespersonName: salespersonName || null,
+      salespersonEmployeeNo: salespersonEmployeeNo || null,
     }
     setReceiptData(receipt)
     setShowReceipt(true)
     setShowMobileCart(false)
     cart.clearCart()
     setAmountTendered('')
+    resetSalesperson()
     setCheckingOut(false)
     toast.success(isRestaurant ? 'Order sent to kitchen!' : 'Transaction completed!')
   }
@@ -691,7 +735,71 @@ export default function POS() {
               </button>
             )}
           </div>
-          <div className="space-y-1">
+
+          {/* Salesperson — optional, distinct from the cashier. Silent on
+              the receipt entirely unless one is actually picked/typed. */}
+          {!showSalesperson ? (
+            <button
+              onClick={() => setShowSalesperson(true)}
+              className="mt-2 flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-brand-600 dark:hover:text-brand-400"
+            >
+              + Add Salesperson
+            </button>
+          ) : (
+            <div className="mt-2 rounded-xl border border-slate-200 p-2.5 dark:border-slate-700">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-xs font-semibold uppercase text-slate-500">Salesperson</span>
+                <button onClick={resetSalesperson} className="text-xs font-semibold text-red-500 hover:underline">
+                  Remove
+                </button>
+              </div>
+              <div className="mt-1.5 flex gap-1.5">
+                <button
+                  onClick={() => setSalespersonMode('staff')}
+                  className={`flex-1 rounded-lg border py-1 text-xs font-medium ${salespersonMode === 'staff' ? 'border-brand-500 bg-brand-50 text-brand-700 dark:bg-brand-950 dark:text-brand-400' : 'border-slate-200 text-slate-600 dark:border-slate-700 dark:text-slate-400'}`}
+                >
+                  Select Staff
+                </button>
+                <button
+                  onClick={() => setSalespersonMode('manual')}
+                  className={`flex-1 rounded-lg border py-1 text-xs font-medium ${salespersonMode === 'manual' ? 'border-brand-500 bg-brand-50 text-brand-700 dark:bg-brand-950 dark:text-brand-400' : 'border-slate-200 text-slate-600 dark:border-slate-700 dark:text-slate-400'}`}
+                >
+                  Type Manually
+                </button>
+              </div>
+              {salespersonMode === 'staff' ? (
+                <select
+                  value={salespersonStaffId}
+                  onChange={(e) => setSalespersonStaffId(e.target.value)}
+                  className="mt-1.5 w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                >
+                  <option value="">Select staff…</option>
+                  {staffList.map((s) => (
+                    <option key={s.id} value={s.id}>{s.name}{s.employee_no ? ` (${s.employee_no})` : ''}</option>
+                  ))}
+                </select>
+              ) : (
+                <div className="mt-1.5 space-y-1.5">
+                  <input
+                    type="text"
+                    value={salespersonManualName}
+                    onChange={(e) => setSalespersonManualName(e.target.value)}
+                    placeholder="Salesperson name"
+                    className="w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                  />
+                  <input
+                    type="text"
+                    value={salespersonManualEmpNo}
+                    onChange={(e) => setSalespersonManualEmpNo(e.target.value)}
+                    placeholder="Employee number (optional)"
+                    className="w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                  />
+                </div>
+              )}
+            </div>
+          )}
+
+          <div className="mt-3 space-y-1">
             {cart.discount > 0 && (
               <div className="flex justify-between text-sm">
                 <span className="text-slate-500">

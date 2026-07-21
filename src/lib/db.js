@@ -1,6 +1,15 @@
 import { supabase } from '@/lib/supabase'
 import { generateReceiptNumber } from '@/utils/formatters'
 
+// Parses a price input into an exact 2-decimal number. Guards against any
+// upstream float artifact (browser input quirks, a CSV/Excel export like
+// 9.999999999999998) ever reaching the database as anything other than
+// exactly what the user typed — money is never left to raw parseFloat.
+function parseMoney(value) {
+  const n = parseFloat(value)
+  return Number.isFinite(n) ? Math.round(n * 100) / 100 : 0
+}
+
 // ─── Products ────────────────────────────────────────────────────────────────
 
 export async function fetchProducts(tenantId) {
@@ -30,10 +39,10 @@ export async function insertProduct(tenantId, product) {
       brand: product.brand || null,
       sku: product.sku || null,
       barcode: product.barcode || null,
-      price: parseFloat(product.price),
+      price: parseMoney(product.price),
       // landing price (what it cost you) — powers margins & AI insights
-      cost_price: product.landingPrice ? parseFloat(product.landingPrice)
-        : product.costPrice ? parseFloat(product.costPrice) : null,
+      cost_price: product.landingPrice ? parseMoney(product.landingPrice)
+        : product.costPrice ? parseMoney(product.costPrice) : null,
       stock_qty: parseInt(product.stock) || 0,
       low_stock_threshold: parseInt(product.lowStockThreshold) || 10,
       unit: product.unit || null,
@@ -59,8 +68,8 @@ export async function updateProduct(id, updates) {
       brand: updates.brand || null,
       sku: updates.sku || null,
       barcode: updates.barcode || null,
-      price: parseFloat(updates.price),
-      cost_price: updates.landingPrice ? parseFloat(updates.landingPrice) : null,
+      price: parseMoney(updates.price),
+      cost_price: updates.landingPrice ? parseMoney(updates.landingPrice) : null,
       stock_qty: parseInt(updates.stock) || 0,
       low_stock_threshold: parseInt(updates.lowStockThreshold) || 10,
       image_url: updates.imageUrl || null,
@@ -113,63 +122,21 @@ export async function deleteProduct(id) {
 
 // ─── Checkout / POS ──────────────────────────────────────────────────────────
 
-export async function saveCheckout({ tenantId, branchId, userId, cartItems, paymentMethod, subtotal, tax, total, posMode, orderType }) {
-  const receiptNo = generateReceiptNumber()
+export async function saveCheckout({ tenantId, branchId, userId, cartItems, paymentMethod, subtotal, tax, total, posMode, orderType, receiptNo: receiptNoIn, salespersonName, salespersonEmployeeNo }) {
+  // The receipt number is the idempotency key: the caller generates it once,
+  // up front, and reuses the SAME value on every retry (a live retry queued
+  // after a network blip, or an offline-sync replay). process_checkout runs
+  // the stock reservation + order + order_items + transaction as one atomic,
+  // idempotent call — if this exact receipt was already processed, it
+  // returns that order instead of reprocessing it. Without this, a retry
+  // used to decrement stock again and create a fully duplicate sale, because
+  // the old code generated a fresh receipt number on every call.
+  const receiptNo = receiptNoIn || generateReceiptNumber()
 
-  // 0. Reserve stock ATOMICALLY before anything else — the database refuses
-  //    the sale if any line would oversell (fixes selling 3 when 2 in stock)
-  const decremented = []
-  for (const item of cartItems) {
-    const pid = item.id
-    if (pid && typeof pid === 'string' && pid.length === 36) {
-      const { error } = await supabase.rpc('decrement_stock', { p_product_id: pid, p_qty: item.quantity })
-      if (error) {
-        // Roll back any lines already reserved, then surface a clear message
-        for (const done of decremented) {
-          const { data: p } = await supabase.from('products').select('stock_qty').eq('id', done.pid).single()
-          if (p) {
-            await supabase.from('products')
-              .update({ stock_qty: (p.stock_qty ?? 0) + done.restoreBy, updated_at: new Date().toISOString() })
-              .eq('id', done.pid)
-          }
-        }
-        throw new Error(error.message?.includes('Insufficient stock')
-          ? error.message
-          : `Stock check failed: ${error.message}`)
-      }
-      decremented.push({ pid, restoreBy: item.quantity })
-    }
-  }
-
-  // Discount actually applied (item-level + cart-level combined), derived by
-  // comparing the pre-discount gross to the post-discount total the cart
-  // already computed — no need to re-derive the cart-level percent here.
   const grossTotal = cartItems.reduce((sum, item) => sum + item.price * item.quantity, 0)
   const discountAmount = Math.max(0, grossTotal - total)
 
-  // 1. Create order
-  const { data: order, error: orderError } = await supabase
-    .from('orders')
-    .insert({
-      tenant_id: tenantId,
-      branch_id: branchId || null,
-      served_by: userId || null,
-      order_no: receiptNo,
-      status: posMode === 'restaurant' ? 'received' : 'completed',
-      type: orderType || 'sale',
-      pos_mode: posMode || 'retail',
-      subtotal,
-      tax_amount: tax,
-      discount_amount: discountAmount,
-      total,
-    })
-    .select()
-    .single()
-  if (orderError) throw orderError
-
-  // 2. Create order items
   const items = cartItems.map(item => ({
-    order_id: order.id,
     product_id: item.id && !String(item.id).startsWith('demo') ? item.id : null,
     name: item.name,
     sku: item.sku || null,
@@ -178,28 +145,31 @@ export async function saveCheckout({ tenantId, branchId, userId, cartItems, paym
     discount: item.itemDiscount || 0,
     total: item.price * item.quantity * (1 - (item.itemDiscount || 0) / 100),
   }))
-  const { error: itemsError } = await supabase.from('order_items').insert(items)
-  if (itemsError) throw itemsError
 
-  // 3. Create transaction (payment record)
-  const { error: txError } = await supabase
-    .from('transactions')
-    .insert({
-      tenant_id: tenantId,
-      order_id: order.id,
-      branch_id: branchId || null,
-      processed_by: userId || null,
-      type: 'sale',
-      method: paymentMethod || 'cash',
-      amount: total,
-      reference: receiptNo,
-      status: 'completed',
-    })
-  if (txError) throw txError
+  const { data, error } = await supabase.rpc('process_checkout', {
+    p_tenant_id: tenantId,
+    p_branch_id: branchId || null,
+    p_user_id: userId || null,
+    p_receipt_no: receiptNo,
+    p_status: posMode === 'restaurant' ? 'received' : 'completed',
+    p_type: orderType || 'sale',
+    p_pos_mode: posMode || 'retail',
+    p_subtotal: subtotal,
+    p_tax: tax,
+    p_discount: discountAmount,
+    p_total: total,
+    p_payment_method: paymentMethod || 'cash',
+    p_items: items,
+    p_salesperson_name: salespersonName || null,
+    p_salesperson_employee_no: salespersonEmployeeNo || null,
+  })
+  if (error) {
+    throw new Error(error.message?.includes('Insufficient stock')
+      ? error.message
+      : `Checkout failed: ${error.message}`)
+  }
 
-  // Stock was already decremented atomically in step 0
-
-  return { order, receiptNo }
+  return { order: { id: data.order_id }, receiptNo: data.receipt_no }
 }
 
 // ─── Payment Sessions (Paynow) ────────────────────────────────────────────────
@@ -435,6 +405,14 @@ export async function updateStaffUsername(userId, username) {
   const { error } = await supabase
     .from('users')
     .update({ username, updated_at: new Date().toISOString() })
+    .eq('id', userId)
+  if (error) throw error
+}
+
+export async function updateStaffEmployeeNo(userId, employeeNo) {
+  const { error } = await supabase
+    .from('users')
+    .update({ employee_no: employeeNo || null, updated_at: new Date().toISOString() })
     .eq('id', userId)
   if (error) throw error
 }
@@ -1041,19 +1019,21 @@ export async function submitReceiptConfig(config) {
  *  sessions needing manual review. Powers the Requests page and the
  *  dashboard notice. */
 export async function fetchVendorRequests(tenantId) {
-  const [configs, voids, returns, sessions] = await Promise.all([
+  const [configs, voids, returns, sessions, configChanges] = await Promise.all([
     fetchReceiptConfigs(tenantId).catch(() => []),
     fetchVoids(tenantId).catch(() => []),
     fetchReturns(tenantId).catch(() => []),
     fetchPaymentSessions(tenantId).catch(() => []),
+    fetchPendingConfigChanges(tenantId).catch(() => []),
   ])
   const result = {
     receiptConfigs: (configs || []).filter((c) => c.pending_approval),
     voids: (voids || []).filter((v) => ['requested', 'approved'].includes(v.status)),
     returns: (returns || []).filter((r) => ['requested', 'approved'].includes(r.status)),
     payments: (sessions || []).filter((s) => ['pending', 'awaiting_delivery'].includes(s.status)),
+    configChanges: (configChanges || []).filter((c) => c.status === 'pending'),
   }
-  result.total = result.receiptConfigs.length + result.voids.length + result.returns.length + result.payments.length
+  result.total = result.receiptConfigs.length + result.voids.length + result.returns.length + result.payments.length + result.configChanges.length
   return result
 }
 
@@ -1064,6 +1044,40 @@ export async function approveReceiptConfig(configId) {
 
 export async function rejectReceiptConfig(configId) {
   const { error } = await supabase.rpc('reject_receipt_config', { p_config_id: configId })
+  if (error) throw error
+}
+
+// ─── Shop Manager config-change approval ───────────────────────────────────────
+
+export async function submitConfigChange(tenantId, branchId, configArea, receiptBranchId, newValues) {
+  const { data, error } = await supabase.rpc('submit_config_change', {
+    p_tenant_id: tenantId,
+    p_branch_id: branchId || null,
+    p_config_area: configArea,
+    p_receipt_branch_id: receiptBranchId || null,
+    p_new_values: newValues,
+  })
+  if (error) throw error
+  return data
+}
+
+export async function fetchPendingConfigChanges(tenantId) {
+  const { data, error } = await supabase
+    .from('pending_config_changes')
+    .select('*, submitter:users!pending_config_changes_changed_by_fkey(name)')
+    .eq('tenant_id', tenantId)
+    .order('created_at', { ascending: false })
+  if (error) throw error
+  return data
+}
+
+export async function approveConfigChange(id) {
+  const { error } = await supabase.rpc('approve_config_change', { p_id: id })
+  if (error) throw error
+}
+
+export async function rejectConfigChange(id) {
+  const { error } = await supabase.rpc('reject_config_change', { p_id: id })
   if (error) throw error
 }
 

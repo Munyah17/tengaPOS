@@ -7,7 +7,7 @@ import ExportMenu from '@/components/common/ExportMenu'
 import { useThemeStore } from '@/stores/themeStore'
 import { useAuthStore } from '@/stores/authStore'
 import {
-  fetchStaff, updateStaffStatus, fetchBranches, updateStaffUsername,
+  fetchStaff, updateStaffStatus, fetchBranches, updateStaffUsername, updateStaffEmployeeNo,
   fetchUserBranches, assignUserBranch, unassignUserBranch,
 } from '@/lib/db'
 import { loadWithOfflineCache } from '@/lib/offlineCache'
@@ -48,7 +48,7 @@ export default function Staff() {
   const [form, setForm] = useState({ name: '', email: '', password: '', role: 'cashier', branch_id: '', username: '' })
   const [showPassword, setShowPassword] = useState(false)
   const [creating, setCreating] = useState(false)
-  const [usernameEdit, setUsernameEdit] = useState(null) // { id, name, username } while editing
+  const [usernameEdit, setUsernameEdit] = useState(null) // { id, name, username, employee_no } while editing
   const [savingUsername, setSavingUsername] = useState(false)
   const [branchesEdit, setBranchesEdit] = useState(null) // { id, name, homeBranchId, extraIds } while editing
   const [savingBranches, setSavingBranches] = useState(false)
@@ -126,12 +126,16 @@ export default function Staff() {
     setSavingUsername(true)
     try {
       const clean = usernameEdit.username.trim().toLowerCase()
-      await updateStaffUsername(usernameEdit.id, clean || null)
-      setStaff((prev) => prev.map((s) => s.id === usernameEdit.id ? { ...s, username: clean || null } : s))
-      toast.success(clean ? `Username set to "${clean}"` : 'Username removed')
+      const cleanEmployeeNo = usernameEdit.employee_no.trim()
+      await Promise.all([
+        updateStaffUsername(usernameEdit.id, clean || null),
+        updateStaffEmployeeNo(usernameEdit.id, cleanEmployeeNo || null),
+      ])
+      setStaff((prev) => prev.map((s) => s.id === usernameEdit.id ? { ...s, username: clean || null, employee_no: cleanEmployeeNo || null } : s))
+      toast.success('Details saved')
       setUsernameEdit(null)
     } catch (err) {
-      toast.error(err.message?.includes('duplicate') || err.code === '23505' ? 'That username is already taken' : (err.message || 'Failed to save username'))
+      toast.error(err.message?.includes('duplicate') || err.code === '23505' ? 'That username is already taken' : (err.message || 'Failed to save details'))
     } finally {
       setSavingUsername(false)
     }
@@ -241,9 +245,9 @@ export default function Staff() {
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-1">
                         <button
-                          onClick={() => setUsernameEdit({ id: member.id, name: member.name, username: member.username || '' })}
+                          onClick={() => setUsernameEdit({ id: member.id, name: member.name, username: member.username || '', employee_no: member.employee_no || '' })}
                           className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800"
-                          title="Set username"
+                          title="Set username / employee number"
                         >
                           <Pencil className="h-4 w-4" />
                         </button>
@@ -371,21 +375,34 @@ export default function Staff() {
         </form>
       </Modal>
 
-      {/* Set/change username — lets staff sign in without typing an email */}
-      <Modal isOpen={!!usernameEdit} onClose={() => setUsernameEdit(null)} title={`Username for ${usernameEdit?.name || ''}`}>
+      {/* Set/change username + employee number */}
+      <Modal isOpen={!!usernameEdit} onClose={() => setUsernameEdit(null)} title={`Details for ${usernameEdit?.name || ''}`}>
         {usernameEdit && (
           <form onSubmit={handleSaveUsername} className="space-y-4">
-            <p className="text-sm text-slate-500">
-              Optional. Lets this person sign in with a username instead of their email — either one works. Leave blank to remove it.
-            </p>
             <div>
               <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">Username</label>
+              <p className="mb-1.5 text-xs text-slate-500">
+                Optional. Lets this person sign in with a username instead of their email — either one works. Leave blank to remove it.
+              </p>
               <input
                 type="text"
                 value={usernameEdit.username}
                 onChange={(e) => setUsernameEdit((u) => ({ ...u, username: e.target.value }))}
                 className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
                 placeholder="e.g. rudo.c"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">Employee Number</label>
+              <p className="mb-1.5 text-xs text-slate-500">
+                Optional. Lets this person be picked as the Salesperson on a receipt at checkout.
+              </p>
+              <input
+                type="text"
+                value={usernameEdit.employee_no}
+                onChange={(e) => setUsernameEdit((u) => ({ ...u, employee_no: e.target.value }))}
+                className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                placeholder="e.g. EMP-014"
               />
             </div>
             <div className="flex justify-end gap-2 pt-2">

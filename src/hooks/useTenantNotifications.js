@@ -2,7 +2,7 @@
 // ready to serve, and platform announcements. Shared by TopBar and the
 // full Notifications page so the two never drift out of sync.
 import { useState, useEffect, useCallback } from 'react'
-import { Package, UtensilsCrossed, Megaphone, Inbox } from 'lucide-react'
+import { Package, UtensilsCrossed, Megaphone, Inbox, ClipboardEdit } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 
 function timeAgo(iso) {
@@ -26,7 +26,9 @@ function saveReadIds(ids) {
 // assistants only need what affects the till: low stock and ready orders.
 const ANNOUNCEMENTS_HIDDEN_FOR = ['cashier', 'shop_assistant']
 
-export function useTenantNotifications({ tenantId, posMode, role, limit = 20, pollMs = 60000 } = {}) {
+const CONFIG_AREA_LABEL = { general: 'General Settings', receipts_config: 'Receipts Config' }
+
+export function useTenantNotifications({ tenantId, posMode, role, userId, limit = 20, pollMs = 60000 } = {}) {
   const [notifications, setNotifications] = useState([])
 
   const load = useCallback(async () => {
@@ -52,8 +54,25 @@ export function useTenantNotifications({ tenantId, posMode, role, limit = 20, po
         supabase.from('voids').select('id', { count: 'exact', head: true }).eq('tenant_id', tenantId).in('status', ['requested', 'approved']),
         supabase.from('returns').select('id', { count: 'exact', head: true }).eq('tenant_id', tenantId).in('status', ['requested', 'approved']),
         supabase.from('payment_sessions').select('id', { count: 'exact', head: true }).eq('tenant_id', tenantId).in('status', ['pending', 'awaiting_delivery']),
+        supabase.from('pending_config_changes').select('id', { count: 'exact', head: true }).eq('tenant_id', tenantId).eq('status', 'pending'),
       ]).catch(() => [])
       pendingApprovals = (counts || []).reduce((s, r) => s + (r?.count || 0), 0)
+    }
+
+    // Shop Managers see the status of their own submitted changes — these
+    // apply immediately but revert automatically if the Vendor hasn't
+    // approved them within 48 hours.
+    let ownPendingChanges = []
+    if (role === 'shop_manager' && userId) {
+      try {
+        const { data } = await supabase
+          .from('pending_config_changes')
+          .select('id, config_area, expires_at')
+          .eq('tenant_id', tenantId)
+          .eq('changed_by', userId)
+          .eq('status', 'pending')
+        ownPendingChanges = data || []
+      } catch { /* best-effort */ }
     }
 
     const lowStock = (products || [])
@@ -93,13 +112,24 @@ export function useTenantNotifications({ tenantId, posMode, role, limit = 20, po
       icon: Inbox,
     }] : []
 
-    const all = [...approvalNotes, ...lowStock, ...orderNotes, ...announcementNotes]
+    const ownPendingChangeNotes = ownPendingChanges.map((c) => {
+      const hoursLeft = Math.max(0, Math.round((new Date(c.expires_at) - Date.now()) / 3600000))
+      return {
+        id: `pending-change-${c.id}`,
+        text: `Your ${CONFIG_AREA_LABEL[c.config_area] || c.config_area} change is awaiting approval — reverts in ${hoursLeft}h if not approved`,
+        time: 'now',
+        ts: new Date().toISOString(),
+        icon: ClipboardEdit,
+      }
+    })
+
+    const all = [...approvalNotes, ...ownPendingChangeNotes, ...lowStock, ...orderNotes, ...announcementNotes]
       .sort((a, b) => new Date(b.ts) - new Date(a.ts))
       .slice(0, limit)
       .map((n) => ({ ...n, unread: !readIds.has(n.id) }))
 
     setNotifications(all)
-  }, [tenantId, posMode, role, limit])
+  }, [tenantId, posMode, role, userId, limit])
 
   useEffect(() => {
     load()

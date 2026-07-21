@@ -72,9 +72,9 @@ export default function ZimraReceipt({ receipt, onClose }) {
   const customLines = Array.isArray(receiptConfig.customLines) ? receiptConfig.customLines.filter((l) => l?.value) : []
 
   // Footer: the tenant's custom message (if any) replaces only the thank-you
-  // line — the "Powered by" + contact lines are permanent and always print
-  // after it. White-label tenants get their own brand's lines there instead
-  // of tengaPOS (or nothing, if hide_powered_by is set for them).
+  // line — the "Developed & Powered By" + contact lines are permanent and
+  // always print after it. White-label tenants get their own brand's lines
+  // there instead (or nothing, if hide_powered_by is set for them).
   const whitelabel = tenant?.whitelabel?.enabled ? tenant.whitelabel : null
   const footerLines = [
     ...(receiptConfig.footerMessage
@@ -87,7 +87,7 @@ export default function ZimraReceipt({ receipt, onClose }) {
             ? [[whitelabel.support_email, whitelabel.support_phone].filter(Boolean).join(' | ')]
             : []),
         ]
-      : ['Powered by tengaPOS', 'info@globalspaceweb.co.zw | +263773909307']),
+      : ['Developed & Powered By Global Space Web', 'info@globalspaceweb.co.zw | +263773909307']),
   ]
 
   const zimraPaymentType = ZIMRA_PAYMENT_MAP[receipt.paymentMethod] || 'Cash'
@@ -172,6 +172,7 @@ export default function ZimraReceipt({ receipt, onClose }) {
         ${row('Date:', dateStr)}
         ${row('Time:', timeStr)}
         ${row('Cashier:', receipt.cashier)}
+        ${receipt.salespersonName ? row('Salesperson:', receipt.salespersonEmployeeNo ? `${receipt.salespersonName} (${receipt.salespersonEmployeeNo})` : receipt.salespersonName) : ''}
         <div class="sep"></div>
         <div class="bold upper">Items</div>
         ${itemsHtml}
@@ -237,6 +238,9 @@ export default function ZimraReceipt({ receipt, onClose }) {
       rowLine('Date:', dateStr)
       rowLine('Time:', timeStr)
       rowLine('Cashier:', receipt.cashier)
+      if (receipt.salespersonName) {
+        rowLine('Salesperson:', receipt.salespersonEmployeeNo ? `${receipt.salespersonName} (${receipt.salespersonEmployeeNo})` : receipt.salespersonName)
+      }
       dash()
       lines.push({ text: 'ITEMS', bold: true })
       for (const item of receipt.items) {
@@ -354,6 +358,12 @@ export default function ZimraReceipt({ receipt, onClose }) {
               <span>Cashier:</span>
               <span>{receipt.cashier}</span>
             </div>
+            {receipt.salespersonName && (
+              <div className="flex justify-between">
+                <span>Salesperson:</span>
+                <span>{receipt.salespersonEmployeeNo ? `${receipt.salespersonName} (${receipt.salespersonEmployeeNo})` : receipt.salespersonName}</span>
+              </div>
+            )}
 
             <div className="my-2 border-t border-dashed border-black" />
 

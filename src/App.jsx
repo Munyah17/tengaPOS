@@ -58,6 +58,7 @@ const SuperAdminVersions = lazy(() => import('@/pages/admin/SuperAdminVersions')
 const AdminUsers = lazy(() => import('@/pages/admin/AdminUsers'))
 const AdminFiscalRequests = lazy(() => import('@/pages/admin/AdminFiscalRequests'))
 const AdminHRRequests = lazy(() => import('@/pages/admin/AdminHRRequests'))
+const AdminVatRequests = lazy(() => import('@/pages/admin/AdminVatRequests'))
 const Checkout = lazy(() => import('@/pages/Checkout'))
 
 function RouteLoading() {
@@ -93,6 +94,9 @@ function ProtectedRoute({ children }) {
   if (tenantStatus === 'suspended') {
     // Suspended because the trial ran out → pay; suspended by Super Admin → pending screen
     return <Navigate to={onTrial ? '/checkout' : '/pending'} replace />
+  }
+  if (tenantStatus === 'rejected' || tenantStatus === 'stalled') {
+    return <Navigate to="/pending" replace />
   }
   return children
 }
@@ -209,6 +213,7 @@ export default function App() {
             <Route path="users" element={<AdminUsers />} />
             <Route path="fiscal-requests" element={<AdminFiscalRequests />} />
             <Route path="hr-requests" element={<AdminHRRequests />} />
+            <Route path="vat-requests" element={<AdminVatRequests />} />
             <Route path="subscriptions" element={<SuperAdminSubscriptions />} />
             <Route path="billing" element={<SuperAdminBilling />} />
             <Route path="pricing" element={<SuperAdminPricing />} />
@@ -240,6 +245,7 @@ export default function App() {
             <Route path="users" element={<AdminUsers />} />
             <Route path="fiscal-requests" element={<AdminFiscalRequests />} />
             <Route path="hr-requests" element={<AdminHRRequests />} />
+            <Route path="vat-requests" element={<AdminVatRequests />} />
             <Route path="support" element={<AdminSupport />} />
             <Route path="announcements" element={<SuperAdminAnnouncements />} />
             <Route path="versions" element={<SuperAdminVersions />} />

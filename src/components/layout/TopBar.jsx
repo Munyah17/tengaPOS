@@ -31,7 +31,7 @@ export default function TopBar({ onMenuClick }) {
   const bellRef = useRef(null)
   const avatarRef = useRef(null)
 
-  const { notifications, markAllRead } = useTenantNotifications({ tenantId: tenant?.id, posMode, role })
+  const { notifications, markAllRead } = useTenantNotifications({ tenantId: tenant?.id, posMode, role, userId: profile?.id })
   const canSeeSettings = (NAV_PERMISSIONS[role] || NAV_PERMISSIONS.vendor).includes('settings')
 
   const isRestaurant = posMode === 'restaurant'

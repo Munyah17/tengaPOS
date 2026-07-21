@@ -1,14 +1,22 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { UserPlus, ArrowLeft } from 'lucide-react'
+import { UserPlus, ArrowLeft, ChevronDown } from 'lucide-react'
 import posIcon from '@/assets/pos-icon.png'
 import Button from '@/components/common/Button'
 import { useAuthStore } from '@/stores/authStore'
+import { INDUSTRIES } from '@/lib/whitelabelTheme'
 import toast from 'react-hot-toast'
 
+const TEAM_SIZE_RANGES = ['1-5', '6-15', '16-30', '31-50', '50+']
+
 export default function Register() {
-  const [form, setForm] = useState({ name: '', email: '', phone: '', password: '', businessName: '', businessType: 'retail' })
+  const [form, setForm] = useState({
+    name: '', email: '', phone: '', password: '', businessName: '', businessType: 'retail',
+    industry: '', location: '', requestedBranches: '', teamSizeRange: '', requestedPlanPref: '',
+    workAddress: '', workContact: '', specialRequirements: '',
+  })
+  const [showMore, setShowMore] = useState(false)
   const [loading, setLoading] = useState(false)
   const navigate = useNavigate()
   const { signUp } = useAuthStore()
@@ -19,7 +27,16 @@ export default function Register() {
     if (!form.phone.trim()) { toast.error('Phone number is required'); return }
     setLoading(true)
     try {
-      const data = await signUp(form.email, form.password, form.name, form.businessName, form.businessType, form.phone)
+      const data = await signUp(form.email, form.password, form.name, form.businessName, form.businessType, form.phone, {
+        industry: form.industry,
+        location: form.location,
+        requestedBranches: form.requestedBranches,
+        teamSizeRange: form.teamSizeRange,
+        requestedPlanPref: form.requestedPlanPref,
+        workAddress: form.workAddress,
+        workContact: form.workContact,
+        specialRequirements: form.specialRequirements,
+      })
       if (data.user && !data.session) {
         // Email confirmation required — they pick trial or plan after signing in
         toast.success('Almost there! Check your email to confirm, then sign in to choose your plan or free trial.')
@@ -133,6 +150,111 @@ export default function Register() {
               />
               <p className="mt-1 text-xs text-slate-500">So we can reach you if you need help getting set up</p>
             </div>
+
+            <button
+              type="button"
+              onClick={() => setShowMore((v) => !v)}
+              className="flex w-full items-center justify-between rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm font-medium text-slate-300 hover:bg-white/10"
+            >
+              A few more details (helps us set you up faster)
+              <ChevronDown className={`h-4 w-4 transition-transform ${showMore ? 'rotate-180' : ''}`} />
+            </button>
+
+            {showMore && (
+              <div className="space-y-4 rounded-xl border border-white/10 bg-white/5 p-4">
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium text-slate-300">Industry</label>
+                  <select
+                    value={form.industry}
+                    onChange={update('industry')}
+                    className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+                  >
+                    <option value="" className="bg-slate-900">Select…</option>
+                    {INDUSTRIES.map((i) => (
+                      <option key={i.key} value={i.key} className="bg-slate-900">{i.label}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium text-slate-300">Location</label>
+                  <input
+                    type="text"
+                    value={form.location}
+                    onChange={update('location')}
+                    className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white placeholder-slate-500 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+                    placeholder="e.g. Harare"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="mb-1.5 block text-sm font-medium text-slate-300">Branches planned</label>
+                    <input
+                      type="number"
+                      min="1"
+                      value={form.requestedBranches}
+                      onChange={update('requestedBranches')}
+                      className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white placeholder-slate-500 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+                      placeholder="1"
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1.5 block text-sm font-medium text-slate-300">Team size</label>
+                    <select
+                      value={form.teamSizeRange}
+                      onChange={update('teamSizeRange')}
+                      className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+                    >
+                      <option value="" className="bg-slate-900">Select…</option>
+                      {TEAM_SIZE_RANGES.map((r) => (
+                        <option key={r} value={r} className="bg-slate-900">{r}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium text-slate-300">Preferred plan</label>
+                  <select
+                    value={form.requestedPlanPref}
+                    onChange={update('requestedPlanPref')}
+                    className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+                  >
+                    <option value="undecided" className="bg-slate-900">Not sure yet</option>
+                    <option value="byod" className="bg-slate-900">BYOD (use your own device)</option>
+                    <option value="combo" className="bg-slate-900">Hardware Combo (tablet + printer)</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium text-slate-300">Work Address</label>
+                  <input
+                    type="text"
+                    value={form.workAddress}
+                    onChange={update('workAddress')}
+                    className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white placeholder-slate-500 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+                    placeholder="Shop address"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium text-slate-300">Work Contact</label>
+                  <input
+                    type="tel"
+                    value={form.workContact}
+                    onChange={update('workContact')}
+                    className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white placeholder-slate-500 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+                    placeholder="Business phone line, if different"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium text-slate-300">Special Requirements</label>
+                  <textarea
+                    value={form.specialRequirements}
+                    onChange={update('specialRequirements')}
+                    rows={2}
+                    className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white placeholder-slate-500 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+                    placeholder="Anything specific we should know?"
+                  />
+                </div>
+              </div>
+            )}
 
             <div>
               <label className="mb-1.5 block text-sm font-medium text-slate-300">Password</label>

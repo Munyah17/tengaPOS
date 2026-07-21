@@ -3,7 +3,7 @@ import {
   Building2, Search, Calendar, CheckCircle, Clock, XCircle,
   Smartphone, Star, Zap, Briefcase, Crown,
   ToggleLeft, ToggleRight, Palette, HardDrive, Users, ChevronRight,
-  Save, AlertCircle, Trash2, ShieldAlert,
+  Save, AlertCircle, Trash2, ShieldAlert, Ban, PauseCircle, Mail, Phone,
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/stores/authStore'
@@ -134,7 +134,12 @@ const STATUS_BADGE = {
   active:    { bg: 'bg-green-500/20', text: 'text-green-400',  label: 'Active',    icon: CheckCircle },
   suspended: { bg: 'bg-red-500/20',   text: 'text-red-400',    label: 'Suspended', icon: XCircle },
   deleted:   { bg: 'bg-slate-500/20', text: 'text-slate-400',  label: 'Deleted',   icon: Trash2 },
+  rejected:  { bg: 'bg-red-500/20',   text: 'text-red-400',    label: 'Rejected',  icon: Ban },
+  stalled:   { bg: 'bg-orange-500/20', text: 'text-orange-400', label: 'Stalled',  icon: PauseCircle },
 }
+
+const TEAM_SIZE_LABELS = { '1-5': '1–5', '6-15': '6–15', '16-30': '16–30', '31-50': '31–50', '50+': '50+' }
+const PLAN_PREF_LABELS = { byod: 'BYOD (own device)', combo: 'Hardware Combo', undecided: 'Not sure yet' }
 
 const BOOL_FEATURES = [
   { key: 'pos',            label: 'POS / Sales' },
@@ -179,18 +184,22 @@ function Toggle({ value, onChange, disabled }) {
 
 // ─── Main modal ───────────────────────────────────────────────────────────────
 
-const TABS = ['Plan', 'Features', 'Branding', 'Backups', 'Team']
+const TABS = ['Application', 'Plan', 'Features', 'Branding', 'Backups', 'Team']
 
 export function TenantModal({ tenant, technicians, onClose, onSaved }) {
   const { user, role } = useAuthStore()
   const isSuperAdminUser = role === 'super_admin'
-  const [tab, setTab] = useState('Plan')
+  const isPending = tenant.status === 'pending'
+  const isStalled = tenant.status === 'stalled'
+  const [tab, setTab] = useState(isPending || isStalled ? 'Application' : 'Plan')
   const [saving, setSaving] = useState(false)
   const [dangerAction, setDangerAction] = useState(null) // 'terminate' | 'delete' | null
   const [dangerInput, setDangerInput] = useState('')
   const [dangerBusy, setDangerBusy] = useState(false)
+  const [decisionAction, setDecisionAction] = useState(null) // 'reject' | 'stall' | null
+  const [decisionReason, setDecisionReason] = useState('')
+  const [decisionBusy, setDecisionBusy] = useState(false)
 
-  const isPending = tenant.status === 'pending'
   const isHighTier = ['business', 'enterprise'].includes(tenant.plan_type)
 
   const [planType, setPlanType] = useState(tenant.plan_type || 'standard_plan')
@@ -295,9 +304,44 @@ export function TenantModal({ tenant, technicians, onClose, onSaved }) {
       toast.success(newStatus === 'active' && isPending
         ? `${tenant.name} approved on ${PLANS[planType]?.label}`
         : 'Tenant updated')
+      const emailTemplate = { tenant_approved: 'approved', tenant_suspended: 'suspended', tenant_reinstated: 'reinstated' }[action]
+      if (emailTemplate) {
+        supabase.functions.invoke('send-tenant-email', { body: { tenant_id: tenant.id, template: emailTemplate } }).catch(() => {})
+      }
       onSaved()
     }
     setSaving(false)
+  }
+
+  const decideApplication = async (kind) => {
+    if (!decisionReason.trim()) { toast.error('A reason is required'); return }
+    setDecisionBusy(true)
+    const status = kind === 'reject' ? 'rejected' : 'stalled'
+    const reasonField = kind === 'reject' ? 'rejection_reason' : 'stalled_reason'
+    const { data: updated, error } = await supabase
+      .from('tenants')
+      .update({ status, [reasonField]: decisionReason.trim(), decided_at: new Date().toISOString() })
+      .eq('id', tenant.id)
+      .select('id')
+    if (error || !updated?.length) {
+      toast.error(error?.message || 'Update blocked by database permissions')
+      setDecisionBusy(false)
+      return
+    }
+    await supabase.from('audit_logs').insert({
+      actor_id: user?.id,
+      actor_email: user?.email,
+      action: kind === 'reject' ? 'tenant_rejected' : 'tenant_stalled',
+      target_type: 'tenant',
+      target_id: tenant.id,
+      details: { tenant_name: tenant.name, reason: decisionReason.trim() },
+    })
+    toast.success(kind === 'reject' ? `${tenant.name} rejected` : `${tenant.name} put on hold`)
+    supabase.functions.invoke('send-tenant-email', {
+      body: { tenant_id: tenant.id, template: kind === 'reject' ? 'rejected' : 'stalled', extra: { reason: decisionReason.trim() } },
+    }).catch(() => {})
+    setDecisionBusy(false)
+    onSaved()
   }
 
   const terminateTenant = async () => {
@@ -389,6 +433,45 @@ export function TenantModal({ tenant, technicians, onClose, onSaved }) {
 
         {/* Body */}
         <div className="flex-1 overflow-y-auto p-5">
+          {/* ── Application tab — everything typed at signup ── */}
+          {tab === 'Application' && (
+            <div className="space-y-4">
+              {(tenant.status === 'rejected' || tenant.status === 'stalled') && (
+                <div className={`rounded-xl border p-3 text-sm ${tenant.status === 'rejected' ? 'border-red-500/30 bg-red-500/5 text-red-400' : 'border-orange-500/30 bg-orange-500/5 text-orange-400'}`}>
+                  <p className="font-semibold">{tenant.status === 'rejected' ? 'Rejected' : 'On hold'}</p>
+                  <p className="mt-0.5">{tenant.status === 'rejected' ? tenant.rejection_reason : tenant.stalled_reason}</p>
+                </div>
+              )}
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                {[
+                  ['Contact Name', tenant.owner?.name],
+                  ['Email', tenant.owner?.email],
+                  ['Phone', tenant.owner?.phone],
+                  ['Industry', INDUSTRIES.find((i) => i.key === tenant.industry)?.label || tenant.industry],
+                  ['Location', tenant.location],
+                  ['Business Type', tenant.pos_mode === 'restaurant' ? 'Restaurant' : 'Retail'],
+                  ['Branches Planned', tenant.requested_branches],
+                  ['Team Size', TEAM_SIZE_LABELS[tenant.team_size_range] || tenant.team_size_range],
+                  ['Preferred Plan', PLAN_PREF_LABELS[tenant.requested_plan_pref] || tenant.requested_plan_pref],
+                  ['Work Address', tenant.work_address],
+                  ['Work Contact', tenant.work_contact],
+                  ['Signed Up', new Date(tenant.created_at).toLocaleString('en-ZW')],
+                ].filter(([, v]) => v).map(([label, value]) => (
+                  <div key={label}>
+                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{label}</p>
+                    <p className="mt-0.5 text-sm text-slate-900 dark:text-white">{value}</p>
+                  </div>
+                ))}
+              </div>
+              {tenant.special_requirements && (
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Special Requirements</p>
+                  <p className="mt-0.5 text-sm text-slate-900 dark:text-white">{tenant.special_requirements}</p>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* ── Plan tab ── */}
           {tab === 'Plan' && (
             <div>
@@ -743,15 +826,35 @@ export function TenantModal({ tenant, technicians, onClose, onSaved }) {
 
         {/* Footer actions */}
         <div className="flex flex-shrink-0 flex-col gap-2 border-t border-white/10 p-5">
-          {isPending ? (
-            <button
-              onClick={() => save('active')}
-              disabled={saving}
-              className="flex w-full items-center justify-center gap-2 rounded-xl bg-green-600 py-3 text-sm font-bold text-slate-900 dark:text-white hover:bg-green-700 disabled:opacity-60"
-            >
-              <CheckCircle className="h-4 w-4" />
-              {saving ? 'Saving…' : `Approve & Activate — ${PLANS[planType]?.label}`}
-            </button>
+          {isPending || isStalled ? (
+            <>
+              <button
+                onClick={() => save('active')}
+                disabled={saving}
+                className="flex w-full items-center justify-center gap-2 rounded-xl bg-green-600 py-3 text-sm font-bold text-slate-900 dark:text-white hover:bg-green-700 disabled:opacity-60"
+              >
+                <CheckCircle className="h-4 w-4" />
+                {saving ? 'Saving…' : `Approve & Activate — ${PLANS[planType]?.label}`}
+              </button>
+              <div className="flex gap-2">
+                {isPending && (
+                  <button
+                    onClick={() => { setDecisionAction('stall'); setDecisionReason('') }}
+                    className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-orange-600/10 py-2.5 text-sm font-semibold text-orange-400 hover:bg-orange-600/20"
+                  >
+                    <PauseCircle className="h-4 w-4" />
+                    Put On Hold
+                  </button>
+                )}
+                <button
+                  onClick={() => { setDecisionAction('reject'); setDecisionReason('') }}
+                  className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-red-600/10 py-2.5 text-sm font-semibold text-red-400 hover:bg-red-600/20"
+                >
+                  <Ban className="h-4 w-4" />
+                  Reject
+                </button>
+              </div>
+            </>
           ) : (
             <button
               onClick={() => save(null)}
@@ -781,6 +884,16 @@ export function TenantModal({ tenant, technicians, onClose, onSaved }) {
             >
               <CheckCircle className="h-4 w-4" />
               Reinstate Access
+            </button>
+          )}
+          {tenant.status === 'rejected' && (
+            <button
+              onClick={() => save('pending')}
+              disabled={saving}
+              className="flex w-full items-center justify-center gap-2 rounded-xl bg-indigo-600/10 py-2.5 text-sm font-semibold text-indigo-400 hover:bg-indigo-600/20 disabled:opacity-60"
+            >
+              <Clock className="h-4 w-4" />
+              Reopen for Review
             </button>
           )}
 
@@ -863,6 +976,50 @@ export function TenantModal({ tenant, technicians, onClose, onSaved }) {
           </div>
         </div>
       )}
+
+      {/* Reject / Stall confirmation */}
+      {decisionAction && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 px-4" onClick={() => !decisionBusy && setDecisionAction(null)}>
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-sm rounded-2xl border border-white/10 bg-white p-5 shadow-2xl dark:bg-slate-900"
+          >
+            <h3 className="mb-1 font-bold text-slate-900 dark:text-white">
+              {decisionAction === 'reject' ? `Reject ${tenant.name}` : `Put ${tenant.name} on hold`}
+            </h3>
+            <p className="mb-3 text-xs text-slate-500">
+              {decisionAction === 'reject'
+                ? 'The applicant sees this reason and can no longer sign in.'
+                : 'The applicant sees this reason and can request another review at any time.'}
+            </p>
+            <textarea
+              value={decisionReason}
+              onChange={(e) => setDecisionReason(e.target.value)}
+              placeholder="Reason…"
+              rows={3}
+              className="w-full resize-none rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 placeholder-slate-400 focus:border-amber-500 focus:outline-none dark:border-white/10 dark:bg-white/5 dark:text-white"
+            />
+            <div className="mt-4 flex gap-2">
+              <button
+                onClick={() => setDecisionAction(null)}
+                disabled={decisionBusy}
+                className="flex-1 rounded-xl border border-slate-200 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-60 dark:border-white/10 dark:text-slate-300 dark:hover:bg-white/5"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={async () => { await decideApplication(decisionAction); setDecisionAction(null) }}
+                disabled={decisionBusy}
+                className={`flex-1 rounded-xl py-2 text-sm font-bold text-white disabled:opacity-60 ${
+                  decisionAction === 'reject' ? 'bg-red-600 hover:bg-red-700' : 'bg-orange-600 hover:bg-orange-700'
+                }`}
+              >
+                {decisionBusy ? 'Working…' : decisionAction === 'reject' ? 'Reject' : 'Put On Hold'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -881,11 +1038,13 @@ export default function AdminTenants() {
 
   const load = async () => {
     setLoading(true)
-    const [{ data: tenantData }, { data: techData }] = await Promise.all([
+    const [{ data: tenantData }, { data: techData }, { data: ownerData }] = await Promise.all([
       supabase.from('tenants').select('*').order('created_at', { ascending: false }),
       supabase.from('app_users').select('id, name, email').eq('role', 'tech_support').eq('is_active', true),
+      supabase.from('users').select('tenant_id, name, email, phone').eq('role', 'vendor'),
     ])
-    setTenants(tenantData || [])
+    const ownerByTenant = Object.fromEntries((ownerData || []).map((o) => [o.tenant_id, o]))
+    setTenants((tenantData || []).map((t) => ({ ...t, owner: ownerByTenant[t.id] || null })))
     setTechnicians(techData || [])
     setLoading(false)
   }
@@ -896,23 +1055,30 @@ export default function AdminTenants() {
     all:       tenants.filter((t) => t.status !== 'deleted'),
     active:    tenants.filter((t) => t.status === 'active'),
     pending:   tenants.filter((t) => t.status === 'pending'),
+    stalled:   tenants.filter((t) => t.status === 'stalled'),
     suspended: tenants.filter((t) => t.status === 'suspended'),
+    rejected:  tenants.filter((t) => t.status === 'rejected'),
     deleted:   tenants.filter((t) => t.status === 'deleted'),
   }
   const counts = {
     all: byTab.all.length, active: byTab.active.length, pending: byTab.pending.length,
-    suspended: byTab.suspended.length, deleted: byTab.deleted.length,
+    stalled: byTab.stalled.length, suspended: byTab.suspended.length,
+    rejected: byTab.rejected.length, deleted: byTab.deleted.length,
   }
 
-  const filtered = (byTab[tab] || []).filter(
-    (t) => t.name?.toLowerCase().includes(search.toLowerCase()) || t.slug?.toLowerCase().includes(search.toLowerCase()),
-  )
+  const filtered = (byTab[tab] || []).filter((t) => {
+    const q = search.toLowerCase()
+    return t.name?.toLowerCase().includes(q) || t.slug?.toLowerCase().includes(q)
+      || t.owner?.email?.toLowerCase().includes(q) || t.owner?.phone?.toLowerCase().includes(q)
+  })
 
   const tabs = [
     { id: 'all',       label: 'All' },
     { id: 'active',    label: 'Active' },
     { id: 'pending',   label: 'Pending',   urgent: true },
+    { id: 'stalled',   label: 'Stalled',   urgent: true },
     { id: 'suspended', label: 'Suspended' },
+    { id: 'rejected',  label: 'Rejected' },
     { id: 'deleted',   label: 'Deleted' },
   ]
 
@@ -1033,6 +1199,12 @@ export default function AdminTenants() {
                       <span className="text-indigo-400">Renews {renewalDate}</span>
                     )}
                   </div>
+                  {tenant.owner && (
+                    <div className="mt-0.5 flex flex-wrap items-center gap-3 text-xs text-slate-500">
+                      {tenant.owner.email && <span className="flex items-center gap-1"><Mail className="h-3 w-3" />{tenant.owner.email}</span>}
+                      {tenant.owner.phone && <span className="flex items-center gap-1"><Phone className="h-3 w-3" />{tenant.owner.phone}</span>}
+                    </div>
+                  )}
                 </div>
                 {canManage && (
                   <button
