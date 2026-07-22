@@ -95,14 +95,14 @@ export const DEFAULT_FEATURES = {
     reports: 'basic', staff: true, tasks: true,
     kitchen: true, orders: true, dining_board: false,
     drive_through: false, fiscalisation: true,
-    branches: 3, max_vendors: 1, max_users_per_branch: 2, api_access: false,
+    branches: 3, max_users_per_branch: 2, api_access: false,
   },
   pro_package: {
     pos: true, inventory: true, transactions: true,
     reports: 'advanced', staff: true, tasks: true,
     kitchen: true, orders: true, dining_board: true,
     drive_through: true, fiscalisation: true,
-    branches: 5, max_vendors: 2, max_users_per_branch: 4, api_access: false,
+    branches: 5, max_users_per_branch: 4, api_access: false,
   },
   business: {
     pos: true, inventory: true, transactions: true,
@@ -565,9 +565,7 @@ export function TenantModal({ tenant, technicians, onClose, onSaved }) {
                 <div className="grid grid-cols-2 gap-3">
                   {[
                     { key: 'branches', label: 'Max Branches', hint: '-1 = unlimited' },
-                    features.max_vendors !== undefined
-                      ? { key: 'max_vendors', label: 'Max Vendor Accounts', hint: 'Owner-level accounts' }
-                      : { key: 'max_users', label: 'Max Users', hint: '-1 = unlimited' },
+                    { key: 'max_users', label: 'Max Users', hint: '-1 = unlimited' },
                     ...(features.max_users_per_branch !== undefined
                       ? [{ key: 'max_users_per_branch', label: 'Users per Branch', hint: 'Staff under each vendor/branch' }]
                       : []),

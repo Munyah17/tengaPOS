@@ -56,24 +56,17 @@ serve(async (req) => {
     if (cleanUsername && !/^[a-z0-9._-]{3,30}$/.test(cleanUsername)) {
       return json({ error: 'Username must be 3-30 characters: letters, numbers, dots, underscores, or hyphens only' }, 400)
     }
-    const allowedRoles = features.max_vendors > 1 ? [...TENANT_ROLES, 'vendor'] : TENANT_ROLES
-    if (!allowedRoles.includes(role)) {
-      return json({ error: `Role must be one of ${allowedRoles.join(', ')}` }, 400)
+    // Every tenant has exactly one Vendor (the business owner) — that
+    // account is created once, at signup. Staff can only ever be added as
+    // one of the roles below.
+    if (!TENANT_ROLES.includes(role)) {
+      return json({ error: `Role must be one of ${TENANT_ROLES.join(', ')}` }, 400)
     }
     if (String(password).length < 8) {
       return json({ error: 'Password must be at least 8 characters' }, 400)
     }
 
-    if (role === 'vendor') {
-      const { count } = await admin
-        .from('users')
-        .select('id', { count: 'exact', head: true })
-        .eq('tenant_id', callerRow.tenant_id)
-        .eq('role', 'vendor')
-      if ((count || 0) >= (features.max_vendors || 1)) {
-        return json({ error: `Your plan allows up to ${features.max_vendors || 1} vendor account(s)` }, 400)
-      }
-    } else if (features.max_users_per_branch != null) {
+    if (features.max_users_per_branch != null) {
       if (!branch_id) return json({ error: 'Select a branch for this staff member' }, 400)
       const { data: branchRow } = await admin
         .from('branches')

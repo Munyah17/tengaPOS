@@ -293,9 +293,8 @@ export default function SuperAdminPricing() {
                 <div className="pt-2 text-xs text-slate-500">
                   {['business', 'enterprise'].includes(key) ? (
                     <>Branches, users & reports are <b>negotiated on a need basis</b></>
-                  ) : features?.max_vendors !== undefined ? (
+                  ) : features?.max_users_per_branch !== undefined ? (
                     <>
-                      Vendors: <b>{features.max_vendors}</b> ·
                       Branches: <b>{features.branches}</b> ·
                       Users/Branch: <b>{features.max_users_per_branch}</b> ·
                       Reports: <b className="capitalize">{features?.reports}</b>

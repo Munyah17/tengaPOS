@@ -52,7 +52,6 @@ export default function Staff() {
   const [savingUsername, setSavingUsername] = useState(false)
   const [branchesEdit, setBranchesEdit] = useState(null) // { id, name, homeBranchId, extraIds } while editing
   const [savingBranches, setSavingBranches] = useState(false)
-  const canAddVendor = (tenant?.features?.max_vendors || 1) > 1
 
   const loadStaff = () => {
     if (!tenant?.id) return
@@ -345,9 +344,9 @@ export default function Staff() {
               className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
             >
               {Object.entries(roleLabels)
-                .filter(([k]) => ['shop_manager', 'supervisor', 'cashier', 'shop_assistant'].includes(k) || (k === 'vendor' && canAddVendor))
+                .filter(([k]) => ['shop_manager', 'supervisor', 'cashier', 'shop_assistant'].includes(k))
                 .map(([key, label]) => (
-                  <option key={key} value={key}>{key === 'vendor' ? 'Vendor (co-owner)' : label}</option>
+                  <option key={key} value={key}>{label}</option>
                 ))}
             </select>
           </div>

@@ -1754,22 +1754,49 @@ export default function Settings() {
                   </div>
                 )}
 
-                {/* Scope selector */}
+                {/* Scope selector — every branch can carry its own template/details
+                    entirely independent of the others; this is a picker, not a
+                    single all-or-one-branch choice. Each chip shows what that
+                    branch is currently set to, so it's clear at a glance which
+                    branches already have their own config vs. are inheriting
+                    the tenant-wide default. */}
                 <div>
-                  <label className="mb-1.5 block text-sm font-medium text-slate-700 dark:text-slate-300">Applies to</label>
+                  <label className="mb-1.5 block text-sm font-medium text-slate-700 dark:text-slate-300">
+                    {role === 'vendor' ? 'Configure receipts for' : 'Applies to'}
+                  </label>
                   {role === 'vendor' ? (
-                    <select
-                      value={scopeBranchId}
-                      onChange={(e) => setScopeBranchId(e.target.value)}
-                      className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
-                    >
-                      <option value="">All branches (default)</option>
-                      {branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
-                    </select>
+                    <div className="flex flex-wrap gap-2">
+                      {[{ id: '', name: 'All Branches (default)' }, ...branches].map((b) => {
+                        const scopeId = b.id || ''
+                        const own = receiptConfigs.find((c) => (c.branch_id || '') === scopeId && !c.pending_approval)
+                        const label = own ? (RECEIPT_TEMPLATES.find((t) => t.key === own.template_mode)?.label || own.template_mode) : null
+                        const active = scopeBranchId === scopeId
+                        return (
+                          <button
+                            key={scopeId || 'default'}
+                            type="button"
+                            onClick={() => setScopeBranchId(scopeId)}
+                            className={`rounded-xl border px-3 py-2 text-left text-sm transition-colors ${
+                              active
+                                ? 'border-brand-500 bg-brand-50 dark:bg-brand-950'
+                                : 'border-slate-200 hover:border-slate-300 dark:border-slate-700 dark:hover:border-slate-600'
+                            }`}
+                          >
+                            <p className="font-semibold text-slate-900 dark:text-white">{b.name}</p>
+                            <p className="text-xs text-slate-500">{label || 'Using default'}</p>
+                          </button>
+                        )
+                      })}
+                    </div>
                   ) : (
                     <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
                       {branches.find((b) => b.id === homeBranch?.id)?.name || 'Your branch'} only
                     </div>
+                  )}
+                  {role === 'vendor' && (
+                    <p className="mt-1.5 text-xs text-slate-500">
+                      Each branch keeps its own store name, address, TIN, and template — pick a branch above, set what you want, and save. Branches left on "Using default" print with the tenant-wide default you set for "All Branches."
+                    </p>
                   )}
                 </div>
 
