@@ -76,19 +76,20 @@ export default function ZimraReceipt({ receipt, onClose }) {
   // always print after it. White-label tenants get their own brand's lines
   // there instead (or nothing, if hide_powered_by is set for them).
   const whitelabel = tenant?.whitelabel?.enabled ? tenant.whitelabel : null
-  const footerLines = [
-    ...(receiptConfig.footerMessage
-      ? receiptConfig.footerMessage.split('\n').filter(Boolean)
-      : ['Thank You For Your Purchase']),
-    ...(whitelabel
-      ? [
-          ...(whitelabel.hide_powered_by || !whitelabel.brand_name ? [] : [`Powered by ${whitelabel.brand_name}`]),
-          ...((whitelabel.support_email || whitelabel.support_phone)
-            ? [[whitelabel.support_email, whitelabel.support_phone].filter(Boolean).join(' | ')]
-            : []),
-        ]
-      : ['Developed & Powered By Global Space Web', 'info@globalspaceweb.co.zw | +263773909307']),
-  ]
+  // Kept as two separate groups (not one flat list) so every render target
+  // can put clear space between them — the shop's own salutation vs. the
+  // system's copyright line read as two unrelated things otherwise.
+  const shopFooterLines = receiptConfig.footerMessage
+    ? receiptConfig.footerMessage.split('\n').filter(Boolean)
+    : ['Thank You For Your Purchase']
+  const systemFooterLines = whitelabel
+    ? [
+        ...(whitelabel.hide_powered_by || !whitelabel.brand_name ? [] : [`Powered by ${whitelabel.brand_name}`]),
+        ...((whitelabel.support_email || whitelabel.support_phone)
+          ? [[whitelabel.support_email, whitelabel.support_phone].filter(Boolean).join(' | ')]
+          : []),
+      ]
+    : ['Developed & Powered By Global Space Web', 'info@globalspaceweb.co.zw | +263773909307']
 
   const zimraPaymentType = ZIMRA_PAYMENT_MAP[receipt.paymentMethod] || 'Cash'
 
@@ -196,8 +197,11 @@ export default function ZimraReceipt({ receipt, onClose }) {
         ${showFiscalSection ? `<div class="sep"></div>${fiscalHtml}` : ''}
         <div class="sep"></div>
         <div class="center tiny">
-          ${footerLines.map((l) => `<div>${esc(l)}</div>`).join('\n          ')}
+          ${shopFooterLines.map((l) => `<div>${esc(l)}</div>`).join('\n          ')}
           ${customLines.map((l) => `<div>${esc(l.label ? `${l.label}: ${l.value}` : l.value)}</div>`).join('\n          ')}
+          <div style="margin-top: 10px;">
+            ${systemFooterLines.map((l) => `<div>${esc(l)}</div>`).join('\n            ')}
+          </div>
         </div>
       </body>
       </html>
@@ -273,8 +277,13 @@ export default function ZimraReceipt({ receipt, onClose }) {
         lines.push({ text: 'Verify: fdms.zimra.co.zw', center: true })
       }
       dash()
-      for (const l of footerLines) lines.push({ text: l, center: true })
+      for (const l of shopFooterLines) lines.push({ text: l, center: true })
       for (const l of customLines) lines.push({ text: l.label ? `${l.label}: ${l.value}` : l.value, center: true })
+      // Blank lines (thermal printers have no CSS margin) so the shop's own
+      // salutation is clearly separated from the system copyright line below.
+      lines.push({ text: '', center: true })
+      lines.push({ text: '', center: true })
+      for (const l of systemFooterLines) lines.push({ text: l, center: true })
 
       await printToPosPrinter(lines, receiptConfig.printerConnection)
       toast.success('Sent to POS printer')
@@ -482,10 +491,14 @@ export default function ZimraReceipt({ receipt, onClose }) {
 
             <div className="my-2 border-t border-dashed border-black" />
 
-            {/* Footer */}
+            {/* Footer — shop's own salutation, then a deliberate gap, then the
+                system copyright line, so the two are never read as one thing */}
             <div className="text-center text-[9px]">
-              {footerLines.map((l, i) => <div key={i}>{l}</div>)}
+              {shopFooterLines.map((l, i) => <div key={i}>{l}</div>)}
               {customLines.map((l, i) => <div key={`c${i}`}>{l.label ? `${l.label}: ${l.value}` : l.value}</div>)}
+              <div className="mt-2.5">
+                {systemFooterLines.map((l, i) => <div key={`s${i}`}>{l}</div>)}
+              </div>
             </div>
           </div>
         </div>
