@@ -19,6 +19,10 @@ const POS = lazy(() => import('@/pages/POS'))
 const Inventory = lazy(() => import('@/pages/Inventory'))
 const Orders = lazy(() => import('@/pages/Orders'))
 const Kitchen = lazy(() => import('@/pages/Kitchen'))
+const JobCards = lazy(() => import('@/pages/JobCards'))
+const VehicleRegistry = lazy(() => import('@/pages/VehicleRegistry'))
+const Mechanics = lazy(() => import('@/pages/Mechanics'))
+const Quotations = lazy(() => import('@/pages/Quotations'))
 const Transactions = lazy(() => import('@/pages/Transactions'))
 const Reports = lazy(() => import('@/pages/Reports'))
 const Staff = lazy(() => import('@/pages/Staff'))
@@ -181,6 +185,10 @@ export default function App() {
             <Route path="inventory" element={<RequireNav navKey="inventory"><Inventory /></RequireNav>} />
             <Route path="orders" element={<RequireNav navKey="orders"><Orders /></RequireNav>} />
             <Route path="kitchen" element={<RequireNav navKey="kitchen"><Kitchen /></RequireNav>} />
+            <Route path="job-cards" element={<RequireNav navKey="job_cards"><JobCards /></RequireNav>} />
+            <Route path="vehicle-registry" element={<RequireNav navKey="vehicle_registry"><VehicleRegistry /></RequireNav>} />
+            <Route path="mechanics" element={<RequireNav navKey="mechanics"><Mechanics /></RequireNav>} />
+            <Route path="quotations" element={<RequireNav navKey="quotations"><Quotations /></RequireNav>} />
             <Route path="transactions" element={<RequireNav navKey="transactions"><Transactions /></RequireNav>} />
             <Route path="reports" element={<RequireNav navKey="reports"><Reports /></RequireNav>} />
             <Route path="insights" element={<RequireNav navKey="insights"><Insights /></RequireNav>} />

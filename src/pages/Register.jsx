@@ -123,6 +123,7 @@ export default function Register() {
               >
                 <option value="retail" className="bg-slate-900">Retail</option>
                 <option value="restaurant" className="bg-slate-900">Restaurant</option>
+                <option value="workshop" className="bg-slate-900">Workshop (Garage / Fitment)</option>
               </select>
             </div>
 

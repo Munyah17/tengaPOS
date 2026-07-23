@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   DollarSign, ShoppingCart, Package, Users, TrendingUp,
-  AlertTriangle, ArrowUpRight, ArrowDownRight,
+  AlertTriangle, ArrowUpRight, ArrowDownRight, Clock, Wrench as WrenchIcon, CheckCircle2,
 } from 'lucide-react'
 import {
   AreaChart, Area, BarChart, Bar, XAxis, YAxis, Tooltip,
@@ -13,7 +13,7 @@ import { Link } from 'react-router-dom'
 import { Megaphone, Sparkles, Bell, ChevronRight, X, Inbox } from 'lucide-react'
 import { useThemeStore } from '@/stores/themeStore'
 import { useAuthStore } from '@/stores/authStore'
-import { fetchDashboardMetrics, fetchVendorRequests } from '@/lib/db'
+import { fetchDashboardMetrics, fetchVendorRequests, fetchJobCards } from '@/lib/db'
 import { formatCurrency } from '@/utils/formatters'
 import { supabase } from '@/lib/supabase'
 import { withOfflineCache, seedFromOfflineCache } from '@/lib/offlineCache'
@@ -52,10 +52,16 @@ export default function Dashboard() {
   const { posMode } = useThemeStore()
   const { profile, tenant, user, role } = useAuthStore()
   const isRestaurant = posMode === 'restaurant'
-  const accentColor = isRestaurant ? '#22c55e' : '#3b82f6'
+  const accentColor = posMode === 'restaurant' ? '#22c55e' : posMode === 'workshop' ? '#d97706' : '#3b82f6'
   const { notifications } = useTenantNotifications({ tenantId: tenant?.id, posMode, limit: 5 })
   const queryClient = useQueryClient()
   const [sessionDismissed, setSessionDismissed] = useState(readSessionDismissed)
+  const isWorkshop = posMode === 'workshop'
+  const [jobCards, setJobCards] = useState([])
+  useEffect(() => {
+    if (!isWorkshop || !tenant?.id) return
+    fetchJobCards(tenant.id).then(setJobCards).catch(() => {})
+  }, [isWorkshop, tenant?.id])
 
   const dismissForSession = (id) => {
     setSessionDismissed((prev) => {
@@ -236,6 +242,28 @@ export default function Dashboard() {
               >
                 <X className="h-4 w-4" />
               </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Workshop Mode: job card status at a glance -- what Retail/Restaurant's
+          stat cards below don't cover, since job cards are Workshop-only */}
+      {isWorkshop && (
+        <div className="mb-6 grid gap-4 sm:grid-cols-3">
+          {[
+            { label: 'Open', value: jobCards.filter((j) => j.status === 'open').length, icon: Clock, color: 'from-blue-500 to-blue-700' },
+            { label: 'In Progress', value: jobCards.filter((j) => j.status === 'in_progress').length, icon: WrenchIcon, color: 'from-amber-500 to-amber-700' },
+            { label: 'Completed', value: jobCards.filter((j) => j.status === 'completed').length, icon: CheckCircle2, color: 'from-green-500 to-green-700' },
+          ].map((card) => (
+            <div key={card.label} className="rounded-2xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900">
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium text-slate-500 dark:text-slate-400">{card.label} Job Cards</span>
+                <div className={`rounded-xl bg-gradient-to-br ${card.color} p-2 text-white`}>
+                  <card.icon className="h-4 w-4" />
+                </div>
+              </div>
+              <div className="mt-2 text-3xl font-extrabold text-slate-900 dark:text-white">{card.value}</div>
             </div>
           ))}
         </div>

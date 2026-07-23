@@ -1,5 +1,5 @@
 import { supabase } from '@/lib/supabase'
-import { generateReceiptNumber } from '@/utils/formatters'
+import { generateReceiptNumber, generateDocNumber } from '@/utils/formatters'
 
 // Parses a price input into an exact 2-decimal number. Guards against any
 // upstream float artifact (browser input quirks, a CSV/Excel export like
@@ -1237,4 +1237,93 @@ export async function convertQuotationToInvoice(quotation, docNumber, userId) {
   if (updateErr) throw updateErr
 
   return invoice
+}
+
+// ─── Workshop Mode: Customers, Vehicles, Job Cards ────────────────────────────
+
+export async function fetchCustomers(tenantId) {
+  const { data, error } = await supabase
+    .from('customers')
+    .select('*, vehicles(*)')
+    .eq('tenant_id', tenantId)
+    .order('name')
+  if (error) throw error
+  return data
+}
+
+export async function createCustomer(tenantId, { name, phone, email, notes }) {
+  const { data, error } = await supabase
+    .from('customers')
+    .insert({ tenant_id: tenantId, name, phone: phone || null, email: email || null, notes: notes || null })
+    .select()
+    .single()
+  if (error) throw error
+  return data
+}
+
+export async function createVehicle(tenantId, customerId, { make, model, year, regNumber, color }) {
+  const { data, error } = await supabase
+    .from('vehicles')
+    .insert({
+      tenant_id: tenantId, customer_id: customerId,
+      make: make || null, model: model || null, year: year || null,
+      reg_number: regNumber || null, color: color || null,
+    })
+    .select()
+    .single()
+  if (error) throw error
+  return data
+}
+
+export async function fetchJobCards(tenantId) {
+  const { data, error } = await supabase
+    .from('job_cards')
+    .select('*, customers(name, phone), vehicles(make, model, year, reg_number), users!job_cards_assigned_to_fkey(name)')
+    .eq('tenant_id', tenantId)
+    .order('created_at', { ascending: false })
+    .limit(300)
+  if (error) throw error
+  return data
+}
+
+export async function createJobCard(tenantId, { branchId, customerId, vehicleId, description, mileageIn, items, assignedTo, createdBy }) {
+  const jobCardNo = generateDocNumber('JC')
+  const subtotal = items.reduce((s, i) => s + i.unit_price * i.qty, 0)
+  const { data, error } = await supabase
+    .from('job_cards')
+    .insert({
+      tenant_id: tenantId,
+      branch_id: branchId || null,
+      customer_id: customerId,
+      vehicle_id: vehicleId,
+      job_card_no: jobCardNo,
+      description: description || null,
+      mileage_in: mileageIn || null,
+      items,
+      subtotal,
+      total: subtotal,
+      assigned_to: assignedTo || null,
+      created_by: createdBy || null,
+    })
+    .select()
+    .single()
+  if (error) throw error
+  return data
+}
+
+export async function updateJobCard(jobCardId, updates) {
+  const { error } = await supabase.from('job_cards').update(updates).eq('id', jobCardId)
+  if (error) throw error
+}
+
+// Called right after a job card's items have been paid out through the
+// normal POS checkout (process_checkout) -- stamps the job card as done and
+// links it to the resulting order, so its full history (what was done, on
+// which vehicle, for how much) shows up in Vehicle Registry.
+export async function completeJobCard(jobCardId, orderId) {
+  const { error } = await supabase
+    .from('job_cards')
+    .update({ status: 'completed', completed_at: new Date().toISOString(), linked_order_id: orderId })
+    .eq('id', jobCardId)
+  if (error) throw error
 }

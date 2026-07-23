@@ -9,7 +9,7 @@ export default defineConfig({
     tailwindcss(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['favicon.svg', 'robots.txt'],
+      includeAssets: ['favicon.png', 'robots.txt'],
       manifest: {
         name: 'tengaPOS - Cloud POS & Inventory',
         short_name: 'tengaPOS',
@@ -19,8 +19,8 @@ export default defineConfig({
         display: 'standalone',
         start_url: '/',
         icons: [
-          { src: '/favicon.svg', sizes: '192x192', type: 'image/svg+xml' },
-          { src: '/favicon.svg', sizes: '512x512', type: 'image/svg+xml' },
+          { src: '/favicon.png', sizes: '192x192', type: 'image/png' },
+          { src: '/favicon.png', sizes: '512x512', type: 'image/png' },
         ],
       },
       workbox: {

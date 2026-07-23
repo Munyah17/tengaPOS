@@ -7,6 +7,10 @@ export const useCartStore = create((set, get) => ({
   discountType: 'percent', // 'percent' | 'fixed'
   customerId: null,
   orderType: 'counter',
+  // Set when a Workshop job card is sent to POS to be paid out — after
+  // checkout succeeds, POS.jsx uses this to mark that job card completed
+  // and link it to the resulting order, then clears it.
+  sourceJobCardId: null,
   // VAT is INCLUSIVE: the shelf price already contains VAT.
   // Set per tenant from their settings (vat_enabled / vat_rate).
   vatEnabled: true,
@@ -112,5 +116,5 @@ export const useCartStore = create((set, get) => ({
     return get().getTotal()
   },
 
-  clearCart: () => set({ items: [], discount: 0, discountType: 'percent', customerId: null, orderType: 'counter' }),
+  clearCart: () => set({ items: [], discount: 0, discountType: 'percent', customerId: null, orderType: 'counter', sourceJobCardId: null }),
 }))

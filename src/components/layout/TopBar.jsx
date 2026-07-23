@@ -1,4 +1,4 @@
-import { Bell, Wifi, WifiOff, ShieldAlert, Menu, User, Settings, LogOut, ChevronDown, CheckCheck, BellOff, ShoppingBag, UtensilsCrossed, AlertTriangle, CloudUpload } from 'lucide-react'
+import { Bell, Wifi, WifiOff, ShieldAlert, Menu, User, Settings, LogOut, ChevronDown, CheckCheck, BellOff, ShoppingBag, UtensilsCrossed, Wrench, AlertTriangle, CloudUpload } from 'lucide-react'
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import ThemeToggle from '@/components/common/ThemeToggle'
@@ -8,6 +8,15 @@ import { useAuthStore, ROLE_COLORS, ROLE_LABELS, NAV_PERMISSIONS } from '@/store
 import { useFiscalStore } from '@/stores/fiscalStore'
 import { useTenantNotifications } from '@/hooks/useTenantNotifications'
 import { pendingSyncCount } from '@/lib/offlineSync'
+
+// Retail/Restaurant/Workshop — same three modes as Sidebar.jsx and
+// AdminTenants.jsx's Business Modes control. A tenant only ever sees the
+// modes Super Admin actually enabled for it (tenant.enabled_modes).
+const MODE_META = {
+  retail: { label: 'Retail', icon: ShoppingBag, activeClass: 'bg-brand-600 text-white', gradient: 'from-brand-500 to-brand-700' },
+  restaurant: { label: 'Restaurant', icon: UtensilsCrossed, activeClass: 'bg-green-600 text-white', gradient: 'from-green-500 to-green-700' },
+  workshop: { label: 'Workshop', icon: Wrench, activeClass: 'bg-amber-600 text-white', gradient: 'from-amber-500 to-amber-700' },
+}
 
 function useClickOutside(ref, handler) {
   useEffect(() => {
@@ -35,6 +44,8 @@ export default function TopBar({ onMenuClick }) {
   const canSeeSettings = (NAV_PERMISSIONS[role] || NAV_PERMISSIONS.vendor).includes('settings')
 
   const isRestaurant = posMode === 'restaurant'
+  const enabledModes = tenant?.enabled_modes?.length ? tenant.enabled_modes : [tenant?.pos_mode || 'retail']
+  const activeMeta = MODE_META[posMode] || MODE_META.retail
   const isReadOnly = role === 'tech_support'
   const displayName = profile?.name || 'User'
   const initial = displayName[0]?.toUpperCase() || 'U'
@@ -124,15 +135,24 @@ export default function TopBar({ onMenuClick }) {
 
         <RefreshOnlineButton />
 
-        {/* POS mode toggle — hidden on mobile */}
-        <div className="hidden items-center overflow-hidden rounded-xl border border-slate-200 dark:border-slate-700 sm:flex">
-          <button onClick={() => setPosMode('retail')} className={`px-3 py-1.5 text-xs font-semibold transition-colors ${posMode === 'retail' ? 'bg-brand-600 text-white' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}>
-            Retail
-          </button>
-          <button onClick={() => setPosMode('restaurant')} className={`px-3 py-1.5 text-xs font-semibold transition-colors ${posMode === 'restaurant' ? 'bg-green-600 text-white' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}>
-            Restaurant
-          </button>
-        </div>
+        {/* POS mode toggle — hidden on mobile, and only shown at all when
+            Super Admin has enabled more than one mode for this tenant */}
+        {enabledModes.length > 1 && (
+          <div className="hidden items-center overflow-hidden rounded-xl border border-slate-200 dark:border-slate-700 sm:flex">
+            {enabledModes.map((m) => {
+              const meta = MODE_META[m] || MODE_META.retail
+              return (
+                <button
+                  key={m}
+                  onClick={() => setPosMode(m)}
+                  className={`px-3 py-1.5 text-xs font-semibold transition-colors ${posMode === m ? meta.activeClass : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
+                >
+                  {meta.label}
+                </button>
+              )
+            })}
+          </div>
+        )}
 
         <ThemeToggle />
 
@@ -195,7 +215,7 @@ export default function TopBar({ onMenuClick }) {
             onClick={() => { setAvatarOpen((o) => !o); setBellOpen(false) }}
             className="flex items-center gap-2 rounded-xl p-1.5 transition-colors hover:bg-slate-100 dark:hover:bg-slate-800"
           >
-            <div className={`flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-gradient-to-br ${isRestaurant ? 'from-green-500 to-green-700' : 'from-brand-500 to-brand-700'} text-sm font-bold text-white`}>
+            <div className={`flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-gradient-to-br ${activeMeta.gradient} text-sm font-bold text-white`}>
               {initial}
             </div>
             <div className="hidden flex-col text-left sm:flex">
@@ -213,34 +233,33 @@ export default function TopBar({ onMenuClick }) {
                 <p className={`text-xs font-medium ${colors.text}`}>{roleLabel}</p>
               </div>
 
-              {/* Mode switcher — always visible, primary way to switch on mobile */}
-              <div className="border-b border-slate-100 px-3 py-2.5 dark:border-slate-800">
-                <p className="mb-1.5 px-1 text-[10px] font-bold uppercase tracking-widest text-slate-400">POS Mode</p>
-                <div className="grid grid-cols-2 gap-1">
-                  <button
-                    onClick={() => { setPosMode('retail'); setAvatarOpen(false) }}
-                    className={`flex items-center justify-center gap-1.5 rounded-lg px-2 py-2 text-xs font-semibold transition-colors ${
-                      posMode === 'retail'
-                        ? 'bg-brand-600 text-white'
-                        : 'text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800'
-                    }`}
-                  >
-                    <ShoppingBag className="h-3.5 w-3.5" />
-                    Retail
-                  </button>
-                  <button
-                    onClick={() => { setPosMode('restaurant'); setAvatarOpen(false) }}
-                    className={`flex items-center justify-center gap-1.5 rounded-lg px-2 py-2 text-xs font-semibold transition-colors ${
-                      posMode === 'restaurant'
-                        ? 'bg-green-600 text-white'
-                        : 'text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800'
-                    }`}
-                  >
-                    <UtensilsCrossed className="h-3.5 w-3.5" />
-                    Restaurant
-                  </button>
+              {/* Mode switcher — only shown when this tenant has more than
+                  one mode enabled; primary way to switch on mobile */}
+              {enabledModes.length > 1 && (
+                <div className="border-b border-slate-100 px-3 py-2.5 dark:border-slate-800">
+                  <p className="mb-1.5 px-1 text-[10px] font-bold uppercase tracking-widest text-slate-400">POS Mode</p>
+                  <div className={`grid gap-1 ${enabledModes.length === 3 ? 'grid-cols-3' : 'grid-cols-2'}`}>
+                    {enabledModes.map((m) => {
+                      const meta = MODE_META[m] || MODE_META.retail
+                      const Icon = meta.icon
+                      return (
+                        <button
+                          key={m}
+                          onClick={() => { setPosMode(m); setAvatarOpen(false) }}
+                          className={`flex items-center justify-center gap-1.5 rounded-lg px-2 py-2 text-xs font-semibold transition-colors ${
+                            posMode === m
+                              ? meta.activeClass
+                              : 'text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800'
+                          }`}
+                        >
+                          <Icon className="h-3.5 w-3.5" />
+                          {meta.label}
+                        </button>
+                      )
+                    })}
+                  </div>
                 </div>
-              </div>
+              )}
 
               {/* Links */}
               <div className="py-1">

@@ -49,6 +49,7 @@ export default function Settings() {
   const [activeSection, setActiveSection] = useState('general')
   const { posMode, setPosMode } = useThemeStore()
   const { tenant, role, branch: homeBranch, initAuth } = useAuthStore()
+  const enabledModes = tenant?.enabled_modes?.length ? tenant.enabled_modes : [tenant?.pos_mode || 'retail']
   const fiscal = useFiscalStore()
   const visibleSections = role === 'shop_manager'
     ? sections.filter((s) => !SHOP_MANAGER_HIDDEN_SECTIONS.includes(s.id))
@@ -932,30 +933,30 @@ export default function Settings() {
                 </div>
                 <div>
                   <label className="mb-2 block text-sm font-medium text-slate-700 dark:text-slate-300">POS Mode</label>
-                  <div className="flex gap-3">
-                    <button
-                      onClick={() => setPosMode('retail')}
-                      className={`flex-1 rounded-xl border-2 p-4 text-center ${
-                        posMode === 'retail'
-                          ? 'border-brand-500 bg-brand-50 dark:bg-brand-950'
-                          : 'border-slate-200 dark:border-slate-700'
-                      }`}
-                    >
-                      <div className="mb-2 h-3 w-full rounded bg-brand-500" />
-                      <span className="text-sm font-semibold text-slate-900 dark:text-white">Retail (Blue)</span>
-                    </button>
-                    <button
-                      onClick={() => setPosMode('restaurant')}
-                      className={`flex-1 rounded-xl border-2 p-4 text-center ${
-                        posMode === 'restaurant'
-                          ? 'border-restaurant-500 bg-restaurant-50 dark:bg-restaurant-950'
-                          : 'border-slate-200 dark:border-slate-700'
-                      }`}
-                    >
-                      <div className="mb-2 h-3 w-full rounded bg-restaurant-500" />
-                      <span className="text-sm font-semibold text-slate-900 dark:text-white">Restaurant (Green)</span>
-                    </button>
-                  </div>
+                  {enabledModes.length > 1 ? (
+                    <div className="flex gap-3">
+                      {[
+                        { key: 'retail', label: 'Retail (Blue)', barClass: 'bg-brand-500', activeClass: 'border-brand-500 bg-brand-50 dark:bg-brand-950' },
+                        { key: 'restaurant', label: 'Restaurant (Green)', barClass: 'bg-restaurant-500', activeClass: 'border-restaurant-500 bg-restaurant-50 dark:bg-restaurant-950' },
+                        { key: 'workshop', label: 'Workshop (Amber)', barClass: 'bg-amber-500', activeClass: 'border-amber-500 bg-amber-50 dark:bg-amber-950' },
+                      ].filter((m) => enabledModes.includes(m.key)).map((m) => (
+                        <button
+                          key={m.key}
+                          onClick={() => setPosMode(m.key)}
+                          className={`flex-1 rounded-xl border-2 p-4 text-center ${
+                            posMode === m.key ? m.activeClass : 'border-slate-200 dark:border-slate-700'
+                          }`}
+                        >
+                          <div className={`mb-2 h-3 w-full rounded ${m.barClass}`} />
+                          <span className="text-sm font-semibold text-slate-900 dark:text-white">{m.label}</span>
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-slate-500">
+                      Your account is set to {posMode === 'restaurant' ? 'Restaurant' : posMode === 'workshop' ? 'Workshop' : 'Retail'} mode. Contact us if you need a different or additional mode enabled.
+                    </p>
+                  )}
                 </div>
               </div>
             )}

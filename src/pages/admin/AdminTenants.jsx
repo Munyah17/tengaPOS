@@ -163,6 +163,12 @@ const BOOL_FEATURES = [
   { key: 'custom_integrations', label: 'Custom Integrations' },
 ]
 
+const BUSINESS_MODES = [
+  { key: 'retail', label: 'Retail' },
+  { key: 'restaurant', label: 'Restaurant' },
+  { key: 'workshop', label: 'Workshop' },
+]
+
 const BACKUP_OPTIONS = [
   { key: 'daily_cloud',    label: 'Daily — Cloud' },
   { key: 'weekly_cloud',   label: 'Weekly — Cloud' },
@@ -211,6 +217,8 @@ export function TenantModal({ tenant, technicians, onClose, onSaved }) {
 
   const [planType, setPlanType] = useState(tenant.plan_type || 'standard_plan')
   const [features, setFeatures] = useState({ ...DEFAULT_FEATURES[tenant.plan_type || 'standard_plan'], ...(tenant.features || {}) })
+  const [posMode, setPosModeField] = useState(tenant.pos_mode || 'retail')
+  const [enabledModes, setEnabledModes] = useState(tenant.enabled_modes?.length ? tenant.enabled_modes : [tenant.pos_mode || 'retail'])
   const [whitelabel, setWhitelabel] = useState(tenant.whitelabel || {})
   const [backupConfig, setBackupConfig] = useState(tenant.backup_config || {})
   const [technicianId, setTechnicianId] = useState(tenant.dedicated_technician_id || '')
@@ -257,6 +265,18 @@ export function TenantModal({ tenant, technicians, onClose, onSaved }) {
   const setWL = (key, val) => setWhitelabel((w) => ({ ...w, [key]: val }))
   const setBackup = (key, val) => setBackupConfig((b) => ({ ...b, [key]: val }))
 
+  // A tenant always gets exactly the mode it signed up with by default;
+  // Super Admin is the only one who can add more on top (never fewer than
+  // one) -- setting the primary mode always keeps it enabled too.
+  const setPrimaryMode = (m) => {
+    setPosModeField(m)
+    setEnabledModes((prev) => (prev.includes(m) ? prev : [...prev, m]))
+  }
+  const toggleEnabledMode = (m) => {
+    if (m === posMode) return // can't disable the tenant's current default mode
+    setEnabledModes((prev) => (prev.includes(m) ? prev.filter((x) => x !== m) : [...prev, m]))
+  }
+
   const save = async (newStatus) => {
     setSaving(true)
     const now = new Date()
@@ -266,6 +286,8 @@ export function TenantModal({ tenant, technicians, onClose, onSaved }) {
     const updates = {
       plan_type: planType,
       features,
+      pos_mode: posMode,
+      enabled_modes: enabledModes,
       whitelabel,
       backup_config: backupConfig,
       dedicated_technician_id: technicianId || null,
@@ -456,7 +478,7 @@ export function TenantModal({ tenant, technicians, onClose, onSaved }) {
                   ['Phone', tenant.owner?.phone],
                   ['Industry', INDUSTRIES.find((i) => i.key === tenant.industry)?.label || tenant.industry],
                   ['Location', tenant.location],
-                  ['Business Type', tenant.pos_mode === 'restaurant' ? 'Restaurant' : 'Retail'],
+                  ['Business Type (at signup)', BUSINESS_MODES.find((m) => m.key === tenant.pos_mode)?.label || 'Retail'],
                   ['Branches Planned', tenant.requested_branches],
                   ['Team Size', TEAM_SIZE_LABELS[tenant.team_size_range] || tenant.team_size_range],
                   ['Preferred Plan', PLAN_PREF_LABELS[tenant.requested_plan_pref] || tenant.requested_plan_pref],
@@ -482,6 +504,43 @@ export function TenantModal({ tenant, technicians, onClose, onSaved }) {
           {/* ── Plan tab ── */}
           {tab === 'Plan' && (
             <div>
+              {/* Business Modes -- Retail/Restaurant/Workshop. A tenant gets
+                  exactly the mode it signed up with by default; this is the
+                  only place another mode can be added on top (e.g. a
+                  workshop client who also wants retail-style counter
+                  sales). Independent of plan tier -- any plan can run any
+                  mode(s). */}
+              <p className="mb-2 text-sm font-semibold text-slate-300">Business Modes</p>
+              <div className="mb-2 grid grid-cols-3 gap-2">
+                {BUSINESS_MODES.map((m) => (
+                  <button
+                    key={m.key}
+                    onClick={() => setPrimaryMode(m.key)}
+                    className={`rounded-xl border p-3 text-center transition-all ${
+                      posMode === m.key
+                        ? 'border-indigo-500 bg-indigo-500/10 text-indigo-500 dark:text-indigo-400'
+                        : 'border-slate-200 text-slate-500 hover:border-slate-300 dark:border-white/10 dark:hover:border-white/20'
+                    }`}
+                  >
+                    <p className="text-xs font-bold">{m.label}</p>
+                    <p className="mt-0.5 text-[10px] opacity-70">{posMode === m.key ? 'Default mode' : 'Set as default'}</p>
+                  </button>
+                ))}
+              </div>
+              <div className="mb-4 flex flex-wrap gap-x-4 gap-y-1.5">
+                {BUSINESS_MODES.filter((m) => m.key !== posMode).map((m) => (
+                  <label key={m.key} className="flex items-center gap-1.5 text-xs text-slate-400">
+                    <input
+                      type="checkbox"
+                      checked={enabledModes.includes(m.key)}
+                      onChange={() => toggleEnabledMode(m.key)}
+                      className="h-3.5 w-3.5 rounded border-slate-300"
+                    />
+                    Also enable {m.label}
+                  </label>
+                ))}
+              </div>
+
               <p className="mb-4 text-sm font-semibold text-slate-300">Select Plan</p>
               <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
                 {Object.entries(PLANS).map(([key, meta]) => {

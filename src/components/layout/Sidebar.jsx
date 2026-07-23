@@ -4,6 +4,7 @@ import {
   LayoutDashboard, ShoppingCart, Package, ClipboardList, BarChart3,
   Settings, Users, ChefHat, ListTodo, LogOut, ChevronLeft, ChevronRight, ChevronDown,
   Store, Receipt, Cpu, X, Sparkles, CreditCard, BriefcaseBusiness, FileText, Inbox, Calculator,
+  Wrench, Car, HardHat, FileSignature,
 } from 'lucide-react'
 import { useState } from 'react'
 import { useThemeStore } from '@/stores/themeStore'
@@ -17,6 +18,10 @@ const ALL_NAV_ITEMS = [
   { key: 'inventory', icon: Package, label: 'Inventory', path: '/app/inventory' },
   { key: 'orders', icon: ClipboardList, label: 'Orders', path: '/app/orders' },
   { key: 'kitchen', icon: ChefHat, label: 'Kitchen', path: '/app/kitchen', restaurantOnly: true },
+  { key: 'job_cards', icon: Wrench, label: 'Job Cards', path: '/app/job-cards', workshopOnly: true },
+  { key: 'vehicle_registry', icon: Car, label: 'Vehicle Registry', path: '/app/vehicle-registry', workshopOnly: true },
+  { key: 'mechanics', icon: HardHat, label: 'Mechanics', path: '/app/mechanics', workshopOnly: true },
+  { key: 'quotations', icon: FileSignature, label: 'Quotations', path: '/app/quotations', workshopOnly: true },
   { key: 'transactions', icon: Receipt, label: 'Transactions', path: '/app/transactions' },
   { key: 'reports', icon: BarChart3, label: 'Reports', path: '/app/reports' },
   { key: 'insights', icon: Sparkles, label: 'AI Insights', path: '/app/insights', addonFeature: 'ai_insights', addonTitle: 'AI Insights is an optional add-on — request it in Settings' },
@@ -44,6 +49,7 @@ export default function Sidebar({ open = false, onClose }) {
   const location = useLocation()
   const navigate = useNavigate()
   const isRestaurant = posMode === 'restaurant'
+  const isWorkshop = posMode === 'workshop'
 
   const allowedKeys = NAV_PERMISSIONS[role] || NAV_PERMISSIONS.vendor
   const visibleItems = ALL_NAV_ITEMS.map((item) => {
@@ -55,6 +61,7 @@ export default function Sidebar({ open = false, onClose }) {
     if (item.children) return true
     if (!allowedKeys.includes(item.key)) return false
     if (item.restaurantOnly && !isRestaurant) return false
+    if (item.workshopOnly && !isWorkshop) return false
     return true
   })
 

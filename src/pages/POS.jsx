@@ -14,7 +14,7 @@ import { useAuthStore } from '@/stores/authStore'
 import { PAYMENT_METHODS } from '@/utils/constants'
 import { formatCurrency, generateReceiptNumber } from '@/utils/formatters'
 import { initiatePaynowCheckout } from '@/lib/paynow'
-import { fetchProducts, saveCheckout, fetchStaff } from '@/lib/db'
+import { fetchProducts, saveCheckout, fetchStaff, completeJobCard } from '@/lib/db'
 import { getOfflineProducts, queueOfflineSale } from '@/lib/offlineSync'
 import { supabase } from '@/lib/supabase'
 import { useFiscalStore } from '@/stores/fiscalStore'
@@ -36,6 +36,15 @@ export default function POS() {
   const fiscal = useFiscalStore()
   const [search, setSearch] = useState('')
   const [category, setCategory] = useState('all')
+  // Cart quantity: click the number to type an exact value directly instead
+  // of clicking +/- one at a time (painful for bulk quantities like 100).
+  const [editingQtyId, setEditingQtyId] = useState(null)
+  const [qtyDraft, setQtyDraft] = useState('')
+  const commitQtyDraft = (itemId) => {
+    const n = parseInt(qtyDraft, 10)
+    if (Number.isFinite(n) && n > 0) cart.updateQuantity(itemId, n)
+    setEditingQtyId(null)
+  }
   const [showReceipt, setShowReceipt] = useState(false)
   const [receiptData, setReceiptData] = useState(null)
   const [paynowLoading, setPaynowLoading] = useState(false)
@@ -224,6 +233,7 @@ export default function POS() {
     const total = cart.getGrandTotal()
 
     let receiptNumber = generateReceiptNumber()
+    let completedOrderId = null
 
     let fdmsQrUrl = null
 
@@ -258,6 +268,7 @@ export default function POS() {
         try {
           const result = await saveCheckout(checkoutPayload)
           receiptNumber = result.receiptNo
+          completedOrderId = result.order?.id || null
           // We already know exactly what was decremented — patch the cache
           // locally instead of firing a whole new products query for data
           // we can compute ourselves.
@@ -318,6 +329,13 @@ export default function POS() {
           // Non-blocking — the sale is already saved; fiscal failure is not fatal
         }
       }
+    }
+
+    // Job card -> POS checkout loop: this sale came from "Complete & Issue
+    // Receipt" on a job card (JobCards.jsx), so stamp that job card
+    // completed and link it to the order that was just created.
+    if (cart.sourceJobCardId && completedOrderId) {
+      completeJobCard(cart.sourceJobCardId, completedOrderId).catch(() => {})
     }
 
     const grossTotal = cart.items.reduce((s, i) => s + i.price * i.quantity, 0)
@@ -623,9 +641,30 @@ export default function POS() {
                         >
                           <Minus className="h-3 w-3" />
                         </button>
-                        <span className="w-8 text-center text-sm font-bold text-slate-900 dark:text-white">
-                          {item.quantity}
-                        </span>
+                        {editingQtyId === item.id ? (
+                          <input
+                            type="number"
+                            min="1"
+                            autoFocus
+                            value={qtyDraft}
+                            onChange={(e) => setQtyDraft(e.target.value)}
+                            onFocus={(e) => e.target.select()}
+                            onBlur={() => commitQtyDraft(item.id)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') { e.currentTarget.blur() }
+                              else if (e.key === 'Escape') { setEditingQtyId(null) }
+                            }}
+                            className="w-10 rounded-lg border border-brand-300 bg-white px-1 py-0.5 text-center text-sm font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-brand-500 dark:border-brand-700 dark:bg-slate-800 dark:text-white"
+                          />
+                        ) : (
+                          <span
+                            onClick={() => { setEditingQtyId(item.id); setQtyDraft(String(item.quantity)) }}
+                            className="w-8 cursor-text text-center text-sm font-bold text-slate-900 dark:text-white"
+                            title="Click to type a quantity"
+                          >
+                            {item.quantity}
+                          </span>
+                        )}
                         <button
                           onClick={() => cart.updateQuantity(item.id, item.quantity + 1)}
                           className={`flex h-7 w-7 items-center justify-center rounded-lg text-white ${

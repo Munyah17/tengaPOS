@@ -3,6 +3,7 @@ import { Outlet, useLocation } from 'react-router-dom'
 import Sidebar from './Sidebar'
 import TopBar from './TopBar'
 import { useAuthStore } from '@/stores/authStore'
+import { useThemeStore } from '@/stores/themeStore'
 import { useReceiptConfigStore } from '@/stores/receiptConfigStore'
 import { useFiscalStore } from '@/stores/fiscalStore'
 import { startBackgroundSync } from '@/lib/offlineSync'
@@ -64,6 +65,22 @@ export default function AppLayout() {
     applyWhitelabelTheme(tenant?.whitelabel)
     return () => clearWhitelabelTheme()
   }, [tenant?.whitelabel])
+
+  // The active POS mode is the tenant's own assignment, not a free local
+  // toggle — previously posMode lived only in localStorage, so any user
+  // could flip into "Restaurant" on a plain retail tenant. Whenever the
+  // tenant record loads or changes (including live, via the realtime
+  // listener below), snap the local mode back in line: keep it if it's
+  // still one of the tenant's enabled_modes, otherwise fall back to the
+  // tenant's assigned default (pos_mode).
+  useEffect(() => {
+    if (!tenant?.id) return
+    const enabled = tenant.enabled_modes?.length ? tenant.enabled_modes : [tenant.pos_mode || 'retail']
+    const current = useThemeStore.getState().posMode
+    if (!enabled.includes(current)) {
+      useThemeStore.getState().setPosMode(tenant.pos_mode || enabled[0])
+    }
+  }, [tenant?.id, tenant?.pos_mode, tenant?.enabled_modes])
 
   // Lock body scroll when mobile sidebar is open
   useEffect(() => {
