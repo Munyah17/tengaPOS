@@ -938,7 +938,7 @@ export default function Settings() {
                       {[
                         { key: 'retail', label: 'Retail (Blue)', barClass: 'bg-brand-500', activeClass: 'border-brand-500 bg-brand-50 dark:bg-brand-950' },
                         { key: 'restaurant', label: 'Restaurant (Green)', barClass: 'bg-restaurant-500', activeClass: 'border-restaurant-500 bg-restaurant-50 dark:bg-restaurant-950' },
-                        { key: 'workshop', label: 'Workshop (Amber)', barClass: 'bg-amber-500', activeClass: 'border-amber-500 bg-amber-50 dark:bg-amber-950' },
+                        { key: 'workshop', label: 'Workshop (Red/Amber)', barClass: 'bg-gradient-to-r from-red-600 to-amber-500', activeClass: 'border-red-500 bg-red-50 dark:bg-red-950/40' },
                       ].filter((m) => enabledModes.includes(m.key)).map((m) => (
                         <button
                           key={m.key}

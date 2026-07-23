@@ -15,7 +15,7 @@ import { pendingSyncCount } from '@/lib/offlineSync'
 const MODE_META = {
   retail: { label: 'Retail', icon: ShoppingBag, activeClass: 'bg-brand-600 text-white', gradient: 'from-brand-500 to-brand-700' },
   restaurant: { label: 'Restaurant', icon: UtensilsCrossed, activeClass: 'bg-green-600 text-white', gradient: 'from-green-500 to-green-700' },
-  workshop: { label: 'Workshop', icon: Wrench, activeClass: 'bg-amber-600 text-white', gradient: 'from-amber-500 to-amber-700' },
+  workshop: { label: 'Workshop', icon: Wrench, activeClass: 'bg-gradient-to-r from-red-600 to-amber-500 text-white', gradient: 'from-red-600 to-amber-500' },
 }
 
 function useClickOutside(ref, handler) {

@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { Car, User, Phone, Search, ChevronRight, Wrench, Calendar, Lightbulb } from 'lucide-react'
+import ExportMenu from '@/components/common/ExportMenu'
 import { formatCurrency, formatDate } from '@/utils/formatters'
 import { useAuthStore } from '@/stores/authStore'
 import { fetchCustomers, fetchJobCards } from '@/lib/db'
@@ -34,11 +35,29 @@ export default function VehicleRegistry() {
     .filter((j) => j.vehicle_id === vehicleId && j.status === 'completed')
     .sort((a, b) => new Date(b.completed_at || b.created_at) - new Date(a.completed_at || a.created_at))
 
+  const exportRows = useMemo(() => filteredCustomers.flatMap((c) => (c.vehicles || []).map((v) => ({
+    customer: c.name,
+    phone: c.phone || '',
+    vehicle: [v.make, v.model, v.year].filter(Boolean).join(' '),
+    reg_number: v.reg_number || '',
+    services: historyFor(v.id).length,
+  }))), [filteredCustomers, jobCards])
+  const exportColumns = [
+    { header: 'Customer', key: 'customer' },
+    { header: 'Phone', key: 'phone' },
+    { header: 'Vehicle', key: 'vehicle' },
+    { header: 'Reg Number', key: 'reg_number' },
+    { header: 'Services', key: 'services' },
+  ]
+
   return (
     <div className="p-4 sm:p-6">
-      <div className="mb-4">
-        <h1 className="text-2xl font-extrabold text-slate-900 dark:text-white">Vehicle Registry</h1>
-        <p className="text-sm text-slate-500">Customers, their vehicles, and full service history</p>
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-extrabold text-slate-900 dark:text-white">Vehicle Registry</h1>
+          <p className="text-sm text-slate-500">Customers, their vehicles, and full service history</p>
+        </div>
+        <ExportMenu data={exportRows} columns={exportColumns} title="Vehicle Registry" filename="vehicle_registry" />
       </div>
 
       <div className="relative mb-4 max-w-sm">

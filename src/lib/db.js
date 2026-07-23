@@ -1278,7 +1278,7 @@ export async function createVehicle(tenantId, customerId, { make, model, year, r
 export async function fetchJobCards(tenantId) {
   const { data, error } = await supabase
     .from('job_cards')
-    .select('*, customers(name, phone), vehicles(make, model, year, reg_number), users!job_cards_assigned_to_fkey(name)')
+    .select('*, customers(name, phone), vehicles(make, model, year, reg_number), technicians(name)')
     .eq('tenant_id', tenantId)
     .order('created_at', { ascending: false })
     .limit(300)
@@ -1286,7 +1286,7 @@ export async function fetchJobCards(tenantId) {
   return data
 }
 
-export async function createJobCard(tenantId, { branchId, customerId, vehicleId, description, mileageIn, items, assignedTo, createdBy }) {
+export async function createJobCard(tenantId, { branchId, customerId, vehicleId, description, mileageIn, diagnosis, partsRequested, items, assignedTo, createdBy, quotationId }) {
   const jobCardNo = generateDocNumber('JC')
   const subtotal = items.reduce((s, i) => s + i.unit_price * i.qty, 0)
   const { data, error } = await supabase
@@ -1299,17 +1299,74 @@ export async function createJobCard(tenantId, { branchId, customerId, vehicleId,
       job_card_no: jobCardNo,
       description: description || null,
       mileage_in: mileageIn || null,
+      diagnosis: diagnosis || null,
+      parts_requested: partsRequested || [],
       items,
       subtotal,
       total: subtotal,
       assigned_to: assignedTo || null,
       created_by: createdBy || null,
+      quotation_id: quotationId || null,
     })
     .select()
     .single()
   if (error) throw error
   return data
 }
+
+// ─── Technicians (Workshop Mode master data — never log in) ───────────────────
+
+export async function fetchTechnicians(tenantId) {
+  const { data, error } = await supabase
+    .from('technicians')
+    .select('*')
+    .eq('tenant_id', tenantId)
+    .order('name')
+  if (error) throw error
+  return data
+}
+
+export async function createTechnician(tenantId, { name, phone, specialty }) {
+  const { data, error } = await supabase
+    .from('technicians')
+    .insert({ tenant_id: tenantId, name, phone: phone || null, specialty: specialty || null })
+    .select()
+    .single()
+  if (error) throw error
+  return data
+}
+
+export async function updateTechnician(id, updates) {
+  const { error } = await supabase.from('technicians').update(updates).eq('id', id)
+  if (error) throw error
+}
+
+// ─── Duplicate detection (Workshop Mode customer/vehicle intake) ──────────────
+
+export async function findDuplicateCustomer(tenantId, phone) {
+  if (!phone?.trim()) return null
+  const { data, error } = await supabase
+    .from('customers')
+    .select('*, vehicles(*)')
+    .eq('tenant_id', tenantId)
+    .eq('phone', phone.trim())
+    .maybeSingle()
+  if (error) throw error
+  return data
+}
+
+export async function findDuplicateVehicle(tenantId, regNumber) {
+  if (!regNumber?.trim()) return null
+  const { data, error } = await supabase
+    .from('vehicles')
+    .select('*, customers(name, phone)')
+    .eq('tenant_id', tenantId)
+    .ilike('reg_number', regNumber.trim())
+    .maybeSingle()
+  if (error) throw error
+  return data
+}
+
 
 export async function updateJobCard(jobCardId, updates) {
   const { error } = await supabase.from('job_cards').update(updates).eq('id', jobCardId)

@@ -52,7 +52,7 @@ export default function Dashboard() {
   const { posMode } = useThemeStore()
   const { profile, tenant, user, role } = useAuthStore()
   const isRestaurant = posMode === 'restaurant'
-  const accentColor = posMode === 'restaurant' ? '#22c55e' : posMode === 'workshop' ? '#d97706' : '#3b82f6'
+  const accentColor = posMode === 'restaurant' ? '#22c55e' : posMode === 'workshop' ? '#dc2626' : '#3b82f6'
   const { notifications } = useTenantNotifications({ tenantId: tenant?.id, posMode, limit: 5 })
   const queryClient = useQueryClient()
   const [sessionDismissed, setSessionDismissed] = useState(readSessionDismissed)
@@ -268,6 +268,47 @@ export default function Dashboard() {
           ))}
         </div>
       )}
+
+      {/* Workshop Mode: lightweight end-of-day summary -- today's completed
+          jobs, revenue, parts-vs-labor split, and today's top technician.
+          Not a general ledger, just what a service advisor checks at close. */}
+      {isWorkshop && (() => {
+        const todayStr = new Date().toDateString()
+        const completedToday = jobCards.filter((j) => j.status === 'completed' && j.completed_at && new Date(j.completed_at).toDateString() === todayStr)
+        const revenueToday = completedToday.reduce((s, j) => s + (Number(j.total) || 0), 0)
+        const partsTotal = completedToday.reduce((s, j) => s + (j.items || []).filter((i) => i.product_id).reduce((s2, i) => s2 + i.unit_price * i.qty, 0), 0)
+        const laborTotal = Math.max(0, revenueToday - partsTotal)
+        const byTech = {}
+        for (const j of completedToday) {
+          const name = j.technicians?.name || 'Unassigned'
+          byTech[name] = (byTech[name] || 0) + (Number(j.total) || 0)
+        }
+        const topTech = Object.entries(byTech).sort((a, b) => b[1] - a[1])[0]
+
+        return (
+          <div className="mb-6 rounded-2xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900">
+            <h3 className="mb-3 text-sm font-bold uppercase tracking-wide text-slate-500">Today at the Workshop</h3>
+            <div className="grid gap-4 sm:grid-cols-4">
+              <div>
+                <p className="text-xs text-slate-500">Jobs Completed</p>
+                <p className="text-2xl font-extrabold text-slate-900 dark:text-white">{completedToday.length}</p>
+              </div>
+              <div>
+                <p className="text-xs text-slate-500">Revenue</p>
+                <p className="text-2xl font-extrabold text-slate-900 dark:text-white">{formatCurrency(revenueToday)}</p>
+              </div>
+              <div>
+                <p className="text-xs text-slate-500">Parts / Labor Split</p>
+                <p className="text-sm font-semibold text-slate-700 dark:text-slate-300">{formatCurrency(partsTotal)} / {formatCurrency(laborTotal)}</p>
+              </div>
+              <div>
+                <p className="text-xs text-slate-500">Top Technician</p>
+                <p className="text-sm font-semibold text-slate-700 dark:text-slate-300">{topTech ? `${topTech[0]} (${formatCurrency(topTech[1])})` : '—'}</p>
+              </div>
+            </div>
+          </div>
+        )
+      })()}
 
       {/* Stat Cards */}
       <div className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">

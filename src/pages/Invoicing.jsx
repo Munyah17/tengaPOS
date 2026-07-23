@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { Plus, FileText, Receipt, Download, Printer, ArrowRightLeft, Trash2, X, RefreshCw } from 'lucide-react'
+import { Plus, FileText, Receipt, Download, Printer, ArrowRightLeft, Trash2, X, RefreshCw, Wrench } from 'lucide-react'
 import Button from '@/components/common/Button'
 import Modal from '@/components/common/Modal'
 import DateInput from '@/components/common/DateInput'
@@ -33,6 +34,7 @@ const BLANK_FORM = {
 // gate, and locked to quotations only (invoices stay part of the paid add-on).
 export default function Invoicing({ standalone = false } = {}) {
   const { tenant, branch, user } = useAuthStore()
+  const navigate = useNavigate()
   const receiptConfig = useReceiptConfigStore()
   const [docType, setDocType] = useState('quotation')
   const [documents, setDocuments] = useState([])
@@ -288,6 +290,15 @@ export default function Invoicing({ standalone = false } = {}) {
                         {doc.doc_type === 'quotation' && !doc.converted_to_id && (
                           <button onClick={() => handleConvert(doc)} className="rounded-lg p-1.5 text-brand-500 hover:bg-brand-50 dark:hover:bg-brand-950" title="Convert to Invoice">
                             <ArrowRightLeft className="h-4 w-4" />
+                          </button>
+                        )}
+                        {standalone && doc.doc_type === 'quotation' && doc.status === 'accepted' && (
+                          <button
+                            onClick={() => navigate('/app/job-cards', { state: { fromQuotation: doc } })}
+                            className="rounded-lg p-1.5 text-red-500 hover:bg-red-50 dark:hover:bg-red-950"
+                            title="Create Job Card from this quotation"
+                          >
+                            <Wrench className="h-4 w-4" />
                           </button>
                         )}
                         <button onClick={() => handleDelete(doc)} className="rounded-lg p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-950" title="Delete">
