@@ -1,6 +1,5 @@
 import { supabase } from '@/lib/supabase'
 import { generateReceiptNumber, generateDocNumber } from '@/utils/formatters'
-import { isStaleJwtError, refreshSessionOnce } from '@/lib/authRetry'
 
 // Parses a price input into an exact 2-decimal number. Guards against any
 // upstream float artifact (browser input quirks, a CSV/Excel export like
@@ -147,7 +146,7 @@ export async function deleteProduct(id) {
 
 // ─── Checkout / POS ──────────────────────────────────────────────────────────
 
-export async function saveCheckout({ tenantId, branchId, userId, cartItems, paymentMethod, subtotal, tax, total, posMode, orderType, receiptNo: receiptNoIn, clientRef: clientRefIn, salespersonName, salespersonEmployeeNo }, _retried = false) {
+export async function saveCheckout({ tenantId, branchId, userId, cartItems, paymentMethod, subtotal, tax, total, posMode, orderType, receiptNo: receiptNoIn, clientRef: clientRefIn, salespersonName, salespersonEmployeeNo }) {
   // clientRef is the real idempotency key — a UUID with no meaningful
   // collision risk, generated once by the caller and reused on every retry
   // (a live retry queued after a network blip, or an offline-sync replay).
@@ -196,19 +195,6 @@ export async function saveCheckout({ tenantId, branchId, userId, cartItems, paym
     p_client_ref: clientRef,
   })
   if (error) {
-    // A session token minted before a JWT signing-key rotation fails
-    // verification here identically every time (autoRefreshToken only
-    // refreshes on expiry, not on a retired signing key) -- misclassifying
-    // this as a generic failure means it gets queued offline and retried
-    // forever with the same stale token, never actually reaching the
-    // server. Refresh once and retry with the exact same clientRef/receiptNo
-    // (safe — process_checkout is idempotent on clientRef).
-    if (!_retried && isStaleJwtError(error.message) && await refreshSessionOnce(supabase)) {
-      return saveCheckout({
-        tenantId, branchId, userId, cartItems, paymentMethod, subtotal, tax, total, posMode, orderType,
-        receiptNo, clientRef, salespersonName, salespersonEmployeeNo,
-      }, true)
-    }
     throw new Error(error.message?.includes('Insufficient stock')
       ? error.message
       : `Checkout failed: ${error.message}`)
