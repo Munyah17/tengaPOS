@@ -1193,9 +1193,10 @@ export async function deleteShift(shiftId) {
 // ─── Documents (quotations & invoices) ─────────────────────────────────────────
 
 export async function fetchDocuments(tenantId, docType) {
+  // users(name) powers "Prepared By" on the generated PDF (invoicePdf.js)
   let query = supabase
     .from('documents')
-    .select('*')
+    .select('*, users(name)')
     .eq('tenant_id', tenantId)
     .order('created_at', { ascending: false })
   if (docType) query = query.eq('doc_type', docType)
