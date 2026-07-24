@@ -69,7 +69,7 @@ serve(async (req) => {
       integId + reference + amountStr + additionalInfo + returnUrl + resultUrl + statusField + integKey,
     )
 
-    const form = new URLSearchParams({
+    const formData = {
       id:             integId,
       reference,
       amount:         amountStr,
@@ -78,15 +78,24 @@ serve(async (req) => {
       resulturl:      resultUrl,
       status:         statusField,
       hash,
-    })
+    }
 
-    const paynowRes = await fetch('https://www.paynow.co.zw/interface/initiatetransaction', {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body:    form.toString(),
+    // Paynow resets connections from Supabase's Edge/Deno Deploy IP range
+    // (confirmed directly) -- relayed through a Vercel serverless function
+    // on a different network instead. See api/paynow-proxy.js.
+    const proxyUrl = Deno.env.get('PAYNOW_PROXY_URL')
+    const proxySecret = Deno.env.get('PAYNOW_PROXY_SECRET')
+    if (!proxyUrl || !proxySecret) {
+      return json({ error: 'Paynow proxy is not configured yet — contact support.' }, 503)
+    }
+    const proxyRes = await fetch(proxyUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-proxy-secret': proxySecret },
+      body: JSON.stringify({ targetUrl: 'https://www.paynow.co.zw/interface/initiatetransaction', formData }),
     })
-
-    const responseText = await paynowRes.text()
+    const proxyJson = await proxyRes.json()
+    if (!proxyRes.ok) return json({ error: `Paynow proxy: ${proxyJson?.error || 'request failed'}` }, 502)
+    const responseText = proxyJson.body || ''
     const params       = new URLSearchParams(responseText)
 
     if (params.get('status')?.toLowerCase() !== 'ok') {
