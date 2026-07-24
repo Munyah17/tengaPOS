@@ -225,6 +225,14 @@ export default function POS() {
       // Redirect to Paynow — it completes the payment, our return page polls for 30s
       return handlePaynowCheckout()
     }
+    if (!tenant?.id) {
+      // Previously this silently fell through: no order saved, nothing
+      // queued offline, yet the receipt still showed and "Transaction
+      // completed!" still toasted — a session/auth-store race looked
+      // identical to a real sale with nothing to show for it afterwards.
+      toast.error('Not signed in yet — wait a moment and try again')
+      return
+    }
     // Give the button a paint frame before the network work (INP fix)
     setCheckingOut(true)
     await new Promise((r) => setTimeout(r, 30))
@@ -904,7 +912,7 @@ export default function POS() {
             size="lg"
             className="mt-3 w-full"
             onClick={handleCheckout}
-            disabled={cart.items.length === 0 || checkingOut || cashShortfall}
+            disabled={cart.items.length === 0 || checkingOut || cashShortfall || !tenant?.id}
           >
             {checkingOut ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Receipt className="h-4 w-4" />}
             {checkingOut

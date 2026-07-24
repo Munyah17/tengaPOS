@@ -1,15 +1,9 @@
 import { supabase } from './supabase'
+import { isStaleJwtError, refreshSessionOnce } from './authRetry'
 
 // Central helper for calling Supabase Edge Functions with the caller's
-// session token. A session token minted before a JWT signing-key rotation
-// fails verification at the gateway with "invalid JWT ... unrecognized
-// JWT kid" -- not something retrying with the SAME token fixes. This
-// refreshes the session once and retries transparently instead of
-// surfacing that error to the user.
-function isStaleJwtError(msg) {
-  return typeof msg === 'string' && /invalid jwt|unrecognized jwt kid|token is unverifiable/i.test(msg)
-}
-
+// session token. See authRetry.js for why a stale-signing-key token needs
+// an explicit refresh-and-retry instead of being treated as a normal error.
 export async function invokeEdgeFunction(name, body, { retried = false } = {}) {
   const { data: { session } } = await supabase.auth.getSession()
   const { data, error } = await supabase.functions.invoke(name, {
@@ -22,9 +16,8 @@ export async function invokeEdgeFunction(name, body, { retried = false } = {}) {
       const ctx = await error.context?.json()
       if (ctx?.error) msg = ctx.error
     } catch { /* keep default */ }
-    if (!retried && isStaleJwtError(msg)) {
-      const { error: refreshErr } = await supabase.auth.refreshSession()
-      if (!refreshErr) return invokeEdgeFunction(name, body, { retried: true })
+    if (!retried && isStaleJwtError(msg) && await refreshSessionOnce(supabase)) {
+      return invokeEdgeFunction(name, body, { retried: true })
     }
     throw new Error(msg)
   }
