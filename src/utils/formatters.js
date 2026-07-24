@@ -40,7 +40,10 @@ export function generateReceiptNumber() {
   const y = now.getFullYear().toString().slice(-2)
   const m = (now.getMonth() + 1).toString().padStart(2, '0')
   const d = now.getDate().toString().padStart(2, '0')
-  const rand = Math.floor(Math.random() * 10000).toString().padStart(4, '0')
+  // 6 digits (1,000,000 slots/tenant/day) -- this is only the printed
+  // number now, not the checkout dedup key (see process_checkout's
+  // client_ref), so it just needs to be collision-rare, not collision-proof.
+  const rand = Math.floor(Math.random() * 1000000).toString().padStart(6, '0')
   return `TP-${y}${m}${d}-${rand}`
 }
 

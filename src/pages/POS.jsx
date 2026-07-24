@@ -233,6 +233,14 @@ export default function POS() {
     const total = cart.getGrandTotal()
 
     let receiptNumber = generateReceiptNumber()
+    // The real dedup key (see saveCheckout/process_checkout) -- generated
+    // once, up front, and reused on every retry (live retry via the
+    // offline queue, or a background sync replay) so a retried sale is
+    // recognized as the same sale server-side instead of being processed
+    // — and stock-decremented — a second time. receiptNumber alone isn't
+    // safe for this (too few possible values, can collide with an
+    // unrelated sale), which is exactly why clientRef exists.
+    const clientRef = crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`
     let completedOrderId = null
 
     let fdmsQrUrl = null
@@ -249,11 +257,8 @@ export default function POS() {
         total,
         posMode,
         orderType: isRestaurant ? (cart.orderType || 'counter') : 'sale',
-        // Generated once, up front, and reused on every retry (live retry
-        // via the offline queue, or a background sync replay) so a retried
-        // sale is recognized as the same sale server-side instead of being
-        // processed — and stock-decremented — a second time.
         receiptNo: receiptNumber,
+        clientRef,
         salespersonName: salespersonName || null,
         salespersonEmployeeNo: salespersonEmployeeNo || null,
       }

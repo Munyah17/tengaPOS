@@ -122,16 +122,22 @@ export async function deleteProduct(id) {
 
 // ─── Checkout / POS ──────────────────────────────────────────────────────────
 
-export async function saveCheckout({ tenantId, branchId, userId, cartItems, paymentMethod, subtotal, tax, total, posMode, orderType, receiptNo: receiptNoIn, salespersonName, salespersonEmployeeNo }) {
-  // The receipt number is the idempotency key: the caller generates it once,
-  // up front, and reuses the SAME value on every retry (a live retry queued
-  // after a network blip, or an offline-sync replay). process_checkout runs
-  // the stock reservation + order + order_items + transaction as one atomic,
-  // idempotent call — if this exact receipt was already processed, it
-  // returns that order instead of reprocessing it. Without this, a retry
-  // used to decrement stock again and create a fully duplicate sale, because
-  // the old code generated a fresh receipt number on every call.
+export async function saveCheckout({ tenantId, branchId, userId, cartItems, paymentMethod, subtotal, tax, total, posMode, orderType, receiptNo: receiptNoIn, clientRef: clientRefIn, salespersonName, salespersonEmployeeNo }) {
+  // clientRef is the real idempotency key — a UUID with no meaningful
+  // collision risk, generated once by the caller and reused on every retry
+  // (a live retry queued after a network blip, or an offline-sync replay).
+  // process_checkout runs the stock reservation + order + order_items +
+  // transaction as one atomic, idempotent call keyed on this — if this
+  // exact clientRef was already processed, it returns that order instead
+  // of reprocessing it.
+  //
+  // receiptNo is a SEPARATE, purely cosmetic printed number. It used to
+  // double as the dedup key too, but its random suffix only had 10,000
+  // slots/tenant/day — busy tenants hit real collisions between totally
+  // unrelated sales, which silently short-circuited the second sale as
+  // "already processed" (no new order, no stock decrement, no error).
   const receiptNo = receiptNoIn || generateReceiptNumber()
+  const clientRef = clientRefIn || (crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`)
 
   const grossTotal = cartItems.reduce((sum, item) => sum + item.price * item.quantity, 0)
   const discountAmount = Math.max(0, grossTotal - total)
@@ -162,6 +168,7 @@ export async function saveCheckout({ tenantId, branchId, userId, cartItems, paym
     p_items: items,
     p_salesperson_name: salespersonName || null,
     p_salesperson_employee_no: salespersonEmployeeNo || null,
+    p_client_ref: clientRef,
   })
   if (error) {
     throw new Error(error.message?.includes('Insufficient stock')
