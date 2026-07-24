@@ -408,10 +408,19 @@ export default function Invoicing({ standalone = false } = {}) {
               <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Line Items</label>
               <button type="button" onClick={addItem} className="text-xs font-semibold text-brand-600 hover:underline">+ Add Item</button>
             </div>
+            <div className="mb-1 hidden grid-cols-12 gap-1.5 px-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-400 sm:grid">
+              <span className="col-span-4">Description</span>
+              <span className="col-span-1">Qty</span>
+              <span className="col-span-2">Unit Price</span>
+              <span className="col-span-2">Disc %</span>
+              <span className="col-span-2">Total</span>
+            </div>
             <div className="space-y-2">
-              {form.items.map((item, i) => (
+              {form.items.map((item, i) => {
+                const lineTotal = (Number(item.qty) || 0) * (Number(item.unit_price) || 0) * (1 - (item.discount_pct || 0) / 100)
+                return (
                 <div key={i} className="grid grid-cols-12 gap-1.5">
-                  <div className="relative col-span-5">
+                  <div className="relative col-span-4">
                     <input
                       type="text" placeholder="Description — type an SKU or product name" value={item.description}
                       onChange={(e) => { updateItem(i, 'description', e.target.value); setAutocompleteRow(i) }}
@@ -438,7 +447,7 @@ export default function Invoicing({ standalone = false } = {}) {
                   <input
                     type="number" placeholder="Qty" min="0" value={item.qty}
                     onChange={(e) => updateItem(i, 'qty', Number(e.target.value) || 0)}
-                    className="col-span-2 rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                    className="col-span-1 rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
                   />
                   <input
                     type="number" placeholder="Price" min="0" step="0.01" value={item.unit_price}
@@ -450,11 +459,15 @@ export default function Invoicing({ standalone = false } = {}) {
                     onChange={(e) => updateItem(i, 'discount_pct', Number(e.target.value) || 0)}
                     className="col-span-2 rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
                   />
+                  <div className="col-span-2 flex items-center rounded-lg bg-slate-50 px-2 py-1.5 text-sm font-semibold text-slate-700 dark:bg-slate-800/60 dark:text-slate-300">
+                    {fmt(lineTotal)}
+                  </div>
                   <button type="button" onClick={() => removeItem(i)} className="col-span-1 flex items-center justify-center rounded-lg text-slate-400 hover:text-red-500">
                     <X className="h-4 w-4" />
                   </button>
                 </div>
-              ))}
+                )
+              })}
             </div>
           </div>
 

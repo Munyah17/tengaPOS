@@ -1195,6 +1195,30 @@ export async function insertDocument(tenantId, branchId, userId, doc) {
   return data
 }
 
+// Turns a job card's diagnosis + billable items into a real quotation the
+// customer can be sent -- the other direction of the Quotation -> Job Card
+// flow in Invoicing.jsx/Quotations.jsx. Links back via job_cards.quotation_id
+// (same column, whichever direction created the link).
+export async function createQuotationFromJobCard(tenantId, branchId, userId, jobCard, { vatEnabled = true, vatRate = 15.5 } = {}) {
+  const items = (jobCard.items || []).map((i) => ({ description: i.description, qty: i.qty, unit_price: i.unit_price, discount_pct: 0 }))
+  const grossTotal = items.reduce((s, i) => s + i.qty * i.unit_price, 0)
+  const vatAmount = vatEnabled ? grossTotal * (vatRate / (100 + vatRate)) : 0
+  const doc = await insertDocument(tenantId, branchId, userId, {
+    docType: 'quotation',
+    docNumber: generateDocNumber('QUO'),
+    status: 'draft',
+    customerName: jobCard.customers?.name || 'Customer',
+    customerPhone: jobCard.customers?.phone || null,
+    items,
+    subtotal: grossTotal - vatAmount,
+    vatAmount,
+    total: grossTotal,
+    notes: jobCard.diagnosis || null,
+  })
+  await supabase.from('job_cards').update({ quotation_id: doc.id }).eq('id', jobCard.id)
+  return doc
+}
+
 export async function updateDocument(id, updates) {
   const { data, error } = await supabase
     .from('documents')

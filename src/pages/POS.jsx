@@ -367,6 +367,10 @@ export default function POS() {
     setShowReceipt(true)
     setShowMobileCart(false)
     cart.clearCart()
+    // The VAT toggle above only overrides the current sale -- snap it back
+    // to the tenant's own default for the next one, so turning it off for
+    // one exempt item can't quietly carry over and under-charge VAT later.
+    if (tenant) cart.setVatConfig(tenant.vat_enabled, tenant.vat_rate)
     setAmountTendered('')
     resetSalesperson()
     setCheckingOut(false)
@@ -386,6 +390,7 @@ export default function POS() {
       })
       // Clear cart before leaving the POS — the return page handles success/failure
       cart.clearCart()
+      if (tenant) cart.setVatConfig(tenant.vat_enabled, tenant.vat_rate)
       window.location.href = browserUrl
     } catch (err) {
       toast.error(err.message || 'Failed to initiate Paynow checkout')
@@ -854,6 +859,21 @@ export default function POS() {
                 </span>
               </div>
             )}
+            {/* VAT is a tenant-wide default, but not every sale should
+                necessarily carry it (e.g. a zero-rated or exempt walk-in
+                item) -- this only changes the current sale, not the
+                tenant's own setting. */}
+            <div className="flex items-center justify-between text-sm">
+              <label className="flex items-center gap-1.5 text-slate-500">
+                <input
+                  type="checkbox"
+                  checked={cart.vatEnabled}
+                  onChange={(e) => cart.setVatConfig(e.target.checked, cart.vatRate)}
+                  className="h-3.5 w-3.5 rounded border-slate-300"
+                />
+                Charge VAT on this sale
+              </label>
+            </div>
             {cart.vatEnabled ? (
               <>
                 <div className="flex justify-between text-sm">

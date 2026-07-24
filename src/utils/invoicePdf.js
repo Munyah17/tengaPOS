@@ -37,37 +37,43 @@ export async function generateDocumentPDF(doc, store, currency = 'USD', brandCol
   const fmt = (n) => formatCurrency(n, currency)
   const [r, g, b] = hexToRgb(brandColor)
 
+  // Layout: logo stays top-left, large. Everything else about the
+  // business (name, address, contacts, TIN, VAT reg) moves to the right
+  // column, stacked below the TAX INVOICE/QUOTATION heading and its
+  // number/date lines -- the left side is the logo and nothing else.
   const logoDataUrl = await fetchLogoDataUrl(store.logoUrl)
-  const textX = logoDataUrl ? 40 : 14
   if (logoDataUrl) {
-    try { pdf.addImage(logoDataUrl, 'PNG', 14, 14, 20, 20) } catch { /* unsupported format — skip, text still prints */ }
+    try { pdf.addImage(logoDataUrl, 'PNG', 14, 14, 32, 32) } catch { /* unsupported format — skip, text still prints */ }
   }
-
-  pdf.setFontSize(18)
-  pdf.setFont(undefined, 'bold')
-  pdf.setTextColor(r, g, b)
-  pdf.text(store.name || 'Your Business', textX, 20)
-  pdf.setTextColor(0, 0, 0)
-  pdf.setFont(undefined, 'normal')
-  pdf.setFontSize(9)
-  let y = 27
-  if (store.address) { pdf.text(store.address, textX, y); y += 5 }
-  if (store.contacts) { pdf.text(store.contacts, textX, y); y += 5 }
-  if (store.tin) { pdf.text(`TIN: ${store.tin}`, textX, y); y += 5 }
-  if (store.vatNumber) { pdf.text(`VAT Reg: ${store.vatNumber}`, textX, y); y += 5 }
-  y = Math.max(y, logoDataUrl ? 36 : y)
 
   pdf.setFontSize(16)
   pdf.setFont(undefined, 'bold')
   pdf.text(isInvoice ? 'TAX INVOICE' : 'QUOTATION', 196, 20, { align: 'right' })
   pdf.setFont(undefined, 'normal')
   pdf.setFontSize(10)
-  pdf.text(`No: ${doc.doc_number}`, 196, 27, { align: 'right' })
-  pdf.text(`Date: ${formatDate(doc.created_at || new Date())}`, 196, 32, { align: 'right' })
-  if (!isInvoice && doc.valid_until) pdf.text(`Valid until: ${formatDate(doc.valid_until)}`, 196, 37, { align: 'right' })
-  if (isInvoice && doc.due_date) pdf.text(`Due: ${formatDate(doc.due_date)}`, 196, 37, { align: 'right' })
+  let ry = 27
+  pdf.text(`No: ${doc.doc_number}`, 196, ry, { align: 'right' })
+  ry += 5
+  pdf.text(`Date: ${formatDate(doc.created_at || new Date())}`, 196, ry, { align: 'right' })
+  ry += 5
+  if (!isInvoice && doc.valid_until) { pdf.text(`Valid until: ${formatDate(doc.valid_until)}`, 196, ry, { align: 'right' }); ry += 5 }
+  if (isInvoice && doc.due_date) { pdf.text(`Due: ${formatDate(doc.due_date)}`, 196, ry, { align: 'right' }); ry += 5 }
 
-  y = Math.max(y, 40) + 5
+  ry += 3
+  pdf.setFontSize(13)
+  pdf.setFont(undefined, 'bold')
+  pdf.setTextColor(r, g, b)
+  pdf.text(store.name || 'Your Business', 196, ry, { align: 'right' })
+  pdf.setTextColor(0, 0, 0)
+  pdf.setFont(undefined, 'normal')
+  pdf.setFontSize(9)
+  ry += 6
+  if (store.address) { pdf.text(store.address, 196, ry, { align: 'right' }); ry += 5 }
+  if (store.contacts) { pdf.text(store.contacts, 196, ry, { align: 'right' }); ry += 5 }
+  if (store.tin) { pdf.text(`TIN: ${store.tin}`, 196, ry, { align: 'right' }); ry += 5 }
+  if (store.vatNumber) { pdf.text(`VAT Reg: ${store.vatNumber}`, 196, ry, { align: 'right' }); ry += 5 }
+
+  let y = Math.max(ry, logoDataUrl ? 52 : ry) + 5
   pdf.setFontSize(9)
   pdf.setFont(undefined, 'bold')
   pdf.text('Bill To', 14, y)

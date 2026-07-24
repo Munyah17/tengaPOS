@@ -9,7 +9,7 @@ import { useAuthStore } from '@/stores/authStore'
 import { useCartStore } from '@/stores/cartStore'
 import {
   fetchJobCards, fetchCustomers, createCustomer, createVehicle, createJobCard, updateJobCard,
-  fetchTechnicians, fetchProducts, findDuplicateCustomer, findDuplicateVehicle,
+  fetchTechnicians, fetchProducts, findDuplicateCustomer, findDuplicateVehicle, createQuotationFromJobCard,
 } from '@/lib/db'
 import { loadWithOfflineCache } from '@/lib/offlineCache'
 import toast from 'react-hot-toast'
@@ -39,10 +39,9 @@ function JobCardModal({ tenant, branch, customers, technicians, products, existi
   const [newCustomerPhone, setNewCustomerPhone] = useState(prefill?.customerPhone || '')
   const [customerMatch, setCustomerMatch] = useState(null)
   const [vehicleId, setVehicleId] = useState(existing?.vehicle_id || '')
-  const [newVehicle, setNewVehicle] = useState({ make: '', model: '', year: '', regNumber: '' })
+  const [newVehicle, setNewVehicle] = useState({ make: '', model: '', regNumber: '' })
   const [vehicleMatch, setVehicleMatch] = useState(null)
   const [description, setDescription] = useState(existing?.description || '')
-  const [mileageIn, setMileageIn] = useState(existing?.mileage_in || '')
   const [diagnosis, setDiagnosis] = useState(existing?.diagnosis || '')
   const [partsRequested, setPartsRequested] = useState(existing?.parts_requested?.length ? existing.parts_requested : [{ ...BLANK_PART }])
   const [assignedTo, setAssignedTo] = useState(existing?.assigned_to || '')
@@ -52,6 +51,7 @@ function JobCardModal({ tenant, branch, customers, technicians, products, existi
       : [{ ...BLANK_ITEM }],
   )
   const [saving, setSaving] = useState(false)
+  const [creatingQuote, setCreatingQuote] = useState(false)
 
   const selectedCustomer = customers.find((c) => c.id === customerId)
   const isNewCustomer = customerId === '__new__'
@@ -89,6 +89,31 @@ function JobCardModal({ tenant, branch, customers, technicians, products, existi
 
   const total = items.reduce((s, it) => s + (Number(it.qty) || 0) * (Number(it.unit_price) || 0), 0)
 
+  // The diagnosis (recorded once the technician's actually looked at the
+  // car) becomes the customer's quotation -- the reverse of Quotations.jsx's
+  // "Create Job Card" on an accepted quote.
+  const createQuote = async () => {
+    setCreatingQuote(true)
+    try {
+      // Uses whatever's currently typed (diagnosis/items), not the
+      // last-saved copy -- so diagnose-then-quote works in one sitting
+      // without needing a Save first.
+      const doc = await createQuotationFromJobCard(tenant.id, branch?.id, user?.id, {
+        id: existing.id,
+        customers: existing.customers,
+        diagnosis,
+        items: items.filter((it) => it.description.trim()),
+      }, {
+        vatEnabled: tenant?.vat_enabled !== false, vatRate: tenant?.vat_rate ?? 15.5,
+      })
+      toast.success(`Quotation ${doc.doc_number} created`)
+    } catch (err) {
+      toast.error(err.message || 'Failed to create quotation')
+    } finally {
+      setCreatingQuote(false)
+    }
+  }
+
   const save = async () => {
     if (isNewCustomer && !newCustomerName.trim()) { toast.error('Customer name is required'); return }
     if (!isNewCustomer && !customerId) { toast.error('Select or add a customer'); return }
@@ -101,15 +126,14 @@ function JobCardModal({ tenant, branch, customers, technicians, products, existi
     setSaving(true)
     try {
       const patch = {
-        description, mileageIn: mileageIn ? parseInt(mileageIn, 10) : null,
-        diagnosis, partsRequested: cleanParts,
+        description, diagnosis, partsRequested: cleanParts,
         items: cleanItems.map((it) => ({ description: it.description, qty: Number(it.qty) || 1, unit_price: Number(it.unit_price) || 0, product_id: it.product_id })),
         assignedTo: assignedTo || null,
       }
 
       if (existing) {
         await updateJobCard(existing.id, {
-          description: patch.description, mileage_in: patch.mileageIn, diagnosis: patch.diagnosis,
+          description: patch.description, diagnosis: patch.diagnosis,
           parts_requested: patch.partsRequested, items: patch.items,
           subtotal: total, total, assigned_to: patch.assignedTo,
         })
@@ -177,8 +201,7 @@ function JobCardModal({ tenant, branch, customers, technicians, products, existi
                   <div className="grid grid-cols-2 gap-2">
                     <input value={newVehicle.make} onChange={(e) => setNewVehicle((v) => ({ ...v, make: e.target.value }))} placeholder="Make" className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white" />
                     <input value={newVehicle.model} onChange={(e) => setNewVehicle((v) => ({ ...v, model: e.target.value }))} placeholder="Model" className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white" />
-                    <input value={newVehicle.year} onChange={(e) => setNewVehicle((v) => ({ ...v, year: e.target.value }))} placeholder="Year" className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white" />
-                    <input value={newVehicle.regNumber} onChange={(e) => setNewVehicle((v) => ({ ...v, regNumber: e.target.value }))} onBlur={checkVehicleDuplicate} placeholder="Reg Number" className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white" />
+                    <input value={newVehicle.regNumber} onChange={(e) => setNewVehicle((v) => ({ ...v, regNumber: e.target.value }))} onBlur={checkVehicleDuplicate} placeholder="Reg Number" className="col-span-2 rounded-lg border border-slate-200 px-3 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white" />
                   </div>
                   {vehicleMatch && (
                     <div className="flex items-center justify-between gap-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-700/60 dark:bg-amber-950/30 dark:text-amber-300">
@@ -192,21 +215,27 @@ function JobCardModal({ tenant, branch, customers, technicians, products, existi
           </div>
         )}
 
-        <div className="grid gap-3 sm:grid-cols-3">
-          <div className="sm:col-span-2">
-            <label className="mb-1 block text-xs font-semibold text-slate-500">Description of work</label>
-            <input value={description} onChange={(e) => setDescription(e.target.value)} className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white" />
-          </div>
-          <div>
-            <label className="mb-1 block text-xs font-semibold text-slate-500">Mileage In</label>
-            <input type="number" value={mileageIn} onChange={(e) => setMileageIn(e.target.value)} className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white" />
-          </div>
+        <div>
+          <label className="mb-1 block text-xs font-semibold text-slate-500">Description of work</label>
+          <input value={description} onChange={(e) => setDescription(e.target.value)} className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white" />
         </div>
 
-        <div>
-          <label className="mb-1 block text-xs font-semibold text-slate-500">Diagnosis</label>
-          <textarea value={diagnosis} onChange={(e) => setDiagnosis(e.target.value)} rows={2} placeholder="What the technician found" className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white" />
-        </div>
+        {/* Diagnosis only shows up once editing an existing job card -- it's
+            recorded after inspection, not known at intake, and from here it
+            can turn straight into a quotation for the customer. */}
+        {existing && (
+          <div>
+            <div className="mb-1 flex items-center justify-between">
+              <label className="text-xs font-semibold text-slate-500">Diagnosis</label>
+              {diagnosis.trim() && (
+                <button type="button" onClick={createQuote} disabled={creatingQuote} className="text-xs font-semibold text-red-600 hover:underline dark:text-red-400 disabled:opacity-50">
+                  {creatingQuote ? 'Creating quotation…' : 'Create Quotation from this'}
+                </button>
+              )}
+            </div>
+            <textarea value={diagnosis} onChange={(e) => setDiagnosis(e.target.value)} rows={2} placeholder="What the technician found" className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white" />
+          </div>
+        )}
 
         <div>
           <label className="mb-1 block text-xs font-semibold text-slate-500">Assign mechanic</label>
