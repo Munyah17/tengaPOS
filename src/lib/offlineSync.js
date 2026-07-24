@@ -70,7 +70,7 @@ export async function processSyncQueue() {
  * product cache and drains the sync queue while online, and immediately
  * drains the queue the moment connectivity returns. Returns a cleanup fn.
  */
-export function startBackgroundSync(tenantId, { intervalMs = 60000, onSynced } = {}) {
+export function startBackgroundSync(tenantId, { intervalMs = 15000, onSynced } = {}) {
   if (!tenantId) return () => {}
 
   const tick = async () => {

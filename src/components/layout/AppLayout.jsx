@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Outlet, useLocation } from 'react-router-dom'
+import { useQueryClient } from '@tanstack/react-query'
 import Sidebar from './Sidebar'
 import TopBar from './TopBar'
 import { useAuthStore } from '@/stores/authStore'
@@ -18,6 +19,7 @@ export default function AppLayout() {
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false)
   const { tenant, branch } = useAuthStore()
   const location = useLocation()
+  const queryClient = useQueryClient()
 
   // Real, persisted receipt branding — loaded here (not just when Settings
   // happens to be visited) so every role gets correctly-branded receipts,
@@ -89,13 +91,24 @@ export default function AppLayout() {
   }, [mobileSidebarOpen])
 
   // Cloud-based but offline-first: cache products for offline POS use and
-  // replay any sales queued while the connection was down.
+  // replay any sales queued while the connection was down. Previously a
+  // successful background sync only showed a toast -- every already-open
+  // page (Orders, Inventory, Dashboard...) stayed on its stale pre-sync
+  // data until the user manually hit "Refresh Online Updates" or reloaded,
+  // which read as "offline actions take forever to show up" even though
+  // the sync itself had already completed. Now it does the same
+  // (non-reloading) refresh RefreshOnlineButton does: fire the shared
+  // force-refresh event and invalidate every mounted React Query query.
   useEffect(() => {
     if (!tenant?.id) return
     return startBackgroundSync(tenant.id, {
-      onSynced: ({ synced }) => toast.success(`Synced ${synced} offline sale${synced !== 1 ? 's' : ''}`),
+      onSynced: ({ synced }) => {
+        toast.success(`Synced ${synced} offline sale${synced !== 1 ? 's' : ''}`)
+        window.dispatchEvent(new CustomEvent('tengapos:force-refresh'))
+        queryClient.invalidateQueries()
+      },
     })
-  }, [tenant?.id])
+  }, [tenant?.id, queryClient])
 
   // Quietly reconfirm the offline-cached session against the server on the
   // same rhythm as data sync — immediately once online, then every 5
