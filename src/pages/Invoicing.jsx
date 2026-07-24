@@ -9,7 +9,7 @@ import { useAuthStore } from '@/stores/authStore'
 import { useReceiptConfigStore } from '@/stores/receiptConfigStore'
 import {
   fetchDocuments, insertDocument, updateDocument, deleteDocument, convertQuotationToInvoice,
-  fetchProducts, fetchCustomers, findOrCreateCustomer,
+  fetchProducts, fetchCustomers, findOrCreateCustomer, uploadDocumentLogo, submitReceiptConfig,
 } from '@/lib/db'
 import { loadWithOfflineCache } from '@/lib/offlineCache'
 import { formatCurrency, formatDate, generateDocNumber } from '@/utils/formatters'
@@ -34,9 +34,31 @@ const BLANK_FORM = {
 // quotations page) -- same document engine, no Accounting & ERP add-on
 // gate, and locked to quotations only (invoices stay part of the paid add-on).
 export default function Invoicing({ standalone = false } = {}) {
-  const { tenant, branch, user } = useAuthStore()
+  const { tenant, branch, user, role } = useAuthStore()
   const navigate = useNavigate()
   const receiptConfig = useReceiptConfigStore()
+  const [uploadingLogo, setUploadingLogo] = useState(false)
+
+  // Quick logo upload right where quotes/invoices are made, instead of
+  // needing to find it inside Settings > Receipts Config first. Vendor-only
+  // (same restriction as the full Receipts Config save) -- keeps every
+  // other field exactly as Settings already has it, just adds the logo.
+  const handleQuickLogoUpload = async (e) => {
+    const file = e.target.files?.[0]
+    if (!file || !tenant?.id) return
+    setUploadingLogo(true)
+    try {
+      const url = await uploadDocumentLogo(tenant.id, file)
+      await submitReceiptConfig({ ...receiptConfig, branchId: null, logoUrl: url })
+      useReceiptConfigStore.setState({ logoUrl: url })
+      toast.success('Logo added — it now prints on your quotes and invoices')
+    } catch (err) {
+      toast.error(err.message || 'Failed to upload logo')
+    } finally {
+      setUploadingLogo(false)
+      e.target.value = ''
+    }
+  }
   const [docType, setDocType] = useState('quotation')
   const [documents, setDocuments] = useState([])
   const [loading, setLoading] = useState(false)
@@ -266,6 +288,21 @@ export default function Invoicing({ standalone = false } = {}) {
           </Button>
         </div>
       </div>
+
+      {/* Nudge to add a logo right here, instead of only inside Settings >
+          Receipts Config -- most vendors setting up their first quote never
+          think to look there first. */}
+      {role === 'vendor' && !receiptConfig.logoUrl && (
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border-2 border-dashed border-brand-300 bg-brand-50 px-4 py-3 dark:border-brand-700/50 dark:bg-brand-950/20">
+          <p className="text-sm text-brand-800 dark:text-brand-300">
+            <b>Add your logo</b> — it'll print on every quote and invoice you send.
+          </p>
+          <label className="inline-flex flex-shrink-0 cursor-pointer items-center gap-1.5 rounded-xl bg-brand-600 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-700 disabled:opacity-60">
+            {uploadingLogo ? 'Uploading…' : 'Upload Logo'}
+            <input type="file" accept="image/*" onChange={handleQuickLogoUpload} disabled={uploadingLogo} className="hidden" />
+          </label>
+        </div>
+      )}
 
       {/* Type tabs — Quotations-only in standalone (Workshop) mode, since
           invoices stay part of the paid Accounting & ERP add-on */}

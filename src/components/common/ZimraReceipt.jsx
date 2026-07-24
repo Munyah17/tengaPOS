@@ -161,6 +161,7 @@ export default function ZimraReceipt({ receipt, onClose }) {
       <body>
         ${headerMessage ? `<div class="center tiny">${headerMessage.split('\n').filter(Boolean).map((l) => `<div>${esc(l)}</div>`).join('')}</div><div class="sep"></div>` : ''}
         <div class="center">
+          ${receiptConfig.logoUrl ? `<img src="${esc(receiptConfig.logoUrl)}" alt="" style="max-height:48px;max-width:60mm;margin:0 auto 4px;display:block;" />` : ''}
           <div class="store-name">${esc(storeName)}</div>
           ${storeAddress ? `<div>${esc(storeAddress)}</div>` : ''}
           ${storeContacts ? `<div>${esc(storeContacts)}</div>` : ''}
@@ -340,6 +341,9 @@ export default function ZimraReceipt({ receipt, onClose }) {
 
             {/* Store header — only lines this tenant actually configured */}
             <div className="text-center">
+              {receiptConfig.logoUrl && (
+                <img src={receiptConfig.logoUrl} alt="" className="mx-auto mb-1 max-h-12 max-w-[60mm] object-contain" />
+              )}
               <div className="text-sm font-bold uppercase">{storeName}</div>
               {storeAddress && <div>{storeAddress}</div>}
               {storeContacts && <div>{storeContacts}</div>}
