@@ -65,7 +65,7 @@ serve(async (req) => {
     if (authErr || !caller) return json({ error: 'Not authenticated' }, 401)
 
     const { plan_type, provider, return_url, type, period } = await req.json()
-    if (!['stripe', 'paynow'].includes(provider)) return json({ error: 'provider must be stripe or paynow' }, 400)
+    if (!['stripe', 'paynow', 'cash'].includes(provider)) return json({ error: 'provider must be stripe, paynow, or cash' }, 400)
 
     const isFiscal = type === 'fiscalisation'
     const isAccountingErp = type === 'accounting_erp'
@@ -112,6 +112,27 @@ serve(async (req) => {
     const reference = `${refPrefix}-${Date.now()}-${Math.random().toString(36).slice(2, 7).toUpperCase()}`
     const amountStr = plan.amount.toFixed(2)
     const returnUrl = return_url || 'https://www.tengapos.co.zw/checkout'
+
+    // Cash only applies to the plan purchase at signup -- the paid add-ons
+    // (fiscalisation/accounting_erp/ai_insights) already have their own
+    // cash-request tables and Settings.jsx flows; don't create a second,
+    // conflicting cash pathway for those here.
+    if (provider === 'cash') {
+      if (checkoutKind !== 'plan') {
+        return json({ error: 'Cash requests for add-ons are submitted from Settings, not here' }, 400)
+      }
+      const { error: insertErr } = await admin.from('signup_checkouts').insert({
+        tenant_id: tenantId,
+        plan_type: planKey,
+        provider: 'cash',
+        reference,
+        amount: plan.amount,
+        currency: 'USD',
+        status: 'pending_cash',
+      })
+      if (insertErr) return json({ error: insertErr.message }, 500)
+      return json({ cash: true, reference })
+    }
 
     let redirectUrl = ''
     let providerSessionId: string | null = null

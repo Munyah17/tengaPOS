@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams, Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import {
   CheckCircle, Clock, ArrowRight,
-  Sparkles, ShieldCheck, Loader2, ArrowLeft,
+  Sparkles, ShieldCheck, Loader2, ArrowLeft, Banknote,
 } from 'lucide-react'
 import posIcon from '@/assets/pos-icon.png'
 import paynowBanner from '@/assets/paynow-banner.svg'
@@ -57,6 +57,7 @@ export default function Checkout() {
   const [provider, setProvider] = useState('paynow')
   const [redirecting, setRedirecting] = useState(false)
   const [confirming, setConfirming] = useState(false)
+  const [cashSubmitted, setCashSubmitted] = useState(false)
 
   const returnStatus = params.get('status')
   const returnRef = params.get('ref')
@@ -134,6 +135,14 @@ export default function Checkout() {
         throw new Error(msg)
       }
       if (data?.error) throw new Error(data.error)
+      if (data?.cash) {
+        // No redirect — this just queues the request for Super Admin to
+        // confirm once the cash payment's actually been received.
+        setCashSubmitted(true)
+        setRedirecting(false)
+        toast.success("Request sent — we'll activate your account once payment is confirmed")
+        return
+      }
       if (!data?.url) throw new Error('No checkout URL returned')
       // Full redirect to the hosted checkout — no payment details touch this app
       window.location.href = data.url
@@ -255,8 +264,18 @@ export default function Checkout() {
 
         {/* Payment method */}
         <div className="mx-auto mt-6 max-w-lg">
+          {cashSubmitted ? (
+            <div className="rounded-2xl border-2 border-amber-500/70 bg-amber-500/10 p-5 text-center">
+              <Banknote className="mx-auto mb-2 h-8 w-8 text-amber-400" />
+              <h3 className="font-bold text-white">Request submitted</h3>
+              <p className="mt-1 text-sm text-amber-200/80">
+                We'll activate your account as soon as your cash payment is confirmed. No further action needed here.
+              </p>
+            </div>
+          ) : (
+          <>
           <p className="mb-2 text-center text-xs font-bold uppercase tracking-widest text-slate-500">Pay with</p>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-3 gap-3">
             <button
               onClick={() => setProvider('paynow')}
               className={`flex items-center justify-center rounded-xl border px-4 py-3 transition-all ${
@@ -277,6 +296,16 @@ export default function Checkout() {
             >
               <img src={stripeBanner} alt="Stripe" className="h-6 w-auto" />
             </button>
+            <button
+              onClick={() => setProvider('cash')}
+              className={`flex items-center justify-center gap-1.5 rounded-xl border px-4 py-3 text-sm font-bold transition-all ${
+                provider === 'cash'
+                  ? 'border-amber-500 bg-white text-amber-700'
+                  : 'border-white/10 bg-white/90 text-slate-700 hover:border-white/25'
+              }`}
+            >
+              <Banknote className="h-5 w-5" /> Cash
+            </button>
           </div>
 
           <button
@@ -285,13 +314,20 @@ export default function Checkout() {
             className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-brand-600 py-3.5 text-sm font-bold text-white transition-colors hover:bg-brand-700 disabled:opacity-60"
           >
             {redirecting ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}
-            {redirecting ? 'Redirecting to secure checkout…' : `Continue to secure checkout — $${planPrice(PLANS.find((p) => p.key === selectedPlan))}`}
+            {redirecting
+              ? 'Redirecting to secure checkout…'
+              : provider === 'cash'
+                ? `Request Cash Payment — $${planPrice(PLANS.find((p) => p.key === selectedPlan))}`
+                : `Continue to secure checkout — $${planPrice(PLANS.find((p) => p.key === selectedPlan))}`}
           </button>
 
           <p className="mt-3 text-center text-xs text-white">
-            You'll be redirected to {provider === 'stripe' ? 'Stripe' : 'Paynow'}'s secure hosted page.
-            tengaPOS never sees or stores your payment details.
+            {provider === 'cash'
+              ? "We'll confirm your payment manually and activate your account — usually within a business day."
+              : `You'll be redirected to ${provider === 'stripe' ? 'Stripe' : 'Paynow'}'s secure hosted page. tengaPOS never sees or stores your payment details.`}
           </p>
+          </>
+          )}
 
           {trialActive && (
             <button

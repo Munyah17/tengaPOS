@@ -236,6 +236,50 @@ export function TenantModal({ tenant, technicians, onClose, onSaved }) {
   }
 
   const onTrial = tenant.trial_ends_at && !tenant.plan_start_date
+  // Same eligibility rule as the tenant's own self-serve trial button in
+  // Checkout.jsx -- Super Admin can now grant it directly too, for signups
+  // handled over the phone/WhatsApp rather than through that page.
+  const trialEligible = !tenant.trial_ends_at && !tenant.plan_start_date
+
+  const [pendingCashCheckout, setPendingCashCheckout] = useState(null)
+  const [cashLoading, setCashLoading] = useState(false)
+  useEffect(() => {
+    supabase.from('signup_checkouts').select('id, plan_type, amount, reference, created_at')
+      .eq('tenant_id', tenant.id).eq('status', 'pending_cash')
+      .order('created_at', { ascending: false }).limit(1).maybeSingle()
+      .then(({ data }) => setPendingCashCheckout(data || null))
+  }, [tenant.id])
+
+  const confirmCashPayment = async () => {
+    if (!pendingCashCheckout) return
+    setCashLoading(true)
+    try {
+      const { error } = await supabase.rpc('confirm_cash_signup', { p_checkout_id: pendingCashCheckout.id })
+      if (error) throw error
+      toast.success(`${tenant.name}'s cash payment confirmed — plan activated`)
+      setPendingCashCheckout(null)
+      onSaved()
+    } catch (err) {
+      toast.error(err.message || 'Failed to confirm payment')
+    } finally {
+      setCashLoading(false)
+    }
+  }
+
+  const [trialGranting, setTrialGranting] = useState(false)
+  const grantTrial = async () => {
+    setTrialGranting(true)
+    try {
+      const { error } = await supabase.rpc('grant_free_trial', { p_tenant_id: tenant.id })
+      if (error) throw error
+      toast.success(`${tenant.name} is now on a 7-day free trial`)
+      onSaved()
+    } catch (err) {
+      toast.error(err.message || 'Failed to grant trial')
+    } finally {
+      setTrialGranting(false)
+    }
+  }
 
   const extendTrial = async () => {
     const base = new Date(tenant.trial_ends_at) > new Date() ? new Date(tenant.trial_ends_at) : new Date()
@@ -593,6 +637,37 @@ export function TenantModal({ tenant, technicians, onClose, onSaved }) {
                     className="rounded-lg bg-green-600/20 px-3 py-1.5 text-xs font-bold text-green-500 hover:bg-green-600/30 dark:text-green-400"
                   >
                     Extend trial +7 days
+                  </button>
+                </div>
+              )}
+
+              {/* Grant a trial directly -- for signups handled by phone/
+                  WhatsApp that never went through Checkout.jsx themselves */}
+              {trialEligible && (
+                <div className="mt-2 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-green-500/20 bg-green-500/5 px-4 py-3">
+                  <p className="text-sm text-green-500 dark:text-green-400">Not on a trial or paid plan yet</p>
+                  <button
+                    onClick={grantTrial}
+                    disabled={trialGranting}
+                    className="rounded-lg bg-green-600/20 px-3 py-1.5 text-xs font-bold text-green-500 hover:bg-green-600/30 disabled:opacity-60 dark:text-green-400"
+                  >
+                    {trialGranting ? 'Granting…' : 'Grant 7-Day Free Trial'}
+                  </button>
+                </div>
+              )}
+
+              {/* Pending cash signup payment -- from Checkout.jsx's Cash option */}
+              {pendingCashCheckout && (
+                <div className="mt-2 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-500/20 bg-amber-500/5 px-4 py-3">
+                  <p className="text-sm text-amber-500 dark:text-amber-400">
+                    Cash payment pending — {PLANS[pendingCashCheckout.plan_type]?.label || pendingCashCheckout.plan_type}, ${pendingCashCheckout.amount}
+                  </p>
+                  <button
+                    onClick={confirmCashPayment}
+                    disabled={cashLoading}
+                    className="rounded-lg bg-amber-600/20 px-3 py-1.5 text-xs font-bold text-amber-600 hover:bg-amber-600/30 disabled:opacity-60 dark:text-amber-400"
+                  >
+                    {cashLoading ? 'Confirming…' : 'Confirm Payment Received'}
                   </button>
                 </div>
               )}
