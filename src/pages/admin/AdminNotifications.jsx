@@ -1,12 +1,18 @@
 import { useState, useEffect } from 'react'
-import { Bell, Building2, RefreshCw, CheckCheck, Clock, CreditCard, Trash2 } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
+import { Bell, Building2, RefreshCw, CheckCheck, Clock, CreditCard, Trash2, ArrowRight } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
+import { useAuthStore } from '@/stores/authStore'
 import toast from 'react-hot-toast'
 
+// `route` is relative to the admin section root ('/admin/super' for Super
+// Admin, '/admin' for staff) -- every notification type maps to wherever
+// it needs a decision made, so "N new signups" is a click away from the
+// actual approval queue instead of a dead-end row you have to go find.
 const TYPE_META = {
-  new_signup:   { icon: Building2,    color: 'text-amber-400',  bg: 'bg-amber-500/10',  label: 'New Signup' },
-  renewal_due:  { icon: RefreshCw,    color: 'text-indigo-400', bg: 'bg-indigo-500/10', label: 'Renewal Due' },
-  payment_due:  { icon: CreditCard,   color: 'text-green-400',  bg: 'bg-green-500/10',  label: 'Payment Due' },
+  new_signup:   { icon: Building2,  color: 'text-amber-400',  bg: 'bg-amber-500/10',  label: 'New Signup', route: '/tenants', cta: 'Go to New Client Requests' },
+  renewal_due:  { icon: RefreshCw,  color: 'text-indigo-400', bg: 'bg-indigo-500/10', label: 'Renewal Due', route: '/tenants', cta: 'Go to Tenant' },
+  payment_due:  { icon: CreditCard, color: 'text-green-400',  bg: 'bg-green-500/10',  label: 'Payment Due', route: '/tenants', cta: 'Go to Tenant' },
 }
 
 function timeAgo(iso) {
@@ -18,6 +24,9 @@ function timeAgo(iso) {
 }
 
 export default function AdminNotifications() {
+  const navigate = useNavigate()
+  const { role } = useAuthStore()
+  const adminRoot = role === 'super_admin' ? '/admin/super' : '/admin'
   const [notifications, setNotifications] = useState([])
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
@@ -153,6 +162,16 @@ export default function AdminNotifications() {
                   <p className="mt-0.5 text-sm text-slate-600 dark:text-slate-400">{n.body}</p>
                   {n.tenants && (
                     <p className="mt-1 font-mono text-xs text-slate-500 dark:text-slate-600">{n.tenants.slug}</p>
+                  )}
+                  {/* Only Super Admin can act on tenant applications/plans --
+                      the staff admin tree has no /tenants route to send them to. */}
+                  {meta.route && role === 'super_admin' && (
+                    <button
+                      onClick={(e) => { e.stopPropagation(); markRead(n.id); navigate(`${adminRoot}${meta.route}`) }}
+                      className="mt-2 flex items-center gap-1 text-xs font-semibold text-indigo-500 hover:text-indigo-400"
+                    >
+                      {meta.cta} <ArrowRight className="h-3 w-3" />
+                    </button>
                   )}
                 </div>
                 <div className="flex flex-shrink-0 items-center gap-2">
