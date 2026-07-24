@@ -1025,9 +1025,24 @@ export async function submitReceiptConfig(config) {
     p_show_pos_print: config.showPosPrint !== false,
     p_header_message: config.headerMessage || null,
     p_custom_lines: config.customLines || [],
+    p_logo_url: config.logoUrl || null,
+    p_bank_details: config.bankDetails || null,
   })
   if (error) throw error
   return data
+}
+
+// Upload a business logo (for quotes/invoices/receipts) to storage; returns its public URL
+export async function uploadDocumentLogo(tenantId, file) {
+  const ext = file.name.split('.').pop()?.toLowerCase() || 'png'
+  const path = `${tenantId}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`
+  const { error } = await supabase.storage.from('business-logos').upload(path, file, {
+    cacheControl: '3600',
+    upsert: false,
+  })
+  if (error) throw error
+  const { data } = supabase.storage.from('business-logos').getPublicUrl(path)
+  return data.publicUrl
 }
 
 /** Everything currently waiting on the Vendor's decision, in one call —
@@ -1258,14 +1273,39 @@ export async function fetchCustomers(tenantId) {
   return data
 }
 
-export async function createCustomer(tenantId, { name, phone, email, notes }) {
+export async function createCustomer(tenantId, { name, phone, email, address, notes }) {
   const { data, error } = await supabase
     .from('customers')
-    .insert({ tenant_id: tenantId, name, phone: phone || null, email: email || null, notes: notes || null })
+    .insert({ tenant_id: tenantId, name, phone: phone || null, email: email || null, address: address || null, notes: notes || null })
     .select()
     .single()
   if (error) throw error
   return data
+}
+
+// Best-effort: reuse an existing customer (matched by phone, then by exact
+// name) so repeat customers build up one real record instead of a fresh
+// free-text entry every time a quote/invoice is made out to them — used by
+// Invoicing.jsx, which (unlike Job Cards) doesn't force an explicit
+// select-or-create choice. Never throws; a failure here shouldn't block
+// saving the document itself.
+export async function findOrCreateCustomer(tenantId, { name, phone, email, address }) {
+  try {
+    if (phone?.trim()) {
+      const { data: byPhone } = await supabase.from('customers').select('id').eq('tenant_id', tenantId).eq('phone', phone.trim()).maybeSingle()
+      if (byPhone) {
+        await supabase.from('customers').update({ name, email: email || null, address: address || null, updated_at: new Date().toISOString() }).eq('id', byPhone.id)
+        return byPhone.id
+      }
+    } else if (name?.trim()) {
+      const { data: byName } = await supabase.from('customers').select('id').eq('tenant_id', tenantId).eq('name', name.trim()).maybeSingle()
+      if (byName) return byName.id
+    }
+    const created = await createCustomer(tenantId, { name, phone, email, address })
+    return created.id
+  } catch {
+    return null
+  }
 }
 
 export async function createVehicle(tenantId, customerId, { make, model, year, regNumber, color }) {

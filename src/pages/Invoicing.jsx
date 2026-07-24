@@ -9,6 +9,7 @@ import { useAuthStore } from '@/stores/authStore'
 import { useReceiptConfigStore } from '@/stores/receiptConfigStore'
 import {
   fetchDocuments, insertDocument, updateDocument, deleteDocument, convertQuotationToInvoice,
+  fetchProducts, fetchCustomers, findOrCreateCustomer,
 } from '@/lib/db'
 import { loadWithOfflineCache } from '@/lib/offlineCache'
 import { formatCurrency, formatDate, generateDocNumber } from '@/utils/formatters'
@@ -43,6 +44,19 @@ export default function Invoicing({ standalone = false } = {}) {
   const [editing, setEditing] = useState(null)
   const [form, setForm] = useState(BLANK_FORM)
   const [saving, setSaving] = useState(false)
+  const [products, setProducts] = useState([])
+  const [customers, setCustomers] = useState([])
+  const [selectedCustomerId, setSelectedCustomerId] = useState('')
+  // Which line-item row (by index) currently has its product-suggestion
+  // dropdown open, so typing in one row's description doesn't pop up
+  // suggestions under every other row.
+  const [autocompleteRow, setAutocompleteRow] = useState(null)
+
+  useEffect(() => {
+    if (!tenant?.id) return
+    fetchProducts(tenant.id).then(setProducts).catch(() => {})
+    fetchCustomers(tenant.id).then(setCustomers).catch(() => {})
+  }, [tenant?.id])
 
   const vatEnabled = tenant?.vat_enabled !== false
   const vatRate = tenant?.vat_rate ?? 15.5
@@ -68,11 +82,13 @@ export default function Invoicing({ standalone = false } = {}) {
   const openCreate = () => {
     setEditing(null)
     setForm(BLANK_FORM)
+    setSelectedCustomerId('')
     setShowForm(true)
   }
 
   const openEdit = (doc) => {
     setEditing(doc)
+    setSelectedCustomerId('')
     setForm({
       customerName: doc.customer_name || '',
       customerEmail: doc.customer_email || '',
@@ -86,12 +102,33 @@ export default function Invoicing({ standalone = false } = {}) {
     setShowForm(true)
   }
 
+  // Picking a saved customer autofills every field below -- they stay
+  // editable either way, so a repeat customer's changed number/address
+  // still gets typed in and saved back (see findOrCreateCustomer on save).
+  const selectCustomer = (customerId) => {
+    setSelectedCustomerId(customerId)
+    const c = customers.find((c) => c.id === customerId)
+    if (c) {
+      setForm((f) => ({ ...f, customerName: c.name || '', customerEmail: c.email || '', customerPhone: c.phone || '', customerAddress: c.address || '' }))
+    }
+  }
+
   const updateItem = (i, field, value) => setForm((f) => ({
     ...f,
     items: f.items.map((it, idx) => idx === i ? { ...it, [field]: value } : it),
   }))
   const addItem = () => setForm((f) => ({ ...f, items: [...f.items, { ...BLANK_ITEM }] }))
   const removeItem = (i) => setForm((f) => ({ ...f, items: f.items.filter((_, idx) => idx !== i) }))
+
+  const pickProduct = (i, product) => {
+    setForm((f) => ({ ...f, items: f.items.map((it, idx) => idx === i ? { ...it, description: product.name, unit_price: product.price } : it) }))
+    setAutocompleteRow(null)
+  }
+  const productMatches = (query) => {
+    const q = query.trim().toLowerCase()
+    if (!q) return []
+    return products.filter((p) => p.name?.toLowerCase().includes(q) || p.sku?.toLowerCase().includes(q)).slice(0, 8)
+  }
 
   const computeTotals = (items) => {
     const grossTotal = items.reduce((s, i) => s + (i.qty * i.unit_price * (1 - (i.discount_pct || 0) / 100)), 0)
@@ -132,6 +169,14 @@ export default function Invoicing({ standalone = false } = {}) {
         setDocuments((prev) => [created, ...prev])
         toast.success(`${docType === 'invoice' ? 'Invoice' : 'Quotation'} created`)
       }
+      // Best-effort, non-blocking: save/update the customer record so next
+      // time this same person is quoted, they're a pick from the list
+      // instead of retyping everything.
+      if (tenant?.id) {
+        findOrCreateCustomer(tenant.id, {
+          name: payload.customerName, phone: payload.customerPhone, email: payload.customerEmail, address: payload.customerAddress,
+        }).then((id) => { if (id) setCustomers((prev) => (prev.some((c) => c.id === id) ? prev : [...prev, { id, name: payload.customerName, phone: payload.customerPhone }])) })
+      }
       setShowForm(false)
     } catch (err) {
       toast.error(err.message || 'Failed to save')
@@ -171,13 +216,15 @@ export default function Invoicing({ standalone = false } = {}) {
     }
   }
 
-  const handlePDF = (doc) => {
-    generateDocumentPDF(doc, {
+  const handlePDF = async (doc) => {
+    await generateDocumentPDF(doc, {
       name: receiptConfig.storeName || tenant?.name,
       address: receiptConfig.storeAddress,
       contacts: receiptConfig.storeContacts,
       tin: receiptConfig.tin,
       vatNumber: receiptConfig.vatNumber,
+      logoUrl: receiptConfig.logoUrl,
+      bankDetails: receiptConfig.bankDetails,
     }, tenant?.currency, tenant?.whitelabel?.enabled ? tenant.whitelabel.primary_color : null)
   }
 
@@ -317,6 +364,19 @@ export default function Invoicing({ standalone = false } = {}) {
       {/* Create/Edit Modal */}
       <Modal isOpen={showForm} onClose={() => setShowForm(false)} title={`${editing ? 'Edit' : 'New'} ${docType === 'invoice' ? 'Invoice' : 'Quotation'}`}>
         <form onSubmit={handleSave} className="space-y-4">
+          {customers.length > 0 && (
+            <div>
+              <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">Saved Customer</label>
+              <select
+                value={selectedCustomerId}
+                onChange={(e) => selectCustomer(e.target.value)}
+                className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+              >
+                <option value="">Type new customer details below…</option>
+                {customers.map((c) => <option key={c.id} value={c.id}>{c.name}{c.phone ? ` — ${c.phone}` : ''}</option>)}
+              </select>
+            </div>
+          )}
           <div className="grid gap-3 sm:grid-cols-2">
             <div>
               <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">Customer Name *</label>
@@ -351,11 +411,30 @@ export default function Invoicing({ standalone = false } = {}) {
             <div className="space-y-2">
               {form.items.map((item, i) => (
                 <div key={i} className="grid grid-cols-12 gap-1.5">
-                  <input
-                    type="text" placeholder="Description" value={item.description}
-                    onChange={(e) => updateItem(i, 'description', e.target.value)}
-                    className="col-span-5 rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
-                  />
+                  <div className="relative col-span-5">
+                    <input
+                      type="text" placeholder="Description — type an SKU or product name" value={item.description}
+                      onChange={(e) => { updateItem(i, 'description', e.target.value); setAutocompleteRow(i) }}
+                      onFocus={() => setAutocompleteRow(i)}
+                      onBlur={() => setTimeout(() => setAutocompleteRow((r) => (r === i ? null : r)), 150)}
+                      className="w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                    />
+                    {autocompleteRow === i && productMatches(item.description).length > 0 && (
+                      <div className="absolute left-0 right-0 top-full z-10 mt-1 max-h-48 overflow-y-auto rounded-lg border border-slate-200 bg-white shadow-lg dark:border-slate-700 dark:bg-slate-800">
+                        {productMatches(item.description).map((p) => (
+                          <button
+                            key={p.id}
+                            type="button"
+                            onMouseDown={() => pickProduct(i, p)}
+                            className="flex w-full items-center justify-between gap-2 px-3 py-1.5 text-left text-xs hover:bg-slate-50 dark:hover:bg-slate-700"
+                          >
+                            <span className="truncate text-slate-700 dark:text-slate-200">{p.name}{p.sku ? ` (${p.sku})` : ''}</span>
+                            <span className="flex-shrink-0 font-semibold text-slate-500">{fmt(p.price)}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                   <input
                     type="number" placeholder="Qty" min="0" value={item.qty}
                     onChange={(e) => updateItem(i, 'qty', Number(e.target.value) || 0)}

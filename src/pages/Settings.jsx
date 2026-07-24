@@ -18,7 +18,7 @@ import { CURRENCIES, PAYMENT_PROVIDERS } from '@/utils/constants'
 import {
   fetchAllTenantData, fetchBranches, fetchReceiptConfigs,
   submitReceiptConfig, approveReceiptConfig, rejectReceiptConfig,
-  submitConfigChange, fetchPendingConfigChanges,
+  submitConfigChange, fetchPendingConfigChanges, uploadDocumentLogo,
 } from '@/lib/db'
 import { loadWithOfflineCache } from '@/lib/offlineCache'
 import { INDUSTRIES } from '@/lib/whitelabelTheme'
@@ -87,8 +87,9 @@ export default function Settings() {
   const [receiptForm, setReceiptForm] = useState({
     templateMode: 'zimra_default', storeName: '', storeAddress: '', storeContacts: '',
     tin: '', vatNumber: '', footerMessage: '', paperWidthMm: 80, printerConnection: 'usb',
-    showPosPrint: true, headerMessage: '', customLines: [],
+    showPosPrint: true, headerMessage: '', customLines: [], logoUrl: '', bankDetails: '',
   })
+  const [uploadingLogo, setUploadingLogo] = useState(false)
   const [savingReceiptConfig, setSavingReceiptConfig] = useState(false)
 
   const loadReceiptConfigs = () => {
@@ -126,6 +127,8 @@ export default function Settings() {
       showPosPrint: existing?.show_pos_print !== false,
       headerMessage: existing?.header_message || '',
       customLines: Array.isArray(existing?.custom_lines) ? existing.custom_lines : [],
+      logoUrl: existing?.logo_url || '',
+      bankDetails: existing?.bank_details || '',
     })
   }, [scopeBranchId, receiptConfigs])
 
@@ -148,6 +151,8 @@ export default function Settings() {
           show_pos_print: receiptForm.showPosPrint,
           header_message: receiptForm.headerMessage,
           custom_lines: receiptForm.customLines,
+          logo_url: receiptForm.logoUrl,
+          bank_details: receiptForm.bankDetails,
         })
         toast.success("Receipt config updated — awaiting the owner's approval (reverts automatically in 48h if not approved)")
         loadPendingChanges()
@@ -160,6 +165,22 @@ export default function Settings() {
       toast.error(err.message || 'Failed to save receipt config')
     } finally {
       setSavingReceiptConfig(false)
+    }
+  }
+
+  const handleLogoUpload = async (e) => {
+    const file = e.target.files?.[0]
+    if (!file || !tenant?.id) return
+    setUploadingLogo(true)
+    try {
+      const url = await uploadDocumentLogo(tenant.id, file)
+      setReceiptForm((f) => ({ ...f, logoUrl: url }))
+      toast.success('Logo uploaded — click Save to apply it to quotes and invoices')
+    } catch (err) {
+      toast.error(err.message || 'Failed to upload logo')
+    } finally {
+      setUploadingLogo(false)
+      e.target.value = ''
     }
   }
 
@@ -1872,6 +1893,33 @@ export default function Settings() {
                     placeholder="123 Samora Machel Ave, Harare"
                     className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
                   />
+                </div>
+
+                {/* Logo + banking details -- printed on quotes and invoices
+                    (not the thermal receipt, which has no room for an image) */}
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div>
+                    <label className="mb-1.5 block text-sm font-medium text-slate-700 dark:text-slate-300">Logo (quotes & invoices)</label>
+                    <div className="flex items-center gap-3">
+                      {receiptForm.logoUrl && (
+                        <img src={receiptForm.logoUrl} alt="Logo" className="h-12 w-12 flex-shrink-0 rounded-lg border border-slate-200 bg-white object-contain p-1 dark:border-slate-700" />
+                      )}
+                      <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
+                        {uploadingLogo ? 'Uploading…' : receiptForm.logoUrl ? 'Change logo' : 'Upload logo'}
+                        <input type="file" accept="image/*" onChange={handleLogoUpload} disabled={uploadingLogo} className="hidden" />
+                      </label>
+                    </div>
+                  </div>
+                  <div>
+                    <label className="mb-1.5 block text-sm font-medium text-slate-700 dark:text-slate-300">Banking Details (quotes & invoices)</label>
+                    <textarea
+                      value={receiptForm.bankDetails}
+                      onChange={(e) => setReceiptForm((f) => ({ ...f, bankDetails: e.target.value }))}
+                      placeholder={'Bank: CBZ Bank\nAccount Name: Your Business\nAccount No: 0123456789\nBranch: Borrowdale'}
+                      rows={4}
+                      className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                    />
+                  </div>
                 </div>
                 <div className="grid gap-4 sm:grid-cols-2">
                   <div>
