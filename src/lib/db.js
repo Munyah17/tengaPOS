@@ -51,6 +51,7 @@ export async function insertProduct(tenantId, product) {
       vat_treatment: product.vatTreatment || 'standard',
       attributes: product.attributes || {},
       branch_id: product.branchId || null,
+      category_id: product.categoryId || null,
       is_active: true,
       pos_visible: true,
     })
@@ -77,6 +78,7 @@ export async function updateProduct(id, updates) {
       vat_treatment: updates.vatTreatment || 'standard',
       attributes: updates.attributes || {},
       branch_id: updates.branchId || null,
+      category_id: updates.categoryId || null,
       updated_at: new Date().toISOString(),
     })
     .eq('id', id)
@@ -84,6 +86,28 @@ export async function updateProduct(id, updates) {
     .single()
   if (error) throw error
   return { ...data, stock: data.stock_qty ?? 0, image: data.image_url ?? null }
+}
+
+// ─── Categories ────────────────────────────────────────────────────────────
+
+export async function fetchCategories(tenantId) {
+  const { data, error } = await supabase
+    .from('categories')
+    .select('*')
+    .eq('tenant_id', tenantId)
+    .order('name')
+  if (error) throw error
+  return data
+}
+
+export async function createCategory(tenantId, { name, color }) {
+  const { data, error } = await supabase
+    .from('categories')
+    .insert({ tenant_id: tenantId, name, color: color || null })
+    .select()
+    .single()
+  if (error) throw error
+  return data
 }
 
 // Upload a product photo to storage; returns its public URL

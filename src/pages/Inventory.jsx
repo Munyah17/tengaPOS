@@ -15,6 +15,7 @@ import { useAuthStore } from '@/stores/authStore'
 import {
   fetchProducts, insertProduct, updateProduct, deleteProduct, uploadProductImage,
   fetchBranches, fetchProductBranches, assignProductBranch, unassignProductBranch,
+  fetchCategories, createCategory,
 } from '@/lib/db'
 import { getOfflineProducts, queueOfflineInventoryWrite } from '@/lib/offlineSync'
 import toast from 'react-hot-toast'
@@ -22,7 +23,7 @@ import toast from 'react-hot-toast'
 const BLANK = {
   name: '', brand: '', sku: '', barcode: '', price: '', landingPrice: '',
   stock: '', lowStockThreshold: '10', imageUrl: '', imageUnavailable: false,
-  vatTreatment: 'standard', attributePairs: [], branchIds: [],
+  vatTreatment: 'standard', attributePairs: [], branchIds: [], categoryId: '',
 }
 
 const ATTRIBUTE_PRESETS = ['Weight', 'Volume', 'Color', 'Size']
@@ -48,12 +49,37 @@ export default function Inventory() {
   const [uploadingImage, setUploadingImage] = useState(false)
   const [branches, setBranches] = useState([])
   const [originalBranchIds, setOriginalBranchIds] = useState([])
+  const [categories, setCategories] = useState([])
+  const [newCategoryName, setNewCategoryName] = useState('')
+  const [addingCategory, setAddingCategory] = useState(false)
   const fileInputRef = useRef(null)
 
   useEffect(() => {
     if (!tenant?.id) return
     fetchBranches(tenant.id).then(setBranches).catch(() => toast.error("Couldn't load branches"))
   }, [tenant?.id])
+
+  const loadCategories = () => {
+    if (!tenant?.id) return
+    fetchCategories(tenant.id).then(setCategories).catch(() => {})
+  }
+  useEffect(loadCategories, [tenant?.id])
+
+  const addCategory = async () => {
+    if (!newCategoryName.trim()) return
+    setAddingCategory(true)
+    try {
+      const created = await createCategory(tenant.id, { name: newCategoryName.trim() })
+      setCategories((prev) => [...prev, created].sort((a, b) => a.name.localeCompare(b.name)))
+      setForm((f) => ({ ...f, categoryId: created.id }))
+      setNewCategoryName('')
+      toast.success('Category added')
+    } catch (err) {
+      toast.error(err.message || 'Failed to add category')
+    } finally {
+      setAddingCategory(false)
+    }
+  }
 
   const queryClient = useQueryClient()
   // Same cache key as POS's product query — editing a product here makes
@@ -150,6 +176,7 @@ export default function Inventory() {
       vatTreatment: p.vat_treatment || 'standard',
       attributePairs: Object.entries(p.attributes || {}).map(([key, value]) => ({ key, value })),
       branchIds,
+      categoryId: p.category_id || '',
     })
     setOriginalBranchIds(branchIds)
     setEditTarget(p)
@@ -236,8 +263,9 @@ export default function Inventory() {
       try {
         if (editTarget) {
           const updated = await updateProduct(editTarget.id, payload)
+          const newCategoryName = categories.find((c) => c.id === updated.category_id)?.name || ''
           queryClient.setQueryData(['products', tenant.id], (old) =>
-            (old || []).map(p => p.id === editTarget.id ? { ...updated, stock: updated.stock_qty, category: p.category } : p))
+            (old || []).map(p => p.id === editTarget.id ? { ...updated, stock: updated.stock_qty, category: newCategoryName } : p))
           toast.success('Product updated')
         } else {
           const created = await insertProduct(tenant.id, payload)
@@ -405,7 +433,7 @@ export default function Inventory() {
             <table className="w-full">
               <thead>
                 <tr className="border-b border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-900">
-                  {['Product', 'SKU', 'Barcode', 'Price', 'Stock', 'Actions'].map(h => (
+                  {['Product', 'SKU', 'Category', 'Price', 'Stock', 'Actions'].map(h => (
                     <th key={h} className="px-4 py-3 text-left text-xs font-semibold uppercase text-slate-500">{h}</th>
                   ))}
                 </tr>
@@ -440,7 +468,11 @@ export default function Inventory() {
                         </div>
                       </td>
                       <td className="px-4 py-3 text-sm text-slate-600 dark:text-slate-400">{product.sku || '—'}</td>
-                      <td className="px-4 py-3 font-mono text-sm text-slate-600 dark:text-slate-400">{product.barcode || '—'}</td>
+                      <td className="px-4 py-3 text-sm text-slate-600 dark:text-slate-400">
+                        {product.category
+                          ? <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300">{product.category}</span>
+                          : '—'}
+                      </td>
                       <td className="px-4 py-3 text-sm font-semibold text-slate-900 dark:text-white">{formatCurrency(product.price)}</td>
                       <td className="px-4 py-3">
                         <span className={`rounded-full px-2.5 py-0.5 text-xs font-bold ${stockQty <= 0 ? 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300' : stockQty <= threshold ? 'bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300' : 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300'}`}>
@@ -532,6 +564,34 @@ export default function Inventory() {
               />
             </div>
           ))}
+          <div>
+            <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">Category</label>
+            <select
+              value={form.categoryId}
+              onChange={e => setForm({ ...form, categoryId: e.target.value })}
+              className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+            >
+              <option value="">No category</option>
+              {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+            <div className="mt-1.5 flex gap-1.5">
+              <input
+                type="text"
+                value={newCategoryName}
+                onChange={e => setNewCategoryName(e.target.value)}
+                placeholder="e.g. Tyres, Lubricants, Suspension Parts"
+                className="flex-1 rounded-lg border border-slate-200 px-3 py-1.5 text-xs dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+              />
+              <button
+                type="button"
+                onClick={addCategory}
+                disabled={addingCategory || !newCategoryName.trim()}
+                className="flex-shrink-0 rounded-lg bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-200 disabled:opacity-50 dark:bg-slate-800 dark:text-slate-300"
+              >
+                + Add
+              </button>
+            </div>
+          </div>
           <div>
             <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">VAT Treatment</label>
             <select
