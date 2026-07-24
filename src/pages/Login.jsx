@@ -9,6 +9,7 @@ import toast from 'react-hot-toast'
 
 export default function Login() {
   const [email, setEmail] = useState('')
+  const [usernameEmail, setUsernameEmail] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
@@ -36,12 +37,15 @@ export default function Login() {
     }
   }
 
+  const isUsernameMode = email.trim() && !email.includes('@')
+
   const handleSubmit = async (e) => {
     e.preventDefault()
     if (!email || !password) { toast.error('Please enter your email/username and password'); return }
+    if (isUsernameMode && !usernameEmail) { toast.error('Enter the email address linked to that username'); return }
     setLoading(true)
     try {
-      const userType = await signIn(email, password)
+      const userType = await signIn(email, password, isUsernameMode ? usernameEmail : undefined)
       // This page signs in client businesses only — platform staff have
       // their own portals and are dropped straight back out here.
       if (userType === 'app_owner') {
@@ -141,6 +145,24 @@ export default function Login() {
                 placeholder="you@example.com or username"
               />
             </div>
+
+            {/* Usernames are only unique within a business now, so a bare
+                username can't identify a single account by itself — the
+                linked email confirms exactly which one. */}
+            {isUsernameMode && (
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-slate-300">Email linked to this username</label>
+                <input
+                  type="email"
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  value={usernameEmail}
+                  onChange={(e) => setUsernameEmail(e.target.value)}
+                  className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white placeholder-slate-500 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+                  placeholder="you@example.com"
+                />
+              </div>
+            )}
 
             <div>
               <label className="mb-1.5 block text-sm font-medium text-slate-300">Password</label>

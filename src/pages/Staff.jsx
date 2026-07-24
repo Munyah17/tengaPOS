@@ -12,6 +12,7 @@ import {
 } from '@/lib/db'
 import { loadWithOfflineCache } from '@/lib/offlineCache'
 import { supabase } from '@/lib/supabase'
+import { invokeEdgeFunction } from '@/lib/edgeFunction'
 import ShiftRoster from '@/components/staff/ShiftRoster'
 import toast from 'react-hot-toast'
 
@@ -95,20 +96,7 @@ export default function Staff() {
     if (form.password.length < 8) { toast.error('Password must be at least 8 characters'); return }
     setCreating(true)
     try {
-      const { data: { session } } = await supabase.auth.getSession()
-      const { data, error } = await supabase.functions.invoke('tenant-add-staff', {
-        body: form,
-        headers: { Authorization: `Bearer ${session?.access_token}` },
-      })
-      if (error) {
-        let msg = error.message
-        try {
-          const ctx = await error.context?.json()
-          if (ctx?.error) msg = ctx.error
-        } catch { /* keep default */ }
-        throw new Error(msg)
-      }
-      if (data?.error) throw new Error(data.error)
+      await invokeEdgeFunction('tenant-add-staff', form)
       toast.success(`${form.name} can now sign in as ${roleLabels[form.role]}`)
       setForm((f) => ({ name: '', email: '', password: '', role: 'cashier', branch_id: f.branch_id, username: '' }))
       setShowAdd(false)
@@ -134,7 +122,7 @@ export default function Staff() {
       toast.success('Details saved')
       setUsernameEdit(null)
     } catch (err) {
-      toast.error(err.message?.includes('duplicate') || err.code === '23505' ? 'That username is already taken' : (err.message || 'Failed to save details'))
+      toast.error(err.message?.includes('duplicate') || err.code === '23505' ? 'That username is already taken in your business — try another' : (err.message || 'Failed to save details'))
     } finally {
       setSavingUsername(false)
     }

@@ -129,24 +129,31 @@ export const useAuthStore = create(
         }
       },
 
-      // Accepts either an email or a username — Supabase Auth itself only
-      // ever signs in by email, so a non-email-shaped identifier is
-      // resolved to its account's real email first via a DB lookup.
-      signIn: async (identifier, password) => {
+      // Accepts either an email, or a username + its account's email
+      // together — usernames are only unique within a tenant now, so a
+      // bare username alone can no longer identify a single account
+      // (Login.jsx collects the email alongside it whenever the typed
+      // identifier isn't already email-shaped).
+      signIn: async (identifier, password, usernameEmail) => {
         set({ isLoading: true })
 
         try {
           let email = identifier
           if (!identifier.includes('@')) {
+            if (!usernameEmail) {
+              set({ isLoading: false })
+              throw new Error('Enter the email address linked to that username')
+            }
             const { data: resolvedEmail, error: resolveErr } = await withTimeout(
-              supabase.rpc('resolve_login_email', { p_identifier: identifier }),
+              supabase.rpc('resolve_login_email', { p_username: identifier, p_email: usernameEmail }),
               15000,
               'Slow or no connection — check your network and try again',
             )
             if (resolveErr || !resolvedEmail) {
               set({ isLoading: false })
               // Same generic message a wrong password gets — never reveal
-              // whether it was the username or the password that was wrong.
+              // whether it was the username/email pairing or the password
+              // that was wrong.
               throw new Error('Invalid email/username or password')
             }
             email = resolvedEmail

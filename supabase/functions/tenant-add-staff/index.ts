@@ -105,8 +105,8 @@ serve(async (req) => {
     })
     if (insertErr) {
       await admin.auth.admin.deleteUser(created.user.id)
-      const msg = insertErr.message?.includes('users_username_key') || insertErr.code === '23505'
-        ? 'That username is already taken'
+      const msg = insertErr.message?.includes('users_tenant_username_key') || insertErr.code === '23505'
+        ? 'That username is already taken in your business — try another'
         : insertErr.message
       return json({ error: msg }, 400)
     }
