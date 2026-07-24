@@ -1,10 +1,14 @@
 import { useState, useEffect, useMemo } from 'react'
-import { Car, User, Phone, Search, ChevronRight, Wrench, Calendar, Lightbulb } from 'lucide-react'
+import { Car, User, Phone, Search, ChevronRight, Wrench, Calendar, Lightbulb, Plus, X } from 'lucide-react'
 import ExportMenu from '@/components/common/ExportMenu'
+import Button from '@/components/common/Button'
 import { formatCurrency, formatDate } from '@/utils/formatters'
 import { useAuthStore } from '@/stores/authStore'
-import { fetchCustomers, fetchJobCards } from '@/lib/db'
+import { fetchCustomers, fetchJobCards, createCustomer, createVehicle } from '@/lib/db'
 import { loadWithOfflineCache } from '@/lib/offlineCache'
+import toast from 'react-hot-toast'
+
+const BLANK_NEW_CUSTOMER = { name: '', phone: '', make: '', model: '', year: '', regNumber: '' }
 
 // The CRM view: every customer, their vehicle(s), and each vehicle's full
 // service history (what was done, when, and what's recommended for next
@@ -15,12 +19,42 @@ export default function VehicleRegistry() {
   const [jobCards, setJobCards] = useState([])
   const [search, setSearch] = useState('')
   const [selectedVehicle, setSelectedVehicle] = useState(null)
+  const [showAddCustomer, setShowAddCustomer] = useState(false)
+  const [newCustomer, setNewCustomer] = useState(BLANK_NEW_CUSTOMER)
+  const [addingCustomer, setAddingCustomer] = useState(false)
 
-  useEffect(() => {
+  const loadCustomers = () => {
     if (!tenant?.id) return
     loadWithOfflineCache(['customers', tenant.id], () => fetchCustomers(tenant.id), { onData: setCustomers })
+  }
+  useEffect(() => {
+    if (!tenant?.id) return
+    loadCustomers()
     loadWithOfflineCache(['jobCards', tenant.id], () => fetchJobCards(tenant.id), { onData: setJobCards })
   }, [tenant?.id])
+
+  const handleAddCustomer = async (e) => {
+    e.preventDefault()
+    if (!newCustomer.name.trim()) { toast.error('Customer name is required'); return }
+    setAddingCustomer(true)
+    try {
+      const customer = await createCustomer(tenant.id, { name: newCustomer.name.trim(), phone: newCustomer.phone.trim() })
+      if (newCustomer.make.trim() || newCustomer.model.trim() || newCustomer.regNumber.trim()) {
+        await createVehicle(tenant.id, customer.id, {
+          make: newCustomer.make.trim(), model: newCustomer.model.trim(),
+          year: newCustomer.year.trim(), regNumber: newCustomer.regNumber.trim(),
+        })
+      }
+      toast.success(`${customer.name} added`)
+      setNewCustomer(BLANK_NEW_CUSTOMER)
+      setShowAddCustomer(false)
+      loadCustomers()
+    } catch (err) {
+      toast.error(err.message || 'Failed to add customer')
+    } finally {
+      setAddingCustomer(false)
+    }
+  }
 
   const filteredCustomers = useMemo(() => {
     const q = search.trim().toLowerCase()
@@ -57,7 +91,12 @@ export default function VehicleRegistry() {
           <h1 className="text-2xl font-extrabold text-slate-900 dark:text-white">Vehicle Registry</h1>
           <p className="text-sm text-slate-500">Customers, their vehicles, and full service history</p>
         </div>
-        <ExportMenu data={exportRows} columns={exportColumns} title="Vehicle Registry" filename="vehicle_registry" />
+        <div className="flex flex-wrap gap-2">
+          <Button onClick={() => setShowAddCustomer(true)}>
+            <Plus className="h-4 w-4" /> Add Customer
+          </Button>
+          <ExportMenu data={exportRows} columns={exportColumns} title="Vehicle Registry" filename="vehicle_registry" />
+        </div>
       </div>
 
       <div className="relative mb-4 max-w-sm">
@@ -73,7 +112,7 @@ export default function VehicleRegistry() {
       {filteredCustomers.length === 0 ? (
         <div className="flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-slate-200 py-20 dark:border-slate-700">
           <Car className="mb-3 h-10 w-10 text-slate-300 dark:text-slate-700" />
-          <p className="text-sm font-medium text-slate-500">No customers yet — they're added from a Job Card</p>
+          <p className="text-sm font-medium text-slate-500">No customers yet — add one above, or from a Job Card</p>
         </div>
       ) : (
         <div className="space-y-3">
@@ -148,6 +187,43 @@ export default function VehicleRegistry() {
               ))}
             </div>
           </div>
+        </div>
+      )}
+
+      {showAddCustomer && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4 py-6 backdrop-blur-sm">
+          <form onSubmit={handleAddCustomer} className="max-h-full w-full max-w-md overflow-y-auto rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl dark:border-slate-800 dark:bg-slate-900">
+            <div className="mb-4 flex items-center justify-between">
+              <h2 className="font-bold text-slate-900 dark:text-white">Add Customer</h2>
+              <button type="button" onClick={() => setShowAddCustomer(false)} className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <div className="space-y-3">
+              <div>
+                <label className="mb-1 block text-xs font-semibold text-slate-500">Customer Name *</label>
+                <input value={newCustomer.name} onChange={(e) => setNewCustomer((f) => ({ ...f, name: e.target.value }))} required autoFocus className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white" />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-semibold text-slate-500">Phone</label>
+                <input value={newCustomer.phone} onChange={(e) => setNewCustomer((f) => ({ ...f, phone: e.target.value }))} placeholder="+263…" className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white" />
+              </div>
+              <p className="pt-1 text-xs font-bold uppercase tracking-widest text-slate-400">Vehicle (optional — can add later)</p>
+              <div className="grid grid-cols-2 gap-2">
+                <input value={newCustomer.make} onChange={(e) => setNewCustomer((f) => ({ ...f, make: e.target.value }))} placeholder="Make (e.g. Toyota)" className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white" />
+                <input value={newCustomer.model} onChange={(e) => setNewCustomer((f) => ({ ...f, model: e.target.value }))} placeholder="Model (e.g. Hilux)" className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white" />
+                <input value={newCustomer.year} onChange={(e) => setNewCustomer((f) => ({ ...f, year: e.target.value }))} placeholder="Year" className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white" />
+                <input value={newCustomer.regNumber} onChange={(e) => setNewCustomer((f) => ({ ...f, regNumber: e.target.value }))} placeholder="Reg Number" className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white" />
+              </div>
+            </div>
+            <button
+              type="submit"
+              disabled={addingCustomer}
+              className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-amber-600 py-2.5 text-sm font-bold text-white hover:bg-amber-700 disabled:opacity-60"
+            >
+              {addingCustomer ? 'Adding…' : 'Add Customer'}
+            </button>
+          </form>
         </div>
       )}
     </div>

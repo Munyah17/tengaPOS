@@ -130,7 +130,8 @@ export default function Inventory() {
     return products.filter(
       p => (p.name || '').toLowerCase().includes(q) ||
         (p.sku || '').toLowerCase().includes(q) ||
-        (p.barcode || '').includes(q)
+        (p.barcode || '').includes(q) ||
+        (p.category || '').toLowerCase().includes(q)
     )
   }, [products, search])
 
@@ -416,7 +417,7 @@ export default function Inventory() {
             type="text"
             value={search}
             onChange={e => setSearch(e.target.value)}
-            placeholder="Search products by name, SKU, or barcode..."
+            placeholder="Search products by name, SKU, barcode, or category..."
             className="w-full rounded-xl border border-slate-200 bg-white py-2.5 pl-10 pr-4 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 dark:border-slate-700 dark:bg-slate-900 dark:text-white"
           />
         </div>
