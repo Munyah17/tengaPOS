@@ -456,8 +456,8 @@ export default function Invoicing({ standalone = false } = {}) {
               {form.items.map((item, i) => {
                 const lineTotal = (Number(item.qty) || 0) * (Number(item.unit_price) || 0) * (1 - (item.discount_pct || 0) / 100)
                 return (
-                <div key={i} className="grid grid-cols-12 gap-1.5">
-                  <div className="relative col-span-4">
+                <div key={i} className="grid grid-cols-2 gap-1.5 sm:grid-cols-12">
+                  <div className="relative col-span-2 sm:col-span-4">
                     <input
                       type="text" placeholder="Description — type an SKU or product name" value={item.description}
                       onChange={(e) => { updateItem(i, 'description', e.target.value); setAutocompleteRow(i) }}
@@ -489,18 +489,18 @@ export default function Invoicing({ standalone = false } = {}) {
                   <input
                     type="number" placeholder="Price" min="0" step="0.01" value={item.unit_price}
                     onChange={(e) => updateItem(i, 'unit_price', Number(e.target.value) || 0)}
-                    className="col-span-2 rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                    className="col-span-1 rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white sm:col-span-2"
                   />
                   <input
                     type="number" placeholder="Disc %" min="0" max="100" value={item.discount_pct}
                     onChange={(e) => updateItem(i, 'discount_pct', Number(e.target.value) || 0)}
-                    className="col-span-2 rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                    className="col-span-1 rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white sm:col-span-2"
                   />
-                  <div className="col-span-2 flex items-center rounded-lg bg-slate-50 px-2 py-1.5 text-sm font-semibold text-slate-700 dark:bg-slate-800/60 dark:text-slate-300">
+                  <div className="col-span-1 flex items-center rounded-lg bg-slate-50 px-2 py-1.5 text-sm font-semibold text-slate-700 dark:bg-slate-800/60 dark:text-slate-300 sm:col-span-2">
                     {fmt(lineTotal)}
                   </div>
-                  <button type="button" onClick={() => removeItem(i)} className="col-span-1 flex items-center justify-center rounded-lg text-slate-400 hover:text-red-500">
-                    <X className="h-4 w-4" />
+                  <button type="button" onClick={() => removeItem(i)} className="col-span-2 flex items-center justify-center gap-1.5 rounded-lg py-1 text-xs font-medium text-slate-400 hover:text-red-500 sm:col-span-1 sm:py-0">
+                    <X className="h-4 w-4" /> <span className="sm:hidden">Remove line</span>
                   </button>
                 </div>
                 )

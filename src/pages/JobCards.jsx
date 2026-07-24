@@ -179,7 +179,7 @@ function JobCardModal({ tenant, branch, customers, technicians, products, existi
                     <input value={newCustomerPhone} onChange={(e) => setNewCustomerPhone(e.target.value)} onBlur={checkCustomerDuplicate} placeholder="Phone" className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white" />
                   </div>
                   {customerMatch && (
-                    <div className="flex items-center justify-between gap-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-700/60 dark:bg-amber-950/30 dark:text-amber-300">
+                    <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-700/60 dark:bg-amber-950/30 dark:text-amber-300">
                       <span className="flex items-center gap-1.5"><AlertTriangle className="h-3.5 w-3.5 flex-shrink-0" /> Matches existing customer "{customerMatch.name}"</span>
                       <button onClick={() => { setCustomerId(customerMatch.id); setCustomerMatch(null) }} className="flex-shrink-0 font-semibold underline">Use this</button>
                     </div>
@@ -204,7 +204,7 @@ function JobCardModal({ tenant, branch, customers, technicians, products, existi
                     <input value={newVehicle.regNumber} onChange={(e) => setNewVehicle((v) => ({ ...v, regNumber: e.target.value }))} onBlur={checkVehicleDuplicate} placeholder="Reg Number" className="col-span-2 rounded-lg border border-slate-200 px-3 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white" />
                   </div>
                   {vehicleMatch && (
-                    <div className="flex items-center justify-between gap-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-700/60 dark:bg-amber-950/30 dark:text-amber-300">
+                    <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-700/60 dark:bg-amber-950/30 dark:text-amber-300">
                       <span className="flex items-center gap-1.5"><AlertTriangle className="h-3.5 w-3.5 flex-shrink-0" /> "{vehicleMatch.reg_number}" already on file for {vehicleMatch.customers?.name || 'another customer'}</span>
                       <button onClick={() => { setVehicleId(vehicleMatch.id); setVehicleMatch(null) }} className="flex-shrink-0 font-semibold underline">Use this</button>
                     </div>
@@ -252,9 +252,9 @@ function JobCardModal({ tenant, branch, customers, technicians, products, existi
           </div>
           <div className="space-y-1.5">
             {partsRequested.map((p, i) => (
-              <div key={i} className="flex items-center gap-2">
-                <input value={p.description} onChange={(e) => setPart(i, { description: e.target.value })} placeholder="Part needed" className="flex-1 rounded-lg border border-slate-200 px-2 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white" />
-                <input type="number" min="1" value={p.qty} onChange={(e) => setPart(i, { qty: e.target.value })} className="w-16 rounded-lg border border-slate-200 px-2 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white" />
+              <div key={i} className="flex flex-wrap items-center gap-2">
+                <input value={p.description} onChange={(e) => setPart(i, { description: e.target.value })} placeholder="Part needed" className="min-w-[140px] flex-1 rounded-lg border border-slate-200 px-2 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white" />
+                <input type="number" min="1" value={p.qty} onChange={(e) => setPart(i, { qty: e.target.value })} className="w-16 flex-shrink-0 rounded-lg border border-slate-200 px-2 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white" />
                 <button onClick={() => removePartRow(i)} className="flex-shrink-0 rounded-lg p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-950"><Trash2 className="h-3.5 w-3.5" /></button>
               </div>
             ))}
@@ -268,11 +268,11 @@ function JobCardModal({ tenant, branch, customers, technicians, products, existi
           </div>
           <div className="space-y-2">
             {items.map((it, i) => (
-              <div key={i} className="flex items-center gap-2">
+              <div key={i} className="flex flex-wrap items-center gap-2">
                 <select
                   value={it.product_id || ''}
                   onChange={(e) => pickProduct(i, e.target.value)}
-                  className="w-32 flex-shrink-0 rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                  className="w-full flex-shrink-0 rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs dark:border-slate-700 dark:bg-slate-800 dark:text-white sm:w-32"
                 >
                   <option value="">Labor / custom</option>
                   {products.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
@@ -281,17 +281,17 @@ function JobCardModal({ tenant, branch, customers, technicians, products, existi
                   value={it.description}
                   onChange={(e) => setItem(i, { description: e.target.value })}
                   placeholder="Description"
-                  className="flex-1 rounded-lg border border-slate-200 px-2 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                  className="min-w-[120px] flex-1 rounded-lg border border-slate-200 px-2 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
                 />
                 <input
                   type="number" min="1" value={it.qty}
                   onChange={(e) => setItem(i, { qty: e.target.value })}
-                  className="w-16 rounded-lg border border-slate-200 px-2 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                  className="w-14 flex-shrink-0 rounded-lg border border-slate-200 px-2 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
                 />
                 <input
                   type="number" min="0" step="0.01" value={it.unit_price}
                   onChange={(e) => setItem(i, { unit_price: e.target.value })}
-                  className="w-24 rounded-lg border border-slate-200 px-2 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                  className="w-20 flex-shrink-0 rounded-lg border border-slate-200 px-2 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
                 />
                 <button onClick={() => removeItemRow(i)} className="flex-shrink-0 rounded-lg p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-950">
                   <Trash2 className="h-3.5 w-3.5" />
