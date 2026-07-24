@@ -3,7 +3,7 @@ import {
   Building2, Search, Calendar, CheckCircle, Clock, XCircle,
   Smartphone, Star, Zap, Briefcase, Crown,
   ToggleLeft, ToggleRight, Palette, HardDrive, Users, ChevronRight,
-  Save, AlertCircle, Trash2, ShieldAlert, Ban, PauseCircle, Mail, Phone,
+  Save, AlertCircle, Trash2, ShieldAlert, Ban, PauseCircle, Mail, Phone, Eye,
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/stores/authStore'
@@ -223,6 +223,20 @@ export function TenantModal({ tenant, technicians, onClose, onSaved }) {
   const [backupConfig, setBackupConfig] = useState(tenant.backup_config || {})
   const [technicianId, setTechnicianId] = useState(tenant.dedicated_technician_id || '')
 
+  // Application tab was read-only display of what was typed at signup --
+  // Super Admin couldn't fix a typo'd business name or update an address
+  // without going around the app entirely. Now editable, same save() as
+  // everything else in this modal.
+  const [appForm, setAppForm] = useState({
+    name: tenant.name || '',
+    industry: tenant.industry || '',
+    location: tenant.location || '',
+    workAddress: tenant.work_address || '',
+    workContact: tenant.work_contact || '',
+    specialRequirements: tenant.special_requirements || '',
+  })
+  const setApp = (key, val) => setAppForm((f) => ({ ...f, [key]: val }))
+
   const currentIsHighTier = ['business', 'enterprise'].includes(planType)
 
   const applyPlanDefaults = (plan) => {
@@ -263,6 +277,40 @@ export function TenantModal({ tenant, technicians, onClose, onSaved }) {
       toast.error(err.message || 'Failed to confirm payment')
     } finally {
       setCashLoading(false)
+    }
+  }
+
+  // "View as Tenant" -- signs the caller in as this business's own Vendor
+  // account (full rights, not a restricted view), for support/operations.
+  // The current admin session is stashed first so AppLayout's banner can
+  // restore it on "Exit to Super Admin" -- see viewAsTenant().
+  const [impersonating, setImpersonating] = useState(false)
+  const viewAsTenant = async () => {
+    setImpersonating(true)
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      const { data, error } = await supabase.functions.invoke('admin-impersonate-tenant', {
+        body: { tenant_id: tenant.id },
+        headers: { Authorization: `Bearer ${session?.access_token}` },
+      })
+      if (error) {
+        let msg = error.message
+        try { const ctx = await error.context?.json(); if (ctx?.error) msg = ctx.error } catch { /* keep default */ }
+        throw new Error(msg)
+      }
+      if (data?.error) throw new Error(data.error)
+      sessionStorage.setItem('tengapos_admin_return_session', JSON.stringify({
+        access_token: session.access_token, refresh_token: session.refresh_token,
+      }))
+      sessionStorage.setItem('tengapos_impersonating_tenant', data.tenant_name)
+      await supabase.auth.setSession({ access_token: data.access_token, refresh_token: data.refresh_token })
+      // Hard navigation, not client-side routing -- guarantees every bit of
+      // in-memory state (React Query cache, cart/receipt/theme stores) is
+      // wiped clean for the new identity instead of carrying anything over.
+      window.location.href = '/app/dashboard'
+    } catch (err) {
+      toast.error(err.message || 'Could not view as this tenant')
+      setImpersonating(false)
     }
   }
 
@@ -328,6 +376,12 @@ export function TenantModal({ tenant, technicians, onClose, onSaved }) {
     renewalDate.setMonth(renewalDate.getMonth() + (PLANS[planType]?.renewalMonths || 6))
 
     const updates = {
+      name: appForm.name.trim() || tenant.name,
+      industry: appForm.industry.trim() || null,
+      location: appForm.location.trim() || null,
+      work_address: appForm.workAddress.trim() || null,
+      work_contact: appForm.workContact.trim() || null,
+      special_requirements: appForm.specialRequirements.trim() || null,
       plan_type: planType,
       features,
       pos_mode: posMode,
@@ -515,19 +569,18 @@ export function TenantModal({ tenant, technicians, onClose, onSaved }) {
                   <p className="mt-0.5">{tenant.status === 'rejected' ? tenant.rejection_reason : tenant.stalled_reason}</p>
                 </div>
               )}
+              {/* Owner's own contact details and signup-time preferences --
+                  informational only here; edit the owner via User
+                  Management (they're a real `users` row, not a tenant field). */}
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 {[
                   ['Contact Name', tenant.owner?.name],
                   ['Email', tenant.owner?.email],
                   ['Phone', tenant.owner?.phone],
-                  ['Industry', INDUSTRIES.find((i) => i.key === tenant.industry)?.label || tenant.industry],
-                  ['Location', tenant.location],
                   ['Business Type (at signup)', BUSINESS_MODES.find((m) => m.key === tenant.pos_mode)?.label || 'Retail'],
                   ['Branches Planned', tenant.requested_branches],
                   ['Team Size', TEAM_SIZE_LABELS[tenant.team_size_range] || tenant.team_size_range],
                   ['Preferred Plan', PLAN_PREF_LABELS[tenant.requested_plan_pref] || tenant.requested_plan_pref],
-                  ['Work Address', tenant.work_address],
-                  ['Work Contact', tenant.work_contact],
                   ['Signed Up', new Date(tenant.created_at).toLocaleString('en-ZW')],
                 ].filter(([, v]) => v).map(([label, value]) => (
                   <div key={label}>
@@ -536,12 +589,39 @@ export function TenantModal({ tenant, technicians, onClose, onSaved }) {
                   </div>
                 ))}
               </div>
-              {tenant.special_requirements && (
+
+              {/* Editable business record -- fixes a typo'd name/address, or
+                  updates it as the business itself changes, without needing
+                  to go around the app. */}
+              <div className="grid grid-cols-1 gap-3 border-t border-white/10 pt-4 sm:grid-cols-2">
                 <div>
-                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Special Requirements</p>
-                  <p className="mt-0.5 text-sm text-slate-900 dark:text-white">{tenant.special_requirements}</p>
+                  <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Business Name</label>
+                  <input value={appForm.name} onChange={(e) => setApp('name', e.target.value)} className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-indigo-500 focus:outline-none dark:border-white/10 dark:bg-white/5 dark:text-white" />
                 </div>
-              )}
+                <div>
+                  <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Industry</label>
+                  <select value={appForm.industry} onChange={(e) => setApp('industry', e.target.value)} className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-indigo-500 focus:outline-none dark:border-white/10 dark:bg-slate-800 dark:text-white">
+                    <option value="">—</option>
+                    {INDUSTRIES.map((i) => <option key={i.key} value={i.key}>{i.label}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Location</label>
+                  <input value={appForm.location} onChange={(e) => setApp('location', e.target.value)} className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-indigo-500 focus:outline-none dark:border-white/10 dark:bg-white/5 dark:text-white" />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Work Contact</label>
+                  <input value={appForm.workContact} onChange={(e) => setApp('workContact', e.target.value)} className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-indigo-500 focus:outline-none dark:border-white/10 dark:bg-white/5 dark:text-white" />
+                </div>
+                <div className="sm:col-span-2">
+                  <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Work Address</label>
+                  <input value={appForm.workAddress} onChange={(e) => setApp('workAddress', e.target.value)} className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-indigo-500 focus:outline-none dark:border-white/10 dark:bg-white/5 dark:text-white" />
+                </div>
+                <div className="sm:col-span-2">
+                  <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Special Requirements</label>
+                  <textarea value={appForm.specialRequirements} onChange={(e) => setApp('specialRequirements', e.target.value)} rows={2} className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-indigo-500 focus:outline-none dark:border-white/10 dark:bg-white/5 dark:text-white" />
+                </div>
+              </div>
             </div>
           )}
 
@@ -1002,6 +1082,18 @@ export function TenantModal({ tenant, technicians, onClose, onSaved }) {
             >
               <Save className="h-4 w-4" />
               {saving ? 'Saving…' : 'Save Changes'}
+            </button>
+          )}
+
+          {tenant.status === 'active' && (
+            <button
+              onClick={viewAsTenant}
+              disabled={impersonating}
+              title="Signs you in as this business's owner — full rights, for support and operations"
+              className="flex w-full items-center justify-center gap-2 rounded-xl border border-indigo-500/30 bg-indigo-500/10 py-2.5 text-sm font-semibold text-indigo-400 hover:bg-indigo-500/20 disabled:opacity-60"
+            >
+              <Eye className="h-4 w-4" />
+              {impersonating ? 'Opening…' : 'View as Tenant'}
             </button>
           )}
 

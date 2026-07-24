@@ -21,6 +21,17 @@ export default function AppLayout() {
   const location = useLocation()
   const queryClient = useQueryClient()
 
+  // "View as Tenant" (AdminTenants.jsx) stashes the admin's own session here
+  // before switching to the tenant's -- this banner is the only way back.
+  const impersonatingTenant = sessionStorage.getItem('tengapos_impersonating_tenant')
+  const exitImpersonation = async () => {
+    const saved = JSON.parse(sessionStorage.getItem('tengapos_admin_return_session') || 'null')
+    sessionStorage.removeItem('tengapos_admin_return_session')
+    sessionStorage.removeItem('tengapos_impersonating_tenant')
+    if (saved) await supabase.auth.setSession(saved)
+    window.location.href = '/admin/super/tenants'
+  }
+
   // Real, persisted receipt branding — loaded here (not just when Settings
   // happens to be visited) so every role gets correctly-branded receipts,
   // not just whoever last opened the Fiscalisation/Receipts Config page.
@@ -149,6 +160,19 @@ export default function AppLayout() {
     <div className="flex h-screen max-h-screen overflow-hidden bg-slate-50 dark:bg-slate-950" style={{ height: '100dvh' }}>
       <Sidebar open={mobileSidebarOpen} onClose={() => setMobileSidebarOpen(false)} />
       <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+        {impersonatingTenant && (
+          <div className="flex flex-shrink-0 flex-wrap items-center justify-between gap-2 bg-indigo-600 px-4 py-2 text-sm text-white">
+            <span>
+              Viewing as <b>{impersonatingTenant}</b> — actions here are real and affect their account.
+            </span>
+            <button
+              onClick={exitImpersonation}
+              className="rounded-lg bg-white/15 px-3 py-1 text-xs font-bold hover:bg-white/25"
+            >
+              Exit to Super Admin
+            </button>
+          </div>
+        )}
         <TopBar onMenuClick={() => setMobileSidebarOpen(true)} />
         <main className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain">
           {/* Keyed by path so a crash on one page doesn't take the sidebar/topbar
