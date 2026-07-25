@@ -4,12 +4,17 @@
 // JWSInvalidSignature / "invalid signature" / PGRST301). Supabase's client
 // autoRefreshToken only refreshes based on *expiry time*, so a token that
 // isn't expired yet but was signed under a now-retired key is never
-// proactively replaced. The actual refresh-and-retry lives in
-// src/lib/supabase.js's fetch wrapper, which covers every REST/RPC/Storage/
-// Edge Function call the client makes in one place -- this is just the
-// shared detector both that wrapper and any call site's own error
-// messaging can use.
+// proactively replaced -- every call using it keeps failing identically
+// until something forces a refresh. This detects that error class so
+// callers can refresh once and retry instead of treating it as a generic
+// failure (or, worse, a "connection issue" to be queued and retried
+// forever with the same stale token — see src/lib/offlineSync.js).
 export function isStaleJwtError(msg) {
   return typeof msg === 'string' &&
-    /invalid jwt|unrecognized jwt kid|token is unverifiable|jwsinvalidsignature|jwserror|invalid signature|pgrst301/i.test(msg)
+    /invalid jwt|unrecognized jwt kid|token is unverifiable|jwsinvalidsignature|jwserror|invalid signature|pgrst301|not authorized for this tenant/i.test(msg)
+}
+
+export async function refreshSessionOnce(supabase) {
+  const { error } = await supabase.auth.refreshSession()
+  return !error
 }
