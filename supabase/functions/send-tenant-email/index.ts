@@ -50,6 +50,10 @@ function template(name: string, tenantName: string, extra: Record<string, unknow
       subject: `Action needed: ${extra.count} change${extra.count === 1 ? '' : 's'} awaiting your approval — ${tenantName}`,
       body: `${extra.count} change${extra.count === 1 ? '' : 's'} made by your team ${extra.count === 1 ? 'is' : 'are'} still awaiting your approval on tengaPOS, and will automatically revert if not approved in time:\n\n${extra.lines}\n\nSign in to Settings > Requests to review.`,
     },
+    credentials_reset: {
+      subject: `Your tengaPOS password was reset — ${tenantName}`,
+      body: `Your tengaPOS sign-in for ${tenantName} was reset by our support team.\n\nEmail: ${extra.email}\nTemporary password: ${extra.password}\n\nPlease sign in and change this password as soon as you can. If you didn't expect this, contact us right away.`,
+    },
   }
   return templates[name] || null
 }
