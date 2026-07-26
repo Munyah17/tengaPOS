@@ -10,7 +10,20 @@
     <meta name="theme-color" content="#1e40af" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+    <!-- Loaded non-blocking: a stylesheet link here would hold up the whole
+         page behind a third-party request, so on a network where Google
+         Fonts is slow/blocked/dropped silently, the app never renders at
+         all. This still applies the stylesheet once it loads, but never
+         blocks first paint on it. -->
+    <link
+      rel="preload"
+      as="style"
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap"
+      onload="this.onload=null;this.rel='stylesheet'"
+    />
+    <noscript>
+      <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+    </noscript>
     <title>tengaPOS — Cloud POS & Inventory</title>
   </head>
   <body class="antialiased">
