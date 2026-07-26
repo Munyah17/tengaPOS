@@ -35,9 +35,14 @@ export async function pendingSyncCount() {
   return db.syncQueue.count()
 }
 
-/** Replays any queued offline writes (POS checkout + Inventory). Safe to call repeatedly. */
+/** Replays any queued offline writes (POS checkout + Inventory). Safe to call
+ *  repeatedly. Does NOT pre-check navigator.onLine — that flag is only a
+ *  hint and can wrongly report offline on some networks (see handleCheckout
+ *  in POS.jsx), which previously left queued sales stuck forever on
+ *  affected connections even though they'd have synced fine. Each attempt
+ *  that fails is just retried on the next interval — cheap and self-healing
+ *  the moment the real connection is (or already was) working. */
 export async function processSyncQueue() {
-  if (!navigator.onLine) return { synced: 0, failed: 0 }
   const items = await getSyncQueueItems()
   let synced = 0
   let failed = 0

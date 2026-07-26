@@ -13,6 +13,7 @@ import { useThemeStore } from '@/stores/themeStore'
 import { useAuthStore } from '@/stores/authStore'
 import { PAYMENT_METHODS } from '@/utils/constants'
 import { formatCurrency, generateReceiptNumber } from '@/utils/formatters'
+import { FRACTIONAL_UNITS, unitStep } from '@/lib/units'
 import { initiatePaynowCheckout } from '@/lib/paynow'
 import { fetchProducts, saveCheckout, fetchStaff, completeJobCard } from '@/lib/db'
 import { getOfflineProducts, queueOfflineSale } from '@/lib/offlineSync'
@@ -40,8 +41,11 @@ export default function POS() {
   // of clicking +/- one at a time (painful for bulk quantities like 100).
   const [editingQtyId, setEditingQtyId] = useState(null)
   const [qtyDraft, setQtyDraft] = useState('')
-  const commitQtyDraft = (itemId) => {
-    const n = parseInt(qtyDraft, 10)
+  // Hardware Mode items sold by kg/m/L etc. need a real decimal quantity
+  // (2.5kg) rather than being rounded down to a whole unit.
+  const commitQtyDraft = (itemId, unit) => {
+    const isFractional = FRACTIONAL_UNITS.includes(unit)
+    const n = isFractional ? parseFloat(qtyDraft) : parseInt(qtyDraft, 10)
     if (Number.isFinite(n) && n > 0) cart.updateQuantity(itemId, n)
     setEditingQtyId(null)
   }
@@ -271,41 +275,41 @@ export default function POS() {
         salespersonEmployeeNo: salespersonEmployeeNo || null,
       }
 
-      if (!navigator.onLine) {
-        // Offline: queue the sale for background sync, don't block the cashier.
-        // Stock isn't decremented until the sale syncs — acceptable trade-off
-        // for offline-first operation.
-        await queueOfflineSale(checkoutPayload)
-        toast('Offline — sale saved, will sync automatically', { icon: '📴' })
-      } else {
-        try {
-          const result = await saveCheckout(checkoutPayload)
-          receiptNumber = result.receiptNo
-          completedOrderId = result.order?.id || null
-          // We already know exactly what was decremented — patch the cache
-          // locally instead of firing a whole new products query for data
-          // we can compute ourselves.
-          queryClient.setQueryData(['products', tenant.id], (old) =>
-            (old || []).map((p) => {
-              const line = cart.items.find((i) => i.id === p.id)
-              return line ? { ...p, stock: Math.max(0, (p.stock ?? 0) - line.quantity) } : p
-            })
-          )
-        } catch (err) {
-          const msg = err.message || 'unknown'
-          if (msg.includes('Insufficient stock') || msg.includes('Stock check failed')) {
-            // Hard stop — never sell what isn't in stock
-            toast.error(msg)
-            setCheckingOut(false)
-            // Stock actually IS stale here (that's why the sale failed) —
-            // this one genuinely needs a fresh read, not an optimistic patch.
-            queryClient.invalidateQueries({ queryKey: ['products', tenant.id] })
-            return
-          }
-          // Network/server error mid-sale — queue it rather than lose the sale
-          await queueOfflineSale(checkoutPayload)
-          toast('Connection issue — sale saved, will sync automatically', { icon: '📴' })
+      // navigator.onLine is only a hint, not ground truth — it's well known
+      // to report "offline" on some WiFi/VPN/firewall setups even when the
+      // connection actually works, which previously sent every sale straight
+      // to the offline queue (never recorded, stock never decremented) on
+      // affected networks. The real network attempt is the only reliable
+      // signal, so it always runs first; only an actual failure falls back
+      // to queueing.
+      try {
+        const result = await saveCheckout(checkoutPayload)
+        receiptNumber = result.receiptNo
+        completedOrderId = result.order?.id || null
+        // We already know exactly what was decremented — patch the cache
+        // locally instead of firing a whole new products query for data
+        // we can compute ourselves.
+        queryClient.setQueryData(['products', tenant.id], (old) =>
+          (old || []).map((p) => {
+            const line = cart.items.find((i) => i.id === p.id)
+            return line ? { ...p, stock: Math.max(0, (p.stock ?? 0) - line.quantity) } : p
+          })
+        )
+      } catch (err) {
+        const msg = err.message || 'unknown'
+        if (msg.includes('Insufficient stock') || msg.includes('Stock check failed')) {
+          // Hard stop — never sell what isn't in stock
+          toast.error(msg)
+          setCheckingOut(false)
+          // Stock actually IS stale here (that's why the sale failed) —
+          // this one genuinely needs a fresh read, not an optimistic patch.
+          queryClient.invalidateQueries({ queryKey: ['products', tenant.id] })
+          return
         }
+        // Network/server error mid-sale (or genuinely offline) — queue it
+        // rather than lose the sale.
+        await queueOfflineSale(checkoutPayload)
+        toast('Connection issue — sale saved, will sync automatically', { icon: '📴' })
       }
 
       // Submit to ZIMRA FDMS if fiscal day is open
@@ -654,7 +658,7 @@ export default function POS() {
                     <div className="mt-2 flex items-center justify-between">
                       <div className="flex items-center gap-2">
                         <button
-                          onClick={() => cart.updateQuantity(item.id, item.quantity - 1)}
+                          onClick={() => cart.updateQuantity(item.id, Math.round((item.quantity - unitStep(item.unit)) * 1000) / 1000)}
                           className="flex h-7 w-7 items-center justify-center rounded-lg bg-slate-200 text-slate-600 hover:bg-slate-300 dark:bg-slate-700 dark:text-slate-300"
                         >
                           <Minus className="h-3 w-3" />
@@ -662,29 +666,30 @@ export default function POS() {
                         {editingQtyId === item.id ? (
                           <input
                             type="number"
-                            min="1"
+                            min={unitStep(item.unit)}
+                            step={FRACTIONAL_UNITS.includes(item.unit) ? '0.01' : '1'}
                             autoFocus
                             value={qtyDraft}
                             onChange={(e) => setQtyDraft(e.target.value)}
                             onFocus={(e) => e.target.select()}
-                            onBlur={() => commitQtyDraft(item.id)}
+                            onBlur={() => commitQtyDraft(item.id, item.unit)}
                             onKeyDown={(e) => {
                               if (e.key === 'Enter') { e.currentTarget.blur() }
                               else if (e.key === 'Escape') { setEditingQtyId(null) }
                             }}
-                            className="w-10 rounded-lg border border-brand-300 bg-white px-1 py-0.5 text-center text-sm font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-brand-500 dark:border-brand-700 dark:bg-slate-800 dark:text-white"
+                            className="w-14 rounded-lg border border-brand-300 bg-white px-1 py-0.5 text-center text-sm font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-brand-500 dark:border-brand-700 dark:bg-slate-800 dark:text-white"
                           />
                         ) : (
                           <span
                             onClick={() => { setEditingQtyId(item.id); setQtyDraft(String(item.quantity)) }}
-                            className="w-8 cursor-text text-center text-sm font-bold text-slate-900 dark:text-white"
+                            className="min-w-[2rem] cursor-text text-center text-sm font-bold text-slate-900 dark:text-white"
                             title="Click to type a quantity"
                           >
-                            {item.quantity}
+                            {item.quantity}{FRACTIONAL_UNITS.includes(item.unit) ? item.unit : ''}
                           </span>
                         )}
                         <button
-                          onClick={() => cart.updateQuantity(item.id, item.quantity + 1)}
+                          onClick={() => cart.updateQuantity(item.id, Math.round((item.quantity + unitStep(item.unit)) * 1000) / 1000)}
                           className={`flex h-7 w-7 items-center justify-center rounded-lg text-white ${
                             isRestaurant ? 'bg-restaurant-600 hover:bg-restaurant-700' : 'bg-brand-600 hover:bg-brand-700'
                           }`}
