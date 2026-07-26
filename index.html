@@ -28,6 +28,54 @@
   </head>
   <body class="antialiased">
     <div id="root"></div>
+
+    <!-- Fatal-error safety net: plain script (not type="module"), so it runs
+         and works on any browser regardless of module support. Reported
+         symptom: page loads fully over the network, nothing ever paints --
+         classic signature of an uncaught JS error before React can mount
+         (e.g. a browser/WebView missing some API the bundle assumes exists),
+         which previously left a totally blank white screen with no way to
+         tell what happened without console access. This catches that class
+         of error and shows the actual message on screen instead, so it can
+         be read and reported without needing devtools on the failing device.
+         React's own <ErrorBoundary> (main.jsx) still handles ordinary
+         render-time errors after mount; this only ever fires for something
+         that broke before that had a chance to run. -->
+    <script>
+      (function () {
+        var shown = false
+        function showFatalError(message) {
+          if (shown) return
+          var root = document.getElementById('root')
+          if (!root || root.childElementCount > 0) return // React already mounted something — not fatal
+          shown = true
+          root.innerHTML =
+            '<div style="min-height:100vh;display:flex;align-items:center;justify-content:center;' +
+            'padding:24px;font-family:-apple-system,Segoe UI,Arial,sans-serif;background:#f8fafc;">' +
+            '<div style="max-width:480px;text-align:center;">' +
+            '<div style="font-size:15px;font-weight:700;color:#0f172a;margin-bottom:8px;">tengaPOS couldn\'t load on this browser</div>' +
+            '<div style="font-size:13px;color:#64748b;margin-bottom:16px;">Please try a different browser (Chrome or Firefox), or share this message with support:</div>' +
+            '<div style="font-size:12px;color:#b91c1c;background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:10px 12px;word-break:break-word;text-align:left;">' +
+            (message || 'Unknown error') + '</div></div></div>'
+        }
+        window.addEventListener('error', function (e) {
+          showFatalError((e && (e.message || (e.error && e.error.message))) || 'Script error')
+        })
+        window.addEventListener('unhandledrejection', function (e) {
+          showFatalError('Unhandled promise rejection: ' + ((e.reason && (e.reason.message || e.reason)) || 'unknown'))
+        })
+        // If nothing rendered within a few seconds and no error fired either
+        // (e.g. the module script itself silently failed to load), say so
+        // rather than staying blank forever with zero explanation.
+        setTimeout(function () {
+          var root = document.getElementById('root')
+          if (root && root.childElementCount === 0) {
+            showFatalError('The app did not start (no error was reported — this browser may not support a required feature).')
+          }
+        }, 8000)
+      })()
+    </script>
+
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>
