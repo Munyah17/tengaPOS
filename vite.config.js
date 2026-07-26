@@ -4,6 +4,17 @@ import tailwindcss from '@tailwindcss/vite'
 import { VitePWA } from 'vite-plugin-pwa'
 
 export default defineConfig({
+  // Confirmed live (via the fatal-error safety net in index.html) on a real
+  // budget Android tablet: "Uncaught SyntaxError: Unexpected token" -- the
+  // page loads completely over the network but the browser's JS engine
+  // can't even parse the bundle. Vite 8's default output target is more
+  // modern than what a lot of real-world Android WebView/older-Chrome
+  // devices support. Pinning an explicit, conservative target makes esbuild/
+  // rolldown down-level syntax (optional chaining, nullish coalescing,
+  // class fields, etc.) instead of emitting it as-is.
+  build: {
+    target: 'es2015',
+  },
   plugins: [
     react(),
     tailwindcss(),
