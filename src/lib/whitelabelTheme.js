@@ -1,13 +1,13 @@
 /**
  * Runtime white-label theming.
  *
- * The entire app's accent styling is driven by the Tailwind v4 `@theme`
- * custom properties (--color-brand-50 … --color-brand-900 in index.css) —
- * every `bg-brand-600`, `text-brand-400`, gradient, etc. compiles down to
- * var() references. So re-branding a tenant's whole portal is just
- * overriding those variables on <html> with a shade scale generated from
- * their primary colour. Also swaps the favicon, document title, and the
- * mobile browser theme-color to the tenant's brand.
+ * Every `bg-brand-600`, `text-brand-400`, gradient, etc. is defined in
+ * tailwind.config.js as `rgb(var(--color-brand-600) / <alpha>)`, reading
+ * from the --color-brand-50 … --color-brand-950 custom properties declared
+ * in index.css. So re-branding a tenant's whole portal is just overriding
+ * those variables on <html> with a shade scale generated from their primary
+ * colour. Also swaps the favicon, document title, and the mobile browser
+ * theme-color to the tenant's brand.
  *
  * Applied by AppLayout when the signed-in tenant has whitelabel.enabled;
  * cleared on logout/unmount so the Super Admin portal and login screen
@@ -27,6 +27,7 @@ const SHADE_MIX = [
   ['700', -0.28],
   ['800', -0.42],
   ['900', -0.55],
+  ['950', -0.68],
 ]
 
 function parseHex(hex) {
@@ -45,6 +46,12 @@ function mixChannel(c, t) {
 
 function toHex([r, g, b]) {
   return `#${[r, g, b].map((c) => c.toString(16).padStart(2, '0')).join('')}`
+}
+
+// tailwind.config.js's color functions read these as `rgb(var(--color-brand-600) / <alpha>)`,
+// which needs space-separated channel numbers, not a hex string.
+function toRgbTriple([r, g, b]) {
+  return `${r} ${g} ${b}`
 }
 
 /** Full 50–900 Tailwind-style scale from one hex colour. */
@@ -80,7 +87,7 @@ export function applyWhitelabelTheme(whitelabel) {
   const scale = buildShadeScale(whitelabel.primary_color)
   if (scale) {
     for (const [shade, hex] of Object.entries(scale)) {
-      root.style.setProperty(`--color-brand-${shade}`, hex)
+      root.style.setProperty(`--color-brand-${shade}`, toRgbTriple(parseHex(hex)))
     }
   }
 
