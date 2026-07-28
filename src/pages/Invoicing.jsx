@@ -24,10 +24,10 @@ const STATUS_COLORS = {
   cancelled: 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300',
 }
 
-const BLANK_ITEM = { description: '', qty: 1, unit_price: 0, discount_pct: 0 }
+const BLANK_ITEM = { description: '', qty: 1, unit_price: 0, discount_pct: 0, is_service: false }
 const BLANK_FORM = {
   customerName: '', customerEmail: '', customerPhone: '', customerAddress: '',
-  items: [{ ...BLANK_ITEM }], notes: '', validUntil: '', dueDate: '',
+  items: [{ ...BLANK_ITEM }], notes: '', validUntil: '', dueDate: '', vatEnabled: true,
 }
 
 // `standalone` is set by Quotations.jsx (Workshop Mode's built-in
@@ -80,7 +80,10 @@ export default function Invoicing({ standalone = false } = {}) {
     fetchCustomers(tenant.id).then(setCustomers).catch(() => {})
   }, [tenant?.id])
 
-  const vatEnabled = tenant?.vat_enabled !== false
+  // Tenant-wide default -- each document can still override this (see
+  // form.vatEnabled), since not every quote/invoice should be VAT-rated
+  // (e.g. exempt customers, export jobs).
+  const tenantVatDefault = tenant?.vat_enabled !== false
   const vatRate = tenant?.vat_rate ?? 15.5
   const fmt = (n) => formatCurrency(n, tenant?.currency)
 
@@ -103,7 +106,7 @@ export default function Invoicing({ standalone = false } = {}) {
 
   const openCreate = () => {
     setEditing(null)
-    setForm(BLANK_FORM)
+    setForm({ ...BLANK_FORM, vatEnabled: tenantVatDefault })
     setSelectedCustomerId('')
     setShowForm(true)
   }
@@ -120,6 +123,7 @@ export default function Invoicing({ standalone = false } = {}) {
       notes: doc.notes || '',
       validUntil: doc.valid_until || '',
       dueDate: doc.due_date || '',
+      vatEnabled: doc.vat_enabled !== false,
     })
     setShowForm(true)
   }
@@ -143,16 +147,27 @@ export default function Invoicing({ standalone = false } = {}) {
   const removeItem = (i) => setForm((f) => ({ ...f, items: f.items.filter((_, idx) => idx !== i) }))
 
   const pickProduct = (i, product) => {
-    setForm((f) => ({ ...f, items: f.items.map((it, idx) => idx === i ? { ...it, description: product.name, unit_price: product.price } : it) }))
+    setForm((f) => ({ ...f, items: f.items.map((it, idx) => idx === i ? { ...it, description: product.name, unit_price: product.price, is_service: false } : it) }))
     setAutocompleteRow(null)
   }
+  // Services (labor, custom work) don't have a meaningful quantity the way
+  // stocked goods do -- toggling this hides the qty input and pins it at 1,
+  // rather than requiring every service line to awkwardly carry a "1".
+  const toggleService = (i) => setForm((f) => ({
+    ...f,
+    items: f.items.map((it, idx) => {
+      if (idx !== i) return it
+      const isService = !it.is_service
+      return { ...it, is_service: isService, qty: isService ? 1 : it.qty }
+    }),
+  }))
   const productMatches = (query) => {
     const q = query.trim().toLowerCase()
     if (!q) return []
     return products.filter((p) => p.name?.toLowerCase().includes(q) || p.sku?.toLowerCase().includes(q)).slice(0, 8)
   }
 
-  const computeTotals = (items) => {
+  const computeTotals = (items, vatEnabled = tenantVatDefault) => {
     const grossTotal = items.reduce((s, i) => s + (i.qty * i.unit_price * (1 - (i.discount_pct || 0) / 100)), 0)
     if (!vatEnabled) return { subtotal: grossTotal, vatAmount: 0, total: grossTotal }
     const vatAmount = grossTotal * (vatRate / (100 + vatRate))
@@ -166,7 +181,7 @@ export default function Invoicing({ standalone = false } = {}) {
     if (validItems.length === 0) { toast.error('Add at least one line item'); return }
     setSaving(true)
     try {
-      const { subtotal, vatAmount, total } = computeTotals(validItems)
+      const { subtotal, vatAmount, total } = computeTotals(validItems, form.vatEnabled)
       const payload = {
         customerName: form.customerName.trim(),
         customerEmail: form.customerEmail.trim() || null,
@@ -174,6 +189,7 @@ export default function Invoicing({ standalone = false } = {}) {
         customerAddress: form.customerAddress.trim() || null,
         items: validItems,
         subtotal, vatAmount, total,
+        vatEnabled: form.vatEnabled,
         notes: form.notes.trim() || null,
         validUntil: form.validUntil || null,
         dueDate: form.dueDate || null,
@@ -231,7 +247,7 @@ export default function Invoicing({ standalone = false } = {}) {
 
   const handleStatusChange = async (doc, status) => {
     try {
-      const updated = await updateDocument(doc.id, { ...doc, status, customerName: doc.customer_name, subtotal: doc.subtotal, vatAmount: doc.vat_amount, total: doc.total })
+      const updated = await updateDocument(doc.id, { ...doc, status, customerName: doc.customer_name, subtotal: doc.subtotal, vatAmount: doc.vat_amount, vatEnabled: doc.vat_enabled, total: doc.total })
       setDocuments((prev) => prev.map((d) => d.id === doc.id ? updated : d))
     } catch (err) {
       toast.error(err.message || 'Failed to update status')
@@ -252,6 +268,7 @@ export default function Invoicing({ standalone = false } = {}) {
 
   const { subtotal: formSubtotal, vatAmount: formVat, total: formTotal } = computeTotals(
     form.items.filter((i) => i.description.trim() && i.qty > 0),
+    form.vatEnabled,
   )
 
   const erpUnlocked = standalone || tenant?.features?.accounting_erp === true
@@ -481,11 +498,20 @@ export default function Invoicing({ standalone = false } = {}) {
                       </div>
                     )}
                   </div>
-                  <input
-                    type="number" placeholder="Qty" min="0" value={item.qty}
-                    onChange={(e) => updateItem(i, 'qty', Number(e.target.value) || 0)}
-                    className="col-span-1 rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
-                  />
+                  <div className="col-span-1 flex flex-col items-center gap-0.5">
+                    {item.is_service ? (
+                      <span className="flex h-[30px] items-center text-[10px] font-semibold uppercase text-slate-400" title="Service line — quantity doesn't apply">Service</span>
+                    ) : (
+                      <input
+                        type="number" placeholder="Qty" min="0" value={item.qty}
+                        onChange={(e) => updateItem(i, 'qty', Number(e.target.value) || 0)}
+                        className="w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                      />
+                    )}
+                    <label className="flex items-center gap-1 text-[9px] text-slate-400">
+                      <input type="checkbox" checked={item.is_service} onChange={() => toggleService(i)} className="h-3 w-3 rounded border-slate-300" /> Service
+                    </label>
+                  </div>
                   <input
                     type="number" placeholder="Price" min="0" step="0.01" value={item.unit_price}
                     onChange={(e) => updateItem(i, 'unit_price', Number(e.target.value) || 0)}
@@ -509,8 +535,17 @@ export default function Invoicing({ standalone = false } = {}) {
           </div>
 
           <div className="space-y-1 rounded-xl border border-slate-200 p-3 text-sm dark:border-slate-700">
-            <div className="flex justify-between text-slate-500"><span>Subtotal (ex VAT)</span><span>{fmt(formSubtotal)}</span></div>
-            {vatEnabled && <div className="flex justify-between text-slate-500"><span>VAT {vatRate}%</span><span>{fmt(formVat)}</span></div>}
+            <label className="mb-1 flex items-center gap-2 text-xs font-semibold text-slate-500">
+              <input
+                type="checkbox"
+                checked={form.vatEnabled}
+                onChange={(e) => setForm((f) => ({ ...f, vatEnabled: e.target.checked }))}
+                className="h-3.5 w-3.5 rounded border-slate-300"
+              />
+              Charge VAT on this {docType === 'invoice' ? 'invoice' : 'quotation'}
+            </label>
+            <div className="flex justify-between text-slate-500"><span>Subtotal{form.vatEnabled ? ' (ex VAT)' : ''}</span><span>{fmt(formSubtotal)}</span></div>
+            {form.vatEnabled && <div className="flex justify-between text-slate-500"><span>VAT {vatRate}%</span><span>{fmt(formVat)}</span></div>}
             <div className="flex justify-between border-t border-slate-200 pt-1 font-bold text-slate-900 dark:border-slate-700 dark:text-white"><span>Total</span><span>{fmt(formTotal)}</span></div>
           </div>
 

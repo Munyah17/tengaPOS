@@ -3,19 +3,19 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { motion } from 'framer-motion'
 import {
   Search, Plus, Upload, Download, ExternalLink, Edit, Trash2,
-  AlertTriangle, Package, BarChart3, RefreshCw, ImageOff, ImagePlus, X,
+  AlertTriangle, Package, BarChart3, RefreshCw, ImageOff, ImagePlus, X, ArrowLeftRight,
 } from 'lucide-react'
 import Button from '@/components/common/Button'
 import Modal from '@/components/common/Modal'
 import ExportMenu from '@/components/common/ExportMenu'
-import { formatCurrency } from '@/utils/formatters'
+import { formatCurrency, formatDateTime } from '@/utils/formatters'
 import { generateTemplate, parseCSV } from '@/utils/exportUtils'
 import { useThemeStore } from '@/stores/themeStore'
 import { useAuthStore } from '@/stores/authStore'
 import {
   fetchProducts, insertProduct, updateProduct, deleteProduct, uploadProductImage,
   fetchBranches, fetchProductBranches, assignProductBranch, unassignProductBranch,
-  fetchCategories, createCategory,
+  fetchCategories, createCategory, fetchStockTransfers, transferStock,
 } from '@/lib/db'
 import { getOfflineProducts, queueOfflineInventoryWrite } from '@/lib/offlineSync'
 import toast from 'react-hot-toast'
@@ -52,12 +52,27 @@ export default function Inventory() {
   const [categories, setCategories] = useState([])
   const [newCategoryName, setNewCategoryName] = useState('')
   const [addingCategory, setAddingCategory] = useState(false)
+  const [showTransfer, setShowTransfer] = useState(false)
+  const [transferForm, setTransferForm] = useState({ productId: '', toBranchId: '', qty: '', note: '' })
+  const [transferring, setTransferring] = useState(false)
+  const [transfers, setTransfers] = useState([])
   const fileInputRef = useRef(null)
 
   useEffect(() => {
     if (!tenant?.id) return
     fetchBranches(tenant.id).then(setBranches).catch(() => toast.error("Couldn't load branches"))
   }, [tenant?.id])
+
+  const loadTransfers = () => {
+    if (!tenant?.id) return
+    fetchStockTransfers(tenant.id).then(setTransfers).catch(() => {})
+  }
+  useEffect(loadTransfers, [tenant?.id])
+
+  const openTransfer = () => {
+    setTransferForm({ productId: '', toBranchId: '', qty: '', note: '' })
+    setShowTransfer(true)
+  }
 
   const loadCategories = () => {
     if (!tenant?.id) return
@@ -106,6 +121,29 @@ export default function Inventory() {
   })
   const products = productsQuery.data || []
   const loading = productsQuery.isLoading
+
+  const transferProduct = products.find((p) => p.id === transferForm.productId)
+  const transferDestBranches = branches.filter((b) => b.id !== transferProduct?.branch_id)
+
+  const handleTransfer = async (e) => {
+    e.preventDefault()
+    const qty = Number(transferForm.qty)
+    if (!transferForm.productId) { toast.error('Choose a product'); return }
+    if (!transferForm.toBranchId) { toast.error('Choose a destination branch'); return }
+    if (!qty || qty <= 0) { toast.error('Enter a quantity greater than zero'); return }
+    setTransferring(true)
+    try {
+      await transferStock(tenant.id, transferForm.productId, transferForm.toBranchId, qty, transferForm.note.trim() || null)
+      toast.success('Stock transferred')
+      queryClient.invalidateQueries({ queryKey: ['products', tenant.id] })
+      loadTransfers()
+      setShowTransfer(false)
+    } catch (err) {
+      toast.error(err.message || 'Failed to transfer stock')
+    } finally {
+      setTransferring(false)
+    }
+  }
 
   // Paint instantly from the local cache (already kept warm by AppLayout's
   // background sync) instead of a blank loading state, while the query above
@@ -382,6 +420,11 @@ export default function Inventory() {
             <Upload className="h-4 w-4" /> Mass Import
           </Button>
           <ExportMenu data={products} columns={exportColumns} title="Inventory" filename="tengapos_inventory" />
+          {branches.length > 1 && (
+            <Button variant="secondary" onClick={openTransfer}>
+              <ArrowLeftRight className="h-4 w-4" /> Transfer Stock
+            </Button>
+          )}
           <Button variant={isRestaurant ? 'restaurant' : 'primary'} onClick={openAdd}>
             <Plus className="h-4 w-4" /> Add Product
           </Button>
@@ -498,6 +541,104 @@ export default function Inventory() {
           </div>
         )}
       </div>
+
+      {/* Recent branch-to-branch stock transfers */}
+      {branches.length > 1 && transfers.length > 0 && (
+        <div className="mt-6 overflow-hidden rounded-2xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
+          <div className="border-b border-slate-200 px-4 py-3 dark:border-slate-800">
+            <h2 className="text-sm font-bold text-slate-900 dark:text-white">Recent Transfers</h2>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-900">
+                  {['Date', 'Product', 'From', 'To', 'Qty', 'By', 'Note'].map((h) => (
+                    <th key={h} className="px-4 py-2 text-left text-xs font-semibold uppercase text-slate-500">{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {transfers.map((t) => (
+                  <tr key={t.id} className="border-b border-slate-100 dark:border-slate-800">
+                    <td className="px-4 py-2 text-xs text-slate-500">{formatDateTime(t.created_at)}</td>
+                    <td className="px-4 py-2 text-sm text-slate-700 dark:text-slate-300">{t.products?.name || '—'}</td>
+                    <td className="px-4 py-2 text-sm text-slate-500">{t.from_branch?.name || 'Unassigned'}</td>
+                    <td className="px-4 py-2 text-sm text-slate-500">{t.to_branch?.name || '—'}</td>
+                    <td className="px-4 py-2 text-sm font-semibold text-slate-900 dark:text-white">{t.qty}</td>
+                    <td className="px-4 py-2 text-xs text-slate-500">{t.users?.name || '—'}</td>
+                    <td className="px-4 py-2 text-xs text-slate-400">{t.note || '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Transfer Stock Modal */}
+      <Modal isOpen={showTransfer} onClose={() => setShowTransfer(false)} title="Transfer Stock Between Branches">
+        <form onSubmit={handleTransfer} className="space-y-4">
+          <div>
+            <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">Product</label>
+            <select
+              value={transferForm.productId}
+              onChange={(e) => setTransferForm((f) => ({ ...f, productId: e.target.value, toBranchId: '' }))}
+              required
+              className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+            >
+              <option value="">Select product…</option>
+              {products.map((p) => {
+                const homeBranch = branches.find((b) => b.id === p.branch_id)
+                return <option key={p.id} value={p.id}>{p.name}{homeBranch ? ` — ${homeBranch.name}` : ''} (stock: {p.stock_qty ?? p.stock ?? 0})</option>
+              })}
+            </select>
+          </div>
+          {transferProduct && (
+            <p className="text-xs text-slate-500">
+              {transferProduct.stock_qty ?? transferProduct.stock ?? 0} in stock
+              {transferProduct.branch_id ? ` at ${branches.find((b) => b.id === transferProduct.branch_id)?.name || 'its branch'}` : ' (not attached to a branch)'}.
+            </p>
+          )}
+          <div>
+            <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">Destination Branch</label>
+            <select
+              value={transferForm.toBranchId}
+              onChange={(e) => setTransferForm((f) => ({ ...f, toBranchId: e.target.value }))}
+              required
+              disabled={!transferForm.productId}
+              className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm disabled:opacity-50 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+            >
+              <option value="">Select branch…</option>
+              {transferDestBranches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">Quantity</label>
+            <input
+              type="number" min="1" step="1" value={transferForm.qty}
+              onChange={(e) => setTransferForm((f) => ({ ...f, qty: e.target.value }))}
+              required
+              className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">Note (optional)</label>
+            <input
+              type="text" value={transferForm.note}
+              onChange={(e) => setTransferForm((f) => ({ ...f, note: e.target.value }))}
+              placeholder="e.g. restocking after weekend rush"
+              className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+            />
+          </div>
+          <p className="text-xs text-slate-500">
+            Moves stock immediately — if the destination branch doesn't already have this product, it's created there automatically.
+          </p>
+          <div className="flex justify-end gap-2 pt-2">
+            <Button variant="secondary" type="button" onClick={() => setShowTransfer(false)}>Cancel</Button>
+            <Button type="submit" disabled={transferring}>{transferring ? 'Transferring…' : 'Transfer Stock'}</Button>
+          </div>
+        </form>
+      </Modal>
 
       {/* Add / Edit Modal */}
       <Modal isOpen={showAdd} onClose={() => setShowAdd(false)} title={editTarget ? 'Edit Product' : 'Add Product'}>

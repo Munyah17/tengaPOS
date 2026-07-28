@@ -303,7 +303,7 @@ export async function fetchOrders(tenantId, filters = {}) {
 export async function fetchTransactions(tenantId) {
   const { data, error } = await supabase
     .from('transactions')
-    .select('*, orders(order_no, subtotal, tax_amount, total, order_items(qty)), users(name), branches(name)')
+    .select('*, orders(order_no, subtotal, tax_amount, total, order_items(product_id, name, qty, unit_price)), users(name), branches(name)')
     .eq('tenant_id', tenantId)
     .order('created_at', { ascending: false })
     .limit(500)
@@ -539,6 +539,41 @@ export async function fetchBranches(tenantId) {
     .eq('tenant_id', tenantId)
     .is('deleted_at', null)
     .order('is_main', { ascending: false })
+  if (error) throw error
+  return data
+}
+
+// ─── Stock Transfers (branch to branch) ────────────────────────────────────
+
+export async function fetchStockTransfers(tenantId) {
+  const { data, error } = await supabase
+    .from('stock_transfers')
+    .select(`
+      *,
+      products(name, sku),
+      from_branch:branches!stock_transfers_from_branch_id_fkey(name),
+      to_branch:branches!stock_transfers_to_branch_id_fkey(name),
+      users(name)
+    `)
+    .eq('tenant_id', tenantId)
+    .order('created_at', { ascending: false })
+    .limit(100)
+  if (error) throw error
+  return data
+}
+
+// Moves quantity from one branch's copy of a product to another's, creating
+// the destination branch's product row (cloned from the source) if it
+// doesn't have one yet. See stock_transfers.sql for why -- stock lives on
+// the product row itself, not in a separate per-branch table.
+export async function transferStock(tenantId, productId, toBranchId, qty, note) {
+  const { data, error } = await supabase.rpc('transfer_stock', {
+    p_tenant_id: tenantId,
+    p_product_id: productId,
+    p_to_branch_id: toBranchId,
+    p_qty: qty,
+    p_note: note || null,
+  })
   if (error) throw error
   return data
 }
@@ -1221,6 +1256,7 @@ export async function insertDocument(tenantId, branchId, userId, doc) {
       items: doc.items || [],
       subtotal: doc.subtotal,
       vat_amount: doc.vatAmount,
+      vat_enabled: doc.vatEnabled !== false,
       total: doc.total,
       notes: doc.notes || null,
       valid_until: doc.validUntil || null,
@@ -1251,6 +1287,7 @@ export async function createQuotationFromJobCard(tenantId, branchId, userId, job
     items,
     subtotal: grossTotal - vatAmount,
     vatAmount,
+    vatEnabled,
     total: grossTotal,
     notes: jobCard.diagnosis || null,
   })
@@ -1270,6 +1307,7 @@ export async function updateDocument(id, updates) {
       items: updates.items || [],
       subtotal: updates.subtotal,
       vat_amount: updates.vatAmount,
+      vat_enabled: updates.vatEnabled !== false,
       total: updates.total,
       notes: updates.notes || null,
       valid_until: updates.validUntil || null,
@@ -1306,6 +1344,7 @@ export async function convertQuotationToInvoice(quotation, docNumber, userId) {
       items: quotation.items,
       subtotal: quotation.subtotal,
       vat_amount: quotation.vat_amount,
+      vat_enabled: quotation.vat_enabled !== false,
       total: quotation.total,
       notes: quotation.notes,
       converted_from_id: quotation.id,

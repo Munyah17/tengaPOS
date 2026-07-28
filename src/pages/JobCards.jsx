@@ -47,7 +47,10 @@ function JobCardModal({ tenant, branch, customers, technicians, products, existi
   const [assignedTo, setAssignedTo] = useState(existing?.assigned_to || '')
   const [items, setItems] = useState(
     existing?.items?.length ? existing.items
-      : prefill?.items?.length ? prefill.items.map((i) => ({ ...i, product_id: null }))
+      // Quotation-origin items never had a real product_id (quotations don't
+      // link line items to inventory) -- a POS-transaction origin does, and
+      // that one's worth keeping so the picker shows the right product.
+      : prefill?.items?.length ? prefill.items.map((i) => (prefill.keepProductIds ? i : { ...i, product_id: null }))
       : [{ ...BLANK_ITEM }],
   )
   const [saving, setSaving] = useState(false)
@@ -62,7 +65,15 @@ function JobCardModal({ tenant, branch, customers, technicians, products, existi
   const removeItemRow = (i) => setItems((prev) => prev.filter((_, idx) => idx !== i))
   const pickProduct = (i, productId) => {
     const p = products.find((p) => p.id === productId)
-    setItem(i, { product_id: productId || null, description: p ? p.name : items[i].description, unit_price: p ? p.price : items[i].unit_price })
+    // Labor/custom (no product_id) is a service line -- qty doesn't apply,
+    // so it's reset to 1 and hidden rather than left at whatever a
+    // previously-picked product's quantity happened to be.
+    setItem(i, {
+      product_id: productId || null,
+      description: p ? p.name : items[i].description,
+      unit_price: p ? p.price : items[i].unit_price,
+      ...(productId ? {} : { qty: 1 }),
+    })
   }
 
   const setPart = (i, patch) => setPartsRequested((prev) => prev.map((p, idx) => (idx === i ? { ...p, ...patch } : p)))
@@ -283,11 +294,15 @@ function JobCardModal({ tenant, branch, customers, technicians, products, existi
                   placeholder="Description"
                   className="min-w-[120px] flex-1 rounded-lg border border-slate-200 px-2 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
                 />
-                <input
-                  type="number" min="1" value={it.qty}
-                  onChange={(e) => setItem(i, { qty: e.target.value })}
-                  className="w-14 flex-shrink-0 rounded-lg border border-slate-200 px-2 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
-                />
+                {it.product_id ? (
+                  <input
+                    type="number" min="1" value={it.qty}
+                    onChange={(e) => setItem(i, { qty: e.target.value })}
+                    className="w-14 flex-shrink-0 rounded-lg border border-slate-200 px-2 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                  />
+                ) : (
+                  <span className="w-14 flex-shrink-0 text-center text-[10px] font-semibold uppercase text-slate-400" title="Service line — quantity doesn't apply">Service</span>
+                )}
                 <input
                   type="number" min="0" step="0.01" value={it.unit_price}
                   onChange={(e) => setItem(i, { unit_price: e.target.value })}
@@ -327,12 +342,23 @@ export default function JobCards() {
   // Arrived here via "Create Job Card" on an accepted quotation
   // (Quotations.jsx / Invoicing.jsx) -- pre-fill the new job card with the
   // quotation's customer and line items; the vehicle still needs picking
-  // since quotations don't capture one.
+  // since quotations don't capture one. Or via "Create Job Card" on a POS
+  // transaction (Transactions.jsx) -- a walk-in sale with no customer
+  // captured, so only the items pre-fill; customer and vehicle both still
+  // need picking.
   const [quotationPrefill, setQuotationPrefill] = useState(null)
   useEffect(() => {
     const doc = location.state?.fromQuotation
+    const txn = location.state?.fromTransaction
     if (doc) {
       setQuotationPrefill({ customerName: doc.customer_name, customerPhone: doc.customer_phone, items: doc.items, quotationId: doc.id })
+      setShowNew(true)
+      navigate(location.pathname, { replace: true, state: {} })
+    } else if (txn) {
+      setQuotationPrefill({
+        items: txn.items.map((i) => ({ description: i.name, qty: i.qty, unit_price: i.unit_price, product_id: i.product_id || null })),
+        keepProductIds: true,
+      })
       setShowNew(true)
       navigate(location.pathname, { replace: true, state: {} })
     }

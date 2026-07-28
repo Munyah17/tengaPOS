@@ -1,12 +1,14 @@
 import { motion } from 'framer-motion'
 import { useState, useMemo, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { withOfflineCache, seedFromOfflineCache } from '@/lib/offlineCache'
-import { RefreshCw, X, Ban, CheckCircle, ShieldCheck, XCircle, Undo2 } from 'lucide-react'
+import { RefreshCw, X, Ban, CheckCircle, ShieldCheck, XCircle, Undo2, Wrench } from 'lucide-react'
 import ExportMenu from '@/components/common/ExportMenu'
 import DateInput from '@/components/common/DateInput'
 import { formatCurrency, formatDateTime } from '@/utils/formatters'
 import { useAuthStore } from '@/stores/authStore'
+import { useThemeStore } from '@/stores/themeStore'
 import {
   fetchTransactions, fetchVoids, requestVoid, approveVoid, validateVoid, rejectVoid,
   fetchReturns, requestReturn, approveReturn, validateReturn, rejectReturn,
@@ -130,6 +132,9 @@ const exportColumns = [
 
 export default function Transactions() {
   const { tenant, role } = useAuthStore()
+  const { posMode } = useThemeStore()
+  const isWorkshop = posMode === 'workshop'
+  const navigate = useNavigate()
   const queryClient = useQueryClient()
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
@@ -155,6 +160,7 @@ export default function Transactions() {
         date: t.created_at,
         cashier: t.users?.name || '—',
         items: t.orders?.order_items?.reduce((s, i) => s + i.qty, 0) ?? '—',
+        lineItems: t.orders?.order_items || [],
         subtotal: t.orders?.subtotal ?? t.amount,
         tax: t.orders?.tax_amount ?? 0,
         total: parseFloat(t.amount),
@@ -333,15 +339,15 @@ export default function Transactions() {
           <table className="w-full">
             <thead>
               <tr className="border-b border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-900">
-                {['Receipt #', 'Date', 'Cashier', 'Items', 'Subtotal', 'Tax', 'Total', 'Payment', 'Branch', 'Void / Return'].map((h) => (
-                  <th key={h} className="px-4 py-3 text-left text-xs font-semibold uppercase text-slate-500">{h}</th>
+                {['Receipt #', 'Date', 'Cashier', 'Items', 'Subtotal', 'Tax', 'Total', 'Payment', 'Branch', 'Void / Return', ...(isWorkshop ? [''] : [])].map((h, idx) => (
+                  <th key={idx} className="px-4 py-3 text-left text-xs font-semibold uppercase text-slate-500">{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {transactions.length === 0 ? (
                 <tr>
-                  <td colSpan={10} className="py-16 text-center text-sm text-slate-400">
+                  <td colSpan={isWorkshop ? 11 : 10} className="py-16 text-center text-sm text-slate-400">
                     No transactions yet — complete a sale on the POS to see it here.
                   </td>
                 </tr>
@@ -434,6 +440,19 @@ export default function Transactions() {
                       )
                     })()}
                   </td>
+                  {isWorkshop && (
+                    <td className="px-4 py-3">
+                      <button
+                        onClick={() => navigate('/app/job-cards', { state: { fromTransaction: { items: t.lineItems, orderId: t.orderId } } })}
+                        disabled={!t.lineItems.length}
+                        title={!t.lineItems.length ? 'No items to carry over' : 'Create a job card from this sale'}
+                        className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-semibold text-slate-500 hover:bg-red-50 hover:text-red-600 disabled:opacity-40 dark:hover:bg-red-950/30"
+                      >
+                        <Wrench className="h-3.5 w-3.5" />
+                        Job Card
+                      </button>
+                    </td>
+                  )}
                 </motion.tr>
               ))}
             </tbody>
