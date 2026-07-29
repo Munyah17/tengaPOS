@@ -1,4 +1,4 @@
-import { Bell, Wifi, WifiOff, ShieldAlert, Menu, User, Settings, LogOut, ChevronDown, CheckCheck, BellOff, ShoppingBag, UtensilsCrossed, Wrench, Hammer, AlertTriangle, CloudUpload } from 'lucide-react'
+import { Bell, Wifi, WifiOff, ShieldAlert, Menu, User, Settings, LogOut, ChevronDown, CheckCheck, BellOff, ShoppingBag, UtensilsCrossed, Wrench, Hammer, Factory, AlertTriangle, CloudUpload } from 'lucide-react'
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import ThemeToggle from '@/components/common/ThemeToggle'
@@ -9,14 +9,15 @@ import { useFiscalStore } from '@/stores/fiscalStore'
 import { useTenantNotifications } from '@/hooks/useTenantNotifications'
 import { pendingSyncCount } from '@/lib/offlineSync'
 
-// Retail/Restaurant/Workshop/Hardware — same modes as Sidebar.jsx and
-// AdminTenants.jsx's Business Modes control. A tenant only ever sees the
-// modes Super Admin actually enabled for it (tenant.enabled_modes).
+// Retail/Restaurant/Workshop/Hardware/Manufacturing — same modes as
+// Sidebar.jsx and AdminTenants.jsx's Business Modes control. A tenant only
+// ever sees the modes Super Admin actually enabled for it (tenant.enabled_modes).
 const MODE_META = {
   retail: { label: 'Retail', icon: ShoppingBag, activeClass: 'bg-brand-600 text-white', gradient: 'from-brand-500 to-brand-700' },
   restaurant: { label: 'Restaurant', icon: UtensilsCrossed, activeClass: 'bg-green-600 text-white', gradient: 'from-green-500 to-green-700' },
   workshop: { label: 'Workshop', icon: Wrench, activeClass: 'bg-gradient-to-r from-red-600 to-amber-500 text-white', gradient: 'from-red-600 to-amber-500' },
   hardware: { label: 'Hardware', icon: Hammer, activeClass: 'bg-orange-600 text-white', gradient: 'from-orange-500 to-orange-700' },
+  manufacturing: { label: 'Manufacturing', icon: Factory, activeClass: 'bg-indigo-600 text-white', gradient: 'from-indigo-500 to-indigo-700' },
 }
 
 function useClickOutside(ref, handler) {

@@ -582,6 +582,72 @@ export async function transferStock(tenantId, productId, toBranchId, qty, note) 
   return data
 }
 
+// ─── Manufacturing Mode: Bill of Materials + Production Runs ──────────────
+
+export async function fetchBillOfMaterials(tenantId, finishedProductId) {
+  const { data, error } = await supabase
+    .from('bill_of_materials')
+    .select('*, component:products!bill_of_materials_component_product_id_fkey(name, stock_qty, unit)')
+    .eq('tenant_id', tenantId)
+    .eq('finished_product_id', finishedProductId)
+  if (error) throw error
+  return data
+}
+
+// Replaces the whole BOM for a finished product with the given component
+// list — simplest correct way to save an edited list (add/remove/change
+// qty) without diffing row by row.
+export async function saveBillOfMaterials(tenantId, finishedProductId, components) {
+  const { error: delErr } = await supabase
+    .from('bill_of_materials')
+    .delete()
+    .eq('tenant_id', tenantId)
+    .eq('finished_product_id', finishedProductId)
+  if (delErr) throw delErr
+
+  const clean = components.filter((c) => c.component_product_id && c.qty_per_unit > 0)
+  if (clean.length === 0) return []
+
+  const { data, error } = await supabase
+    .from('bill_of_materials')
+    .insert(clean.map((c) => ({
+      tenant_id: tenantId,
+      finished_product_id: finishedProductId,
+      component_product_id: c.component_product_id,
+      qty_per_unit: c.qty_per_unit,
+    })))
+    .select()
+  if (error) throw error
+  return data
+}
+
+export async function fetchProductionRuns(tenantId) {
+  const { data, error } = await supabase
+    .from('production_runs')
+    .select('*, products(name, unit), branches(name), users(name)')
+    .eq('tenant_id', tenantId)
+    .order('created_at', { ascending: false })
+    .limit(100)
+  if (error) throw error
+  return data
+}
+
+// Consumes each BOM component's stock (scaled by qty) and adds qty to the
+// finished product's stock, atomically, via record_production_run(). If no
+// BOM is defined for this product yet, it just adds stock — see
+// manufacturing_mode.sql.
+export async function recordProductionRun(tenantId, finishedProductId, qty, branchId, note) {
+  const { data, error } = await supabase.rpc('record_production_run', {
+    p_tenant_id: tenantId,
+    p_finished_product_id: finishedProductId,
+    p_qty: qty,
+    p_branch_id: branchId || null,
+    p_note: note || null,
+  })
+  if (error) throw error
+  return data
+}
+
 export async function insertBranch(tenantId, branch) {
   const { data, error } = await supabase
     .from('branches')
