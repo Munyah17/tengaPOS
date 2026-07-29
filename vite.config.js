@@ -1,7 +1,6 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
-import legacy from '@vitejs/plugin-legacy'
 
 export default defineConfig({
   // Confirmed live (via the fatal-error safety net in index.html) on a real
@@ -62,33 +61,6 @@ export default defineConfig({
           },
         ],
       },
-    }),
-    // build.target: 'es2015' above only downlevels syntax within a modern
-    // ES-module bundle -- it does nothing for a WebView that predates ES
-    // modules/dynamic import() entirely (pre-Chrome 61/63), which is common
-    // on the cheap Android tablets most tenants actually run this on as a
-    // POS terminal. Those can't even parse <script type="module">, so no
-    // syntax-level fix reaches them. This plugin builds a second, ES5 +
-    // core-js-polyfilled bundle loaded via SystemJS behind <script nomodule>
-    // -- modern browsers ignore it entirely and load the existing bundle,
-    // old ones fall back to this automatically.
-    // Same explicit version floors as package.json's browserslist -- a bare
-    // 'Android >= 5' query resolves almost uselessly (caniuse only tracks one
-    // current "android" entry, not real historical WebView versions), so it
-    // was barely reaching further back than whatever "defaults" alone gave.
-    // Naming actual old Chrome/Android-Chrome/Safari floors is what actually
-    // targets the old cheap-tablet WebViews this exists for.
-    legacy({
-      targets: ['chrome >= 49', 'and_chr >= 49', 'and_uc >= 12', 'safari >= 10', 'ios_saf >= 10', 'samsung >= 5', 'firefox >= 50', 'not dead'],
-      modernPolyfills: true,
-      // core-js covers ECMAScript syntax/APIs, but neither of these is
-      // ECMAScript: async/await needs the regenerator runtime once it's
-      // transformed down to generators for these targets, and fetch (used
-      // throughout by the Supabase client) is a browser API some of these
-      // Android WebView versions predate entirely. Without both, the legacy
-      // bundle parses fine but throws the moment it hits the first await or
-      // network call.
-      additionalLegacyPolyfills: ['regenerator-runtime/runtime', 'whatwg-fetch'],
     }),
   ],
   resolve: {
