@@ -960,6 +960,7 @@ export default function Settings() {
                         { key: 'retail', label: 'Retail (Blue)', barClass: 'bg-brand-500', activeClass: 'border-brand-500 bg-brand-50 dark:bg-brand-950' },
                         { key: 'restaurant', label: 'Restaurant (Green)', barClass: 'bg-restaurant-500', activeClass: 'border-restaurant-500 bg-restaurant-50 dark:bg-restaurant-950' },
                         { key: 'workshop', label: 'Workshop (Red/Amber)', barClass: 'bg-gradient-to-r from-red-600 to-amber-500', activeClass: 'border-red-500 bg-red-50 dark:bg-red-950/40' },
+                        { key: 'hardware', label: 'Hardware (Orange)', barClass: 'bg-orange-500', activeClass: 'border-orange-500 bg-orange-50 dark:bg-orange-950/40' },
                       ].filter((m) => enabledModes.includes(m.key)).map((m) => (
                         <button
                           key={m.key}
@@ -975,7 +976,7 @@ export default function Settings() {
                     </div>
                   ) : (
                     <p className="text-sm text-slate-500">
-                      Your account is set to {posMode === 'restaurant' ? 'Restaurant' : posMode === 'workshop' ? 'Workshop' : 'Retail'} mode. Contact us if you need a different or additional mode enabled.
+                      Your account is set to {posMode === 'restaurant' ? 'Restaurant' : posMode === 'workshop' ? 'Workshop' : posMode === 'hardware' ? 'Hardware' : 'Retail'} mode. Contact us if you need a different or additional mode enabled.
                     </p>
                   )}
                 </div>

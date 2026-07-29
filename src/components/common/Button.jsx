@@ -9,6 +9,7 @@ const variants = {
   ghost: 'text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800',
   restaurant: 'bg-restaurant-600 text-white hover:bg-restaurant-700 shadow-lg shadow-restaurant-600/25',
   workshop: 'bg-gradient-to-r from-red-600 to-amber-500 text-white hover:from-red-700 hover:to-amber-600 shadow-lg shadow-red-600/25',
+  hardware: 'bg-orange-600 text-white hover:bg-orange-700 shadow-lg shadow-orange-600/25',
 }
 
 const sizes = {

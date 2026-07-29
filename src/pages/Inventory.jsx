@@ -24,7 +24,10 @@ const BLANK = {
   name: '', brand: '', sku: '', barcode: '', price: '', landingPrice: '',
   stock: '', lowStockThreshold: '10', imageUrl: '', imageUnavailable: false,
   vatTreatment: 'standard', attributePairs: [], branchIds: [], categoryId: '',
+  priceTiers: [],
 }
+
+const BLANK_PRICE_TIER = { min_qty: '', price: '' }
 
 const ATTRIBUTE_PRESETS = ['Weight', 'Volume', 'Color', 'Size']
 
@@ -38,6 +41,7 @@ export default function Inventory() {
   const { posMode } = useThemeStore()
   const { tenant, branch } = useAuthStore()
   const isRestaurant = posMode === 'restaurant'
+  const isHardware = posMode === 'hardware'
   const [search, setSearch] = useState('')
   const [showAdd, setShowAdd] = useState(false)
   const [showImport, setShowImport] = useState(false)
@@ -216,6 +220,7 @@ export default function Inventory() {
       attributePairs: Object.entries(p.attributes || {}).map(([key, value]) => ({ key, value })),
       branchIds,
       categoryId: p.category_id || '',
+      priceTiers: (p.price_tiers || []).map((t) => ({ min_qty: t.min_qty, price: t.price })),
     })
     setOriginalBranchIds(branchIds)
     setEditTarget(p)
@@ -255,6 +260,13 @@ export default function Inventory() {
   }))
   const removeAttributePair = (i) => setForm((f) => ({ ...f, attributePairs: f.attributePairs.filter((_, idx) => idx !== i) }))
 
+  const addPriceTier = () => setForm((f) => ({ ...f, priceTiers: [...f.priceTiers, { ...BLANK_PRICE_TIER }] }))
+  const updatePriceTier = (i, field, val) => setForm((f) => ({
+    ...f,
+    priceTiers: f.priceTiers.map((t, idx) => (idx === i ? { ...t, [field]: val } : t)),
+  }))
+  const removePriceTier = (i) => setForm((f) => ({ ...f, priceTiers: f.priceTiers.filter((_, idx) => idx !== i) }))
+
   const handleSave = async (e) => {
     e.preventDefault()
     if (!hasImage && !form.imageUnavailable) {
@@ -277,10 +289,14 @@ export default function Inventory() {
         if (p.key.trim()) acc[p.key.trim()] = p.value
         return acc
       }, {})
+      const priceTiers = form.priceTiers
+        .map((t) => ({ min_qty: Number(t.min_qty) || 0, price: Number(t.price) || 0 }))
+        .filter((t) => t.min_qty > 0)
+        .sort((a, b) => a.min_qty - b.min_qty)
       // First checked branch becomes the "home" branch_id; any further ones
       // are extra grants recorded in product_branches.
       const [primaryBranchId, ...extraBranchIds] = form.branchIds
-      const payload = { ...form, imageUrl: form.imageUnavailable ? '' : imageUrl, attributes, branchId: primaryBranchId || null }
+      const payload = { ...form, imageUrl: form.imageUnavailable ? '' : imageUrl, attributes, priceTiers, branchId: primaryBranchId || null }
 
       let productId = editTarget?.id
 
@@ -425,7 +441,7 @@ export default function Inventory() {
               <ArrowLeftRight className="h-4 w-4" /> Transfer Stock
             </Button>
           )}
-          <Button variant={isRestaurant ? 'restaurant' : 'primary'} onClick={openAdd}>
+          <Button variant={isRestaurant ? 'restaurant' : isHardware ? 'hardware' : 'primary'} onClick={openAdd}>
             <Plus className="h-4 w-4" /> Add Product
           </Button>
         </div>
@@ -798,6 +814,42 @@ export default function Inventory() {
               </div>
             )}
           </div>
+          {isHardware && (
+            <div>
+              <div className="mb-1.5 flex items-center justify-between">
+                <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Bulk Pricing</label>
+                <button type="button" onClick={addPriceTier} className="text-xs font-semibold text-orange-600 hover:underline dark:text-orange-400">+ Add Tier</button>
+              </div>
+              <p className="mb-2 text-xs text-slate-500">
+                Charge a lower price per unit once a customer buys enough — e.g. 10+ at $4.50 instead of the regular price. The highest tier a sale qualifies for applies automatically.
+              </p>
+              {form.priceTiers.length > 0 && (
+                <div className="space-y-2">
+                  {form.priceTiers.map((tier, i) => (
+                    <div key={i} className="flex items-center gap-2">
+                      <span className="flex-shrink-0 text-xs text-slate-500">Qty ≥</span>
+                      <input
+                        type="number" min="1" step="1" value={tier.min_qty}
+                        onChange={(e) => updatePriceTier(i, 'min_qty', e.target.value)}
+                        placeholder="10"
+                        className="w-20 rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                      />
+                      <span className="flex-shrink-0 text-xs text-slate-500">→ price</span>
+                      <input
+                        type="number" min="0" step="0.01" value={tier.price}
+                        onChange={(e) => updatePriceTier(i, 'price', e.target.value)}
+                        placeholder="4.50"
+                        className="flex-1 rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                      />
+                      <button type="button" onClick={() => removePriceTier(i)} className="flex-shrink-0 rounded-lg p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-950">
+                        <X className="h-4 w-4" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
           {branches.length > 1 && (
             <div>
               <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">Branches</label>

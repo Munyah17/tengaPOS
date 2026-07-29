@@ -167,6 +167,7 @@ const BUSINESS_MODES = [
   { key: 'retail', label: 'Retail' },
   { key: 'restaurant', label: 'Restaurant' },
   { key: 'workshop', label: 'Workshop' },
+  { key: 'hardware', label: 'Hardware' },
 ]
 
 const BACKUP_OPTIONS = [

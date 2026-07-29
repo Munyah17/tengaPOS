@@ -1,5 +1,19 @@
 import { create } from 'zustand'
 
+// Hardware Mode bulk/trade pricing: price_tiers is [{ min_qty, price }] on
+// the product, highest qualifying tier wins. basePrice is the item's normal
+// (untiered) price, kept alongside so re-evaluating on every quantity change
+// never compounds off an already-discounted price. Products with no tiers
+// (every non-Hardware-Mode tenant) always resolve straight back to basePrice.
+function tieredUnitPrice(basePrice, tiers, qty) {
+  if (!Array.isArray(tiers) || tiers.length === 0) return basePrice
+  let price = basePrice
+  for (const tier of tiers) {
+    if (qty >= tier.min_qty && tier.price < price) price = tier.price
+  }
+  return price
+}
+
 export const useCartStore = create((set, get) => ({
   items: [],
   paymentMethod: 'cash',
@@ -28,16 +42,17 @@ export const useCartStore = create((set, get) => ({
         if (stock != null && stock !== 999 && existing.quantity + 1 > stock) {
           return state
         }
+        const qty = existing.quantity + 1
         return {
           items: state.items.map((i) =>
-            i.id === product.id ? { ...i, quantity: i.quantity + 1 } : i
+            i.id === product.id ? { ...i, quantity: qty, price: tieredUnitPrice(i.basePrice, i.price_tiers, qty) } : i
           ),
         }
       }
       if (stock != null && stock !== 999 && stock < 1) {
         return state
       }
-      return { items: [...state.items, { ...product, quantity: 1, itemDiscount: 0 }] }
+      return { items: [...state.items, { ...product, basePrice: product.price, quantity: 1, itemDiscount: 0 }] }
     }),
 
   removeItem: (productId) =>
@@ -50,7 +65,7 @@ export const useCartStore = create((set, get) => ({
         let q = Math.max(0, quantity)
         // Cap at available stock
         if (i.stock != null && i.stock !== 999 && q > i.stock) q = i.stock
-        return { ...i, quantity: q }
+        return { ...i, quantity: q, price: tieredUnitPrice(i.basePrice, i.price_tiers, q) }
       }).filter((i) => i.quantity > 0),
     })),
 

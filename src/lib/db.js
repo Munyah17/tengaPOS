@@ -53,6 +53,9 @@ export async function insertProduct(tenantId, product) {
       attributes: product.attributes || {},
       branch_id: product.branchId || null,
       category_id: product.categoryId || null,
+      // Hardware Mode bulk/trade pricing — [{ min_qty, price }], highest
+      // qualifying tier wins. Empty for every other tenant.
+      price_tiers: (product.priceTiers || []).filter((t) => t.min_qty > 0 && t.price >= 0),
       is_active: true,
       pos_visible: true,
     })
@@ -80,6 +83,7 @@ export async function updateProduct(id, updates) {
       attributes: updates.attributes || {},
       branch_id: updates.branchId || null,
       category_id: updates.categoryId || null,
+      price_tiers: (updates.priceTiers || []).filter((t) => t.min_qty > 0 && t.price >= 0),
       updated_at: new Date().toISOString(),
     })
     .eq('id', id)
