@@ -112,13 +112,15 @@ export const useAuthStore = create(
               // (not the session itself), keep the user logged in on the
               // last-known persisted profile instead of signing them out.
               // A valid session is still a valid session offline.
+              // BUT: don't trust persisted is_locked state (it's server-side
+              // mutable, changes without warning). Just use cached profile
+              // data for name/email/role, ignore the lock flag.
               const cached = get()
-              if (cached.profile?.is_locked) {
-                set({ isLoading: false, isAuthenticated: false })
-              } else if (cached.profile) {
+              if (cached.profile) {
                 // Have a cached profile and a valid session — authenticate,
                 // even if the profile refresh timed out. Network hiccups
                 // shouldn't prevent offline access.
+                // Pass the valid session through, ignore cached lock state.
                 set({
                   user: session.user,
                   session,
