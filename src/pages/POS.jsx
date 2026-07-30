@@ -363,7 +363,14 @@ export default function POS() {
     // Receipt" on a job card (JobCards.jsx), so stamp that job card
     // completed and link it to the order that was just created.
     if (cart.sourceJobCardId && completedOrderId) {
-      completeJobCard(cart.sourceJobCardId, completedOrderId).catch(() => {})
+      // Payment is already taken at this point -- a failure here must never
+      // look like nothing happened. Previously swallowed silently, which
+      // was indistinguishable from success: the sale completed but the job
+      // card just never showed up as done, with no error anywhere to explain
+      // why.
+      completeJobCard(cart.sourceJobCardId, completedOrderId).catch((err) => {
+        toast.error(`Payment taken, but couldn't mark the job card complete: ${err.message || 'unknown error'} — mark it manually.`, { duration: 8000 })
+      })
     }
 
     const grossTotal = cart.items.reduce((s, i) => s + i.price * i.quantity, 0)
@@ -886,18 +893,22 @@ export default function POS() {
             {/* VAT is a tenant-wide default, but not every sale should
                 necessarily carry it (e.g. a zero-rated or exempt walk-in
                 item) -- this only changes the current sale, not the
-                tenant's own setting. */}
-            <div className="flex items-center justify-between text-sm">
-              <label className="flex items-center gap-1.5 text-slate-500">
-                <input
-                  type="checkbox"
-                  checked={cart.vatEnabled}
-                  onChange={(e) => cart.setVatConfig(e.target.checked, cart.vatRate)}
-                  className="h-3.5 w-3.5 rounded border-slate-300"
-                />
-                Charge VAT on this sale
-              </label>
-            </div>
+                tenant's own setting. Only shown at all if the tenant has
+                VAT activated in Settings -- a tenant that doesn't run VAT
+                shouldn't see any trace of it here. */}
+            {tenant?.vat_enabled && (
+              <div className="flex items-center justify-between text-sm">
+                <label className="flex items-center gap-1.5 text-slate-500">
+                  <input
+                    type="checkbox"
+                    checked={cart.vatEnabled}
+                    onChange={(e) => cart.setVatConfig(e.target.checked, cart.vatRate)}
+                    className="h-3.5 w-3.5 rounded border-slate-300"
+                  />
+                  Charge VAT on this sale
+                </label>
+              </div>
+            )}
             {cart.vatEnabled ? (
               <>
                 <div className="flex justify-between text-sm">

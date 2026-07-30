@@ -45,8 +45,12 @@ export async function insertProduct(tenantId, product) {
       // landing price (what it cost you) — powers margins & AI insights
       cost_price: product.landingPrice ? parseMoney(product.landingPrice)
         : product.costPrice ? parseMoney(product.costPrice) : null,
-      stock_qty: parseInt(product.stock) || 0,
+      // A service has no stock to run out of — always 0, never gated on
+      // the qty field the form hides for it (see process_checkout, which
+      // also skips the stock check entirely when is_service is true).
+      stock_qty: product.isService ? 0 : (parseInt(product.stock) || 0),
       low_stock_threshold: parseInt(product.lowStockThreshold) || 10,
+      is_service: product.isService === true,
       unit: product.unit || null,
       image_url: product.imageUrl || null,
       image_unavailable: product.imageUnavailable === true,
@@ -80,8 +84,9 @@ export async function updateProduct(id, updates) {
       barcode: updates.barcode || null,
       price: parseMoney(updates.price),
       cost_price: updates.landingPrice ? parseMoney(updates.landingPrice) : null,
-      stock_qty: parseInt(updates.stock) || 0,
+      stock_qty: updates.isService ? 0 : (parseInt(updates.stock) || 0),
       low_stock_threshold: parseInt(updates.lowStockThreshold) || 10,
+      is_service: updates.isService === true,
       image_url: updates.imageUrl || null,
       image_unavailable: updates.imageUnavailable === true,
       vat_treatment: updates.vatTreatment || 'standard',

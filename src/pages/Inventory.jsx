@@ -24,7 +24,7 @@ const BLANK = {
   name: '', brand: '', sku: '', barcode: '', price: '', landingPrice: '',
   stock: '', lowStockThreshold: '10', imageUrl: '', imageUnavailable: false,
   vatTreatment: 'standard', attributePairs: [], branchIds: [], categoryId: '',
-  priceTiers: [], dispensingClass: 'otc', controlledSchedule: '',
+  priceTiers: [], dispensingClass: 'otc', controlledSchedule: '', isService: false,
 }
 
 const BLANK_PRICE_TIER = { min_qty: '', price: '' }
@@ -186,7 +186,7 @@ export default function Inventory() {
 
   const stats = useMemo(() => ({
     total: products.length,
-    lowStock: products.filter(p => p.stock_qty <= (p.low_stock_threshold ?? 10)).length,
+    lowStock: products.filter(p => !p.is_service && p.stock_qty <= (p.low_stock_threshold ?? 10)).length,
     totalValue: products.reduce((s, p) => s + parseFloat(p.price || 0) * (p.stock_qty ?? p.stock ?? 0), 0),
   }), [products])
 
@@ -230,6 +230,7 @@ export default function Inventory() {
       priceTiers: (p.price_tiers || []).map((t) => ({ min_qty: String(t.min_qty), price: String(t.price) })),
       dispensingClass: p.dispensing_class || 'otc',
       controlledSchedule: p.controlled_schedule || '',
+      isService: p.is_service === true,
     })
     setOriginalBranchIds(branchIds)
     setEditTarget(p)
@@ -544,9 +545,13 @@ export default function Inventory() {
                       </td>
                       <td className="px-4 py-3 text-sm font-semibold text-slate-900 dark:text-white">{formatCurrency(product.price)}</td>
                       <td className="px-4 py-3">
-                        <span className={`rounded-full px-2.5 py-0.5 text-xs font-bold ${stockQty <= 0 ? 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300' : stockQty <= threshold ? 'bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300' : 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300'}`}>
-                          {stockQty}
-                        </span>
+                        {product.is_service ? (
+                          <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-bold text-slate-500 dark:bg-slate-800 dark:text-slate-400">Service</span>
+                        ) : (
+                          <span className={`rounded-full px-2.5 py-0.5 text-xs font-bold ${stockQty <= 0 ? 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300' : stockQty <= threshold ? 'bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300' : 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300'}`}>
+                            {stockQty}
+                          </span>
+                        )}
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex gap-1">
@@ -668,6 +673,32 @@ export default function Inventory() {
       {/* Add / Edit Modal */}
       <Modal isOpen={showAdd} onClose={() => setShowAdd(false)} title={editTarget ? 'Edit Product' : 'Add Product'}>
         <form onSubmit={handleSave} className="space-y-4">
+          {/* Product vs Service — a service (labour, consultations, wheel
+              alignment, etc.) never restocks, so it has no quantity field
+              and is never blocked by "insufficient stock" at checkout. */}
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-slate-700 dark:text-slate-300">Type</label>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setForm((f) => ({ ...f, isService: false }))}
+                className={`rounded-xl border px-4 py-2.5 text-sm font-semibold ${!form.isService ? 'border-brand-600 bg-brand-50 text-brand-700 dark:bg-brand-900/30 dark:text-brand-400' : 'border-slate-200 text-slate-600 dark:border-slate-700 dark:text-slate-300'}`}
+              >
+                Product
+              </button>
+              <button
+                type="button"
+                onClick={() => setForm((f) => ({ ...f, isService: true }))}
+                className={`rounded-xl border px-4 py-2.5 text-sm font-semibold ${form.isService ? 'border-brand-600 bg-brand-50 text-brand-700 dark:bg-brand-900/30 dark:text-brand-400' : 'border-slate-200 text-slate-600 dark:border-slate-700 dark:text-slate-300'}`}
+              >
+                Service
+              </button>
+            </div>
+            {form.isService && (
+              <p className="mt-1.5 text-xs text-slate-500">No stock quantity — services never run out.</p>
+            )}
+          </div>
+
           {/* Product image — mandatory unless overridden */}
           <div>
             <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">
@@ -715,8 +746,10 @@ export default function Inventory() {
             { label: 'Barcode', field: 'barcode', type: 'text', required: false },
             { label: 'Selling Price (VAT-inclusive) *', field: 'price', type: 'number', required: true },
             { label: 'Landing Price (what it cost you)', field: 'landingPrice', type: 'number', required: false },
-            { label: 'Stock Quantity *', field: 'stock', type: 'number', required: true },
-            { label: 'Low Stock Alert At', field: 'lowStockThreshold', type: 'number', required: false },
+            ...(form.isService ? [] : [
+              { label: 'Stock Quantity *', field: 'stock', type: 'number', required: true },
+              { label: 'Low Stock Alert At', field: 'lowStockThreshold', type: 'number', required: false },
+            ]),
           ].map(f => (
             <div key={f.field}>
               <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">{f.label}</label>
