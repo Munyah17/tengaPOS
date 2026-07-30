@@ -1,4 +1,4 @@
-import { Bell, Wifi, WifiOff, ShieldAlert, Menu, User, Settings, LogOut, ChevronDown, CheckCheck, BellOff, ShoppingBag, UtensilsCrossed, Wrench, Hammer, Factory, AlertTriangle, CloudUpload } from 'lucide-react'
+import { Bell, Wifi, WifiOff, ShieldAlert, Menu, User, Settings, LogOut, ChevronDown, CheckCheck, BellOff, ShoppingBag, UtensilsCrossed, Wrench, Hammer, Factory, Pill, AlertTriangle, CloudUpload } from 'lucide-react'
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import ThemeToggle from '@/components/common/ThemeToggle'
@@ -7,9 +7,10 @@ import { useThemeStore } from '@/stores/themeStore'
 import { useAuthStore, ROLE_COLORS, ROLE_LABELS, NAV_PERMISSIONS } from '@/stores/authStore'
 import { useFiscalStore } from '@/stores/fiscalStore'
 import { useTenantNotifications } from '@/hooks/useTenantNotifications'
-import { pendingSyncCount } from '@/lib/offlineSync'
+import { pendingSyncCount, failedSyncCount } from '@/lib/offlineSync'
+import SyncQueueManager from './SyncQueueManager'
 
-// Retail/Restaurant/Workshop/Hardware/Manufacturing — same modes as
+// Retail/Restaurant/Workshop/Hardware/Manufacturing/Pharmacy — same modes as
 // Sidebar.jsx and AdminTenants.jsx's Business Modes control. A tenant only
 // ever sees the modes Super Admin actually enabled for it (tenant.enabled_modes).
 const MODE_META = {
@@ -18,6 +19,7 @@ const MODE_META = {
   workshop: { label: 'Workshop', icon: Wrench, activeClass: 'bg-gradient-to-r from-red-600 to-amber-500 text-white', gradient: 'from-red-600 to-amber-500' },
   hardware: { label: 'Hardware', icon: Hammer, activeClass: 'bg-orange-600 text-white', gradient: 'from-orange-500 to-orange-700' },
   manufacturing: { label: 'Manufacturing', icon: Factory, activeClass: 'bg-indigo-600 text-white', gradient: 'from-indigo-500 to-indigo-700' },
+  pharmacy: { label: 'Pharmacy', icon: Pill, activeClass: 'bg-teal-600 text-white', gradient: 'from-teal-500 to-teal-700' },
 }
 
 function useClickOutside(ref, handler) {
@@ -39,6 +41,8 @@ export default function TopBar({ onMenuClick }) {
   const [avatarOpen, setAvatarOpen] = useState(false)
   const [showFiscalWarning, setShowFiscalWarning] = useState(false)
   const [pendingSync, setPendingSync] = useState(0)
+  const [failedSync, setFailedSync] = useState(0)
+  const [showSyncManager, setShowSyncManager] = useState(false)
   const bellRef = useRef(null)
   const avatarRef = useRef(null)
 
@@ -69,7 +73,10 @@ export default function TopBar({ onMenuClick }) {
   // Surfaces how many offline sales/inventory edits are still waiting to
   // sync, so people aren't left guessing whether their work actually saved.
   useEffect(() => {
-    const tick = () => pendingSyncCount().then(setPendingSync).catch(() => {})
+    const tick = () => {
+      pendingSyncCount().then(setPendingSync).catch(() => {})
+      failedSyncCount().then(setFailedSync).catch(() => {})
+    }
     tick()
     const interval = setInterval(tick, 5000)
     return () => clearInterval(interval)
@@ -124,15 +131,31 @@ export default function TopBar({ onMenuClick }) {
           <span className="hidden sm:inline">{isOnline ? 'Online' : 'Offline'}</span>
         </div>
 
-        {/* Pending offline sync count — reassurance that queued work hasn't been lost */}
+        {/* Pending offline sync count — reassurance that queued work hasn't been lost.
+            Clickable: opens the same manager as the failed-items badge below. */}
         {pendingSync > 0 && (
-          <div
-            title={`${pendingSync} item${pendingSync !== 1 ? 's' : ''} saved offline, waiting to sync`}
-            className="hidden items-center gap-1.5 rounded-lg bg-amber-50 px-2.5 py-1.5 text-xs font-medium text-amber-700 dark:bg-amber-950 dark:text-amber-400 sm:flex"
+          <button
+            onClick={() => setShowSyncManager(true)}
+            title={`${pendingSync} item${pendingSync !== 1 ? 's' : ''} saved offline, waiting to sync — click to view`}
+            className="hidden items-center gap-1.5 rounded-lg bg-amber-50 px-2.5 py-1.5 text-xs font-medium text-amber-700 hover:bg-amber-100 dark:bg-amber-950 dark:text-amber-400 dark:hover:bg-amber-900 sm:flex"
           >
             <CloudUpload className="h-3.5 w-3.5" />
             {pendingSync} pending
-          </div>
+          </button>
+        )}
+
+        {/* Permanently-failed offline items — retrying can't fix these on its
+            own (e.g. no longer enough stock), so they need a person to look
+            at them here rather than being silently stuck forever. */}
+        {failedSync > 0 && (
+          <button
+            onClick={() => setShowSyncManager(true)}
+            title={`${failedSync} item${failedSync !== 1 ? 's' : ''} couldn't sync — click to review`}
+            className="hidden items-center gap-1.5 rounded-lg bg-red-50 px-2.5 py-1.5 text-xs font-medium text-red-700 hover:bg-red-100 dark:bg-red-950 dark:text-red-400 dark:hover:bg-red-900 sm:flex"
+          >
+            <AlertTriangle className="h-3.5 w-3.5" />
+            {failedSync} failed
+          </button>
         )}
 
         <RefreshOnlineButton />
@@ -332,6 +355,15 @@ export default function TopBar({ onMenuClick }) {
         </div>
       </div>
     )}
+
+    <SyncQueueManager
+      isOpen={showSyncManager}
+      onClose={() => setShowSyncManager(false)}
+      onChanged={() => {
+        pendingSyncCount().then(setPendingSync).catch(() => {})
+        failedSyncCount().then(setFailedSync).catch(() => {})
+      }}
+    />
     </>
   )
 }

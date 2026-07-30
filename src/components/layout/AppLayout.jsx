@@ -118,6 +118,16 @@ export default function AppLayout() {
         window.dispatchEvent(new CustomEvent('tengapos:force-refresh'))
         queryClient.invalidateQueries()
       },
+      // A permanent failure (e.g. no longer enough stock by the time an
+      // offline sale replayed) will never resolve itself by retrying again
+      // — surface it instead of leaving it silently stuck. The TopBar's
+      // pending-sync badge is where they review/retry/discard it.
+      onFailed: ({ permanentlyFailed }) => {
+        toast.error(
+          `${permanentlyFailed} offline sale${permanentlyFailed !== 1 ? 's' : ''} couldn't sync — check the sync icon in the top bar`,
+          { duration: 8000 },
+        )
+      },
     })
   }, [tenant?.id, queryClient])
 
