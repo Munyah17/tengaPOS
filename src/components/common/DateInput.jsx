@@ -15,7 +15,7 @@ export default function DateInput({ value, onChange, placeholder = 'Select date'
   const inputRef = useRef(null)
 
   return (
-    <div className={`relative ${className}`}>
+    <div className={`relative h-10 ${className}`}>
       <input
         ref={inputRef}
         type="date"
@@ -25,9 +25,9 @@ export default function DateInput({ value, onChange, placeholder = 'Select date'
         max={max}
         disabled={disabled}
         required={required}
-        className="absolute inset-0 z-10 h-full w-full cursor-pointer opacity-0 disabled:cursor-not-allowed"
+        className="absolute inset-0 z-10 cursor-pointer opacity-0 disabled:cursor-not-allowed"
       />
-      <div className={`flex h-full items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-800 ${disabled ? 'opacity-60' : ''}`}>
+      <div className={`flex h-10 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-800 ${disabled ? 'opacity-60' : ''}`}>
         <Calendar className="h-4 w-4 flex-shrink-0 text-slate-400" />
         <span className={value ? 'text-slate-900 dark:text-white' : 'text-slate-400'}>
           {value ? formatDate(value) : placeholder}
