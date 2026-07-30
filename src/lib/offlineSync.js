@@ -3,14 +3,19 @@
 // periodically sync everything back to Supabase in the background.
 import { db, addToSyncQueue, getSyncQueueItems, removeSyncQueueItem, markSyncItemFailed } from '@/db'
 import { fetchProducts, saveCheckout, insertProduct, updateProduct } from '@/lib/db'
+import { generateUUID } from '@/lib/uuid'
 
 // A business-logic failure (out of stock by the time this replayed) can
 // never be fixed by retrying it again -- looping forever accomplishes
 // nothing and just hides the problem behind an endless "pending" count.
 // These get pulled into the `failed` bucket instead (see db/index.js),
 // where a person can see and act on them. Matches the same wording the
-// live (non-queued) checkout path already hard-stops on.
-const PERMANENT_ERROR_PATTERNS = [/insufficient stock/i, /stock check failed/i]
+// live (non-queued) checkout path already hard-stops on. "invalid input
+// syntax" is a data-shape problem (a malformed value hit a strongly-typed
+// column) — retrying the exact same payload forever can never fix it either.
+const PERMANENT_ERROR_PATTERNS = [/insufficient stock/i, /stock check failed/i, /invalid input syntax/i]
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 export async function cacheProductsForOffline(tenantId) {
   try {
@@ -69,6 +74,18 @@ export async function processSyncQueue() {
   for (const item of items) {
     try {
       if (item.table_name === 'checkout') {
+        // Sales queued before the crypto.randomUUID fallback fix could have
+        // a malformed (non-UUID) clientRef baked into their stored payload —
+        // saveCheckout only generates a fresh one when none is present, so
+        // replaying item.data as-is would repeat the exact same "invalid
+        // input syntax for type uuid" failure forever. Since that error
+        // means nothing was ever inserted server-side (no idempotency was
+        // ever established), replacing it with a newly-generated valid UUID
+        // here is safe and lets the sale go through instead of being stuck.
+        if (item.data?.clientRef && !UUID_RE.test(item.data.clientRef)) {
+          item.data = { ...item.data, clientRef: generateUUID() }
+          await db.syncQueue.update(item.id, { data: item.data })
+        }
         await saveCheckout(item.data)
       } else if (item.table_name === 'inventory') {
         const { operation, data } = item
