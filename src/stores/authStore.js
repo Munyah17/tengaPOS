@@ -329,9 +329,10 @@ export const useAuthStore = create(
           if (authErr || !serverUser) return // couldn't reach/validate — inconclusive, not a mismatch
 
           if (serverUser.id !== cached.user.id) {
-            // The live session token no longer resolves to the identity this
-            // device has been operating as offline — a real mismatch.
-            try { await supabase.rpc('lock_my_account', { p_reason: 'Session identity mismatch on background revalidation' }) } catch { /* best-effort */ }
+            // Session token resolves to a different user than what's cached.
+            // This can happen legitimately (logged out and back in on same device),
+            // but to be safe, just sign out. Don't lock — locking is only for
+            // actual account security issues, not for session confusion.
             await get().clearAuth()
             return
           }
