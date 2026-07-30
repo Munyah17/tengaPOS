@@ -85,12 +85,40 @@ serve(async (req) => {
       }
     }
 
-    const { data: created, error: createErr } = await admin.auth.admin.createUser({
+    let { data: created, error: createErr } = await admin.auth.admin.createUser({
       email,
       password,
       email_confirm: true,
       user_metadata: { name, skip_tenant_setup: 'true' },
     })
+    if (createErr?.message?.includes('already been registered')) {
+      // Could be a genuine duplicate, or a leftover auth.users row from an
+      // earlier attempt that never got its public.users row created (see
+      // 1785683005_signup_trigger_self_heal.sql for the same class of bug
+      // on the signup path). If nothing in public.users/app_users claims
+      // this email, it's an orphan blocking a legitimately new attempt —
+      // clean it up and retry once instead of permanently refusing this
+      // email.
+      const { data: existing } = await admin.auth.admin.listUsers()
+      const orphan = existing?.users?.find((u) => u.email === email)
+      if (orphan) {
+        const [{ data: userRow }, { data: appUserRow }] = await Promise.all([
+          admin.from('users').select('id').eq('id', orphan.id).maybeSingle(),
+          admin.from('app_users').select('id').eq('id', orphan.id).maybeSingle(),
+        ])
+        if (!userRow && !appUserRow) {
+          await admin.auth.admin.deleteUser(orphan.id)
+          const retry = await admin.auth.admin.createUser({
+            email,
+            password,
+            email_confirm: true,
+            user_metadata: { name, skip_tenant_setup: 'true' },
+          })
+          created = retry.data
+          createErr = retry.error
+        }
+      }
+    }
     if (createErr) return json({ error: createErr.message }, 400)
 
     const { error: insertErr } = await admin.from('users').insert({

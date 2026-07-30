@@ -54,12 +54,37 @@ serve(async (req) => {
     }
 
     // Create the auth account (is_app_staff stops the tenant signup trigger)
-    const { data: created, error: createErr } = await admin.auth.admin.createUser({
+    let { data: created, error: createErr } = await admin.auth.admin.createUser({
       email,
       password,
       email_confirm: true,
       user_metadata: { name, is_app_staff: 'true' },
     })
+    if (createErr?.message?.includes('already been registered')) {
+      // See tenant-add-staff's identical check: a leftover auth.users row
+      // with no matching public.users/app_users is an orphan (from an
+      // earlier failed attempt), not a genuine duplicate — clean it up and
+      // retry once instead of permanently refusing this email.
+      const { data: existing } = await admin.auth.admin.listUsers()
+      const orphan = existing?.users?.find((u) => u.email === email)
+      if (orphan) {
+        const [{ data: userRow }, { data: appUserRow }] = await Promise.all([
+          admin.from('users').select('id').eq('id', orphan.id).maybeSingle(),
+          admin.from('app_users').select('id').eq('id', orphan.id).maybeSingle(),
+        ])
+        if (!userRow && !appUserRow) {
+          await admin.auth.admin.deleteUser(orphan.id)
+          const retry = await admin.auth.admin.createUser({
+            email,
+            password,
+            email_confirm: true,
+            user_metadata: { name, is_app_staff: 'true' },
+          })
+          created = retry.data
+          createErr = retry.error
+        }
+      }
+    }
     if (createErr) return json({ error: createErr.message }, 400)
 
     const { error: insertErr } = await admin.from('app_users').insert({
