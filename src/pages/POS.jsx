@@ -19,6 +19,7 @@ import { initiatePaynowCheckout } from '@/lib/paynow'
 import { fetchProducts, saveCheckout, fetchStaff, completeJobCard, recordPrescriptionDispense } from '@/lib/db'
 import { getOfflineProducts, queueOfflineSale } from '@/lib/offlineSync'
 import { isNetworkError } from '@/lib/authRetry'
+import { generateUUID } from '@/lib/uuid'
 import { supabase } from '@/lib/supabase'
 import { useFiscalStore } from '@/stores/fiscalStore'
 import toast from 'react-hot-toast'
@@ -254,7 +255,7 @@ export default function POS() {
     // — and stock-decremented — a second time. receiptNumber alone isn't
     // safe for this (too few possible values, can collide with an
     // unrelated sale), which is exactly why clientRef exists.
-    const clientRef = crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`
+    const clientRef = generateUUID()
     let completedOrderId = null
 
     let fdmsQrUrl = null

@@ -1,6 +1,7 @@
 import { supabase } from '@/lib/supabase'
 import { generateReceiptNumber, generateDocNumber } from '@/utils/formatters'
 import { isStaleJwtError, refreshSessionOnce } from '@/lib/authRetry'
+import { generateUUID } from '@/lib/uuid'
 
 // Parses a price input into an exact 2-decimal number. Guards against any
 // upstream float artifact (browser input quirks, a CSV/Excel export like
@@ -172,7 +173,7 @@ export async function saveCheckout({ tenantId, branchId, userId, cartItems, paym
   // unrelated sales, which silently short-circuited the second sale as
   // "already processed" (no new order, no stock decrement, no error).
   const receiptNo = receiptNoIn || generateReceiptNumber()
-  const clientRef = clientRefIn || (crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`)
+  const clientRef = clientRefIn || generateUUID()
 
   const grossTotal = cartItems.reduce((sum, item) => sum + item.price * item.quantity, 0)
   const discountAmount = Math.max(0, grossTotal - total)
