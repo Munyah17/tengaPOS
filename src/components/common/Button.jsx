@@ -11,6 +11,7 @@ const variants = {
   workshop: 'bg-gradient-to-r from-red-600 to-amber-500 text-white hover:from-red-700 hover:to-amber-600 shadow-lg shadow-red-600/25',
   hardware: 'bg-orange-600 text-white hover:bg-orange-700 shadow-lg shadow-orange-600/25',
   manufacturing: 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-lg shadow-indigo-600/25',
+  pharmacy: 'bg-teal-600 text-white hover:bg-teal-700 shadow-lg shadow-teal-600/25',
 }
 
 const sizes = {

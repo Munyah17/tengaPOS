@@ -56,6 +56,10 @@ export async function insertProduct(tenantId, product) {
       // Hardware Mode bulk/trade pricing — [{ min_qty, price }], highest
       // qualifying tier wins. Empty for every other tenant.
       price_tiers: (product.priceTiers || []).filter((t) => t.min_qty > 0 && t.price >= 0),
+      // Pharmacy Mode — 'otc' (default) needs nothing extra at checkout;
+      // 'prescription'/'controlled' gate the sale on prescriber details.
+      dispensing_class: product.dispensingClass || 'otc',
+      controlled_schedule: product.dispensingClass === 'controlled' ? (product.controlledSchedule || null) : null,
       is_active: true,
       pos_visible: true,
     })
@@ -84,6 +88,8 @@ export async function updateProduct(id, updates) {
       branch_id: updates.branchId || null,
       category_id: updates.categoryId || null,
       price_tiers: (updates.priceTiers || []).filter((t) => t.min_qty > 0 && t.price >= 0),
+      dispensing_class: updates.dispensingClass || 'otc',
+      controlled_schedule: updates.dispensingClass === 'controlled' ? (updates.controlledSchedule || null) : null,
       updated_at: new Date().toISOString(),
     })
     .eq('id', id)
@@ -646,6 +652,43 @@ export async function recordProductionRun(tenantId, finishedProductId, qty, bran
   })
   if (error) throw error
   return data
+}
+
+// ─── Pharmacy Mode: Prescription Dispensing ────────────────────────────────
+
+export async function fetchPrescriptionDispenses(tenantId) {
+  const { data, error } = await supabase
+    .from('prescription_dispenses')
+    .select('*, products(name), branches(name), users(name)')
+    .eq('tenant_id', tenantId)
+    .order('created_at', { ascending: false })
+    .limit(200)
+  if (error) throw error
+  return data
+}
+
+// Compliance log for one dispensed line item — separate from the order
+// itself, and never blocks the sale if it fails (called best-effort after
+// checkout already succeeded, same as the ZIMRA fiscal submission).
+export async function recordPrescriptionDispense(tenantId, {
+  branchId, orderId, productId, qty, customerId, customerName,
+  prescriberName, prescriberLicenseNo, dispensingClass, controlledSchedule, userId,
+}) {
+  const { error } = await supabase.from('prescription_dispenses').insert({
+    tenant_id: tenantId,
+    branch_id: branchId || null,
+    order_id: orderId || null,
+    product_id: productId,
+    qty,
+    customer_id: customerId || null,
+    customer_name: customerName || null,
+    prescriber_name: prescriberName,
+    prescriber_license_no: prescriberLicenseNo || null,
+    dispensing_class: dispensingClass,
+    controlled_schedule: controlledSchedule || null,
+    created_by: userId || null,
+  })
+  if (error) throw error
 }
 
 export async function insertBranch(tenantId, branch) {
