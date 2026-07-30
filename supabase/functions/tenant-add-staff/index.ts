@@ -105,9 +105,10 @@ serve(async (req) => {
     })
     if (insertErr) {
       await admin.auth.admin.deleteUser(created.user.id)
-      const msg = insertErr.message?.includes('users_tenant_username_key') || insertErr.code === '23505'
+      // Only show username-specific error if it's actually the username constraint
+      const msg = insertErr.message?.includes('users_tenant_username_key')
         ? 'That username is already taken in your business — try another'
-        : insertErr.message
+        : insertErr.message || 'Failed to create staff member'
       return json({ error: msg }, 400)
     }
 
