@@ -215,9 +215,30 @@ async function printViaBluetooth(bytes) {
   if (!isWebBluetoothSupported()) {
     throw new Error('This browser can\'t talk to Bluetooth devices directly — use Chrome or Edge.')
   }
-  const device = await navigator.bluetooth.requestDevice({
-    filters: [{ services: [BLE_PRINTER_SERVICE_UUID] }],
-  })
+
+  let device
+  try {
+    // Fast path: filter directly on the common ESC/POS BLE service most
+    // generic/white-label thermal printers expose.
+    device = await navigator.bluetooth.requestDevice({
+      filters: [{ services: [BLE_PRINTER_SERVICE_UUID] }],
+    })
+  } catch (filterErr) {
+    // No nearby device advertises that exact service — doesn't mean there's
+    // no printer, just that this specific model's GATT profile differs (very
+    // common; there's no single BLE printer standard). Fall back to letting
+    // the user pick from every nearby BLE device, and probe it for our
+    // characteristic once connected instead of filtering up front.
+    if (filterErr.name === 'NotFoundError') {
+      device = await navigator.bluetooth.requestDevice({
+        acceptAllDevices: true,
+        optionalServices: [BLE_PRINTER_SERVICE_UUID],
+      })
+    } else {
+      throw filterErr
+    }
+  }
+
   const server = await device.gatt.connect()
   try {
     const service = await server.getPrimaryService(BLE_PRINTER_SERVICE_UUID)
@@ -225,6 +246,8 @@ async function printViaBluetooth(bytes) {
     for (let i = 0; i < bytes.length; i += BLE_WRITE_CHUNK_SIZE) {
       await characteristic.writeValueWithoutResponse(bytes.slice(i, i + BLE_WRITE_CHUNK_SIZE))
     }
+  } catch (serviceErr) {
+    throw new Error(`Connected to "${device.name || 'the printer'}", but it doesn't support the standard ESC/POS Bluetooth profile TengaPOS expects. (${serviceErr.message})`)
   } finally {
     server.disconnect()
   }
