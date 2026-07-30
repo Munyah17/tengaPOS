@@ -38,16 +38,18 @@ export const ROLE_LABELS = {
 }
 
 export const NAV_PERMISSIONS = {
-  super_admin: ['dashboard', 'pos', 'inventory', 'orders', 'kitchen', 'job_cards', 'vehicle_registry', 'mechanics', 'quotations', 'production', 'transactions', 'reports', 'insights', 'staff', 'tasks', 'branches', 'fiscalisation', 'payments', 'settings'],
-  admin: ['dashboard', 'pos', 'inventory', 'orders', 'job_cards', 'vehicle_registry', 'mechanics', 'quotations', 'production', 'transactions', 'reports', 'insights', 'staff', 'tasks', 'branches', 'fiscalisation', 'payments', 'settings'],
+  super_admin: ['dashboard', 'pos', 'inventory', 'orders', 'kitchen', 'job_cards', 'vehicle_registry', 'mechanics', 'quotations', 'production', 'prescriptions', 'transactions', 'reports', 'insights', 'staff', 'tasks', 'branches', 'fiscalisation', 'payments', 'settings'],
+  admin: ['dashboard', 'pos', 'inventory', 'orders', 'job_cards', 'vehicle_registry', 'mechanics', 'quotations', 'production', 'prescriptions', 'transactions', 'reports', 'insights', 'staff', 'tasks', 'branches', 'fiscalisation', 'payments', 'settings'],
   associate: ['dashboard', 'reports', 'branches'],
-  vendor: ['dashboard', 'requests', 'pos', 'inventory', 'orders', 'kitchen', 'job_cards', 'vehicle_registry', 'mechanics', 'quotations', 'production', 'transactions', 'reports', 'insights', 'staff', 'tasks', 'branches', 'fiscalisation', 'payments', 'hr', 'invoicing', 'settings'],
+  vendor: ['dashboard', 'requests', 'pos', 'inventory', 'orders', 'kitchen', 'job_cards', 'vehicle_registry', 'mechanics', 'quotations', 'production', 'prescriptions', 'transactions', 'reports', 'insights', 'staff', 'tasks', 'branches', 'fiscalisation', 'payments', 'hr', 'invoicing', 'settings'],
   // Shop managers run day-to-day operations for their own branch — payment
   // gateway management and ZIMRA fiscal device registration stay Vendor-only.
-  shop_manager: ['dashboard', 'pos', 'inventory', 'orders', 'kitchen', 'job_cards', 'vehicle_registry', 'mechanics', 'quotations', 'production', 'transactions', 'reports', 'insights', 'staff', 'tasks', 'branches', 'hr', 'invoicing', 'settings'],
-  supervisor: ['dashboard', 'pos', 'inventory', 'orders', 'job_cards', 'vehicle_registry', 'mechanics', 'quotations', 'production', 'transactions', 'reports', 'tasks', 'invoicing'],
-  cashier: ['pos', 'orders', 'job_cards', 'tasks'],
-  shop_assistant: ['pos', 'tasks'],
+  shop_manager: ['dashboard', 'pos', 'inventory', 'orders', 'kitchen', 'job_cards', 'vehicle_registry', 'mechanics', 'quotations', 'production', 'prescriptions', 'transactions', 'reports', 'insights', 'staff', 'tasks', 'branches', 'hr', 'invoicing', 'settings'],
+  supervisor: ['dashboard', 'pos', 'inventory', 'orders', 'job_cards', 'vehicle_registry', 'mechanics', 'quotations', 'production', 'prescriptions', 'transactions', 'reports', 'tasks', 'invoicing'],
+  // Dispensing happens at the till, so cashier/shop_assistant need the log
+  // too — same reasoning as prescription_dispenses' RLS policy.
+  cashier: ['pos', 'orders', 'job_cards', 'prescriptions', 'tasks'],
+  shop_assistant: ['pos', 'prescriptions', 'tasks'],
   tech_support: ['dashboard', 'reports', 'insights', 'orders', 'transactions'],
 }
 
@@ -109,14 +111,20 @@ export const useAuthStore = create(
               // loadProfile() needs the network — if that's what's missing
               // (not the session itself), keep the user logged in on the
               // last-known persisted profile instead of signing them out.
-              // Previously this fell through to isAuthenticated: false,
-              // which logged out an offline cashier who had a perfectly
-              // valid cached session.
+              // A valid session is still a valid session offline.
               const cached = get()
               if (cached.profile?.is_locked) {
                 set({ isLoading: false, isAuthenticated: false })
-              } else if (cached.profile && cached.user?.id === session.user.id) {
-                set({ user: session.user, session, isAuthenticated: true, isLoading: false })
+              } else if (cached.profile) {
+                // Have a cached profile and a valid session — authenticate,
+                // even if the profile refresh timed out. Network hiccups
+                // shouldn't prevent offline access.
+                set({
+                  user: session.user,
+                  session,
+                  isAuthenticated: true,
+                  isLoading: false,
+                })
               } else {
                 set({ isLoading: false, isAuthenticated: false })
               }
@@ -308,10 +316,9 @@ export const useAuthStore = create(
       // a cached session while offline, but the moment connectivity returns
       // this quietly confirms the server still agrees with what the device
       // trusted locally. It only locks on a genuine mismatch (the session
-      // token now resolves to a different identity, or the server's own
-      // record disagrees with what's cached) — never for a plain network
-      // failure, and never for a routine admin action that already has its
-      // own handling (suspension already redirects via tenantStatus).
+      // token now resolves to a different identity) — never for a plain
+      // network failure, and never for email/profile changes (those are
+      // routine admin actions with their own handling).
       validateSession: async () => {
         if (!navigator.onLine) return
         const cached = get()
@@ -329,26 +336,23 @@ export const useAuthStore = create(
             return
           }
 
-          const freshProfile = await loadProfile()
-          if (!freshProfile) return
-
-          if (freshProfile.is_locked) {
-            // Already locked (by this check on another device, or by an
-            // admin) — just sign out locally, no need to lock again.
-            await get().clearAuth()
-            return
+          // Session token is valid and consistent. Attempt to refresh profile,
+          // but don't fail the whole check if it times out — just skip the
+          // refresh. Network hiccups mid-validation should not lock anyone out.
+          try {
+            const freshProfile = await withTimeout(loadProfile(), 5000, 'timeout')
+            if (freshProfile?.is_locked) {
+              // Already locked (by this check on another device, or by an
+              // admin) — just sign out locally, no need to lock again.
+              await get().clearAuth()
+              return
+            }
+            // Quietly refresh the profile if it loaded successfully
+            if (freshProfile) set({ profile: freshProfile })
+          } catch {
+            // Profile refresh failed (network, timeout) — that's fine,
+            // session is still valid. Keep working offline.
           }
-
-          if (freshProfile.email !== cached.profile?.email) {
-            // The server's authoritative record for this session no longer
-            // matches what was cached while offline.
-            try { await supabase.rpc('lock_my_account', { p_reason: 'Account details no longer match this device\'s cached session' }) } catch { /* best-effort */ }
-            await get().clearAuth()
-            return
-          }
-
-          // Confirmed consistent — refresh the cached profile quietly.
-          set({ profile: freshProfile })
         } catch {
           // Network/timeout mid-check — inconclusive, try again next cycle
         }
