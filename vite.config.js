@@ -1,6 +1,7 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
+import legacy from '@vitejs/plugin-legacy'
 
 export default defineConfig({
   // Confirmed live (via the fatal-error safety net in index.html) on real
@@ -67,6 +68,28 @@ export default defineConfig({
           },
         ],
       },
+    }),
+    // Real 2014-era device support (the oldest tablets this actually ships
+    // on) needs more than es2018 + polyfills.js can give: a browser that
+    // predates ES modules entirely (pre-Chrome 61) can't even parse
+    // <script type="module">, no syntax/polyfill fix reaches that.
+    // renderModernChunks: false is deliberate -- @vitejs/plugin-legacy's
+    // default dual-bundle mode (a modern ESM build + a legacy fallback,
+    // chosen at runtime via a feature-detection script) is EXACTLY what
+    // broke the app for every browser, including ordinary modern desktop
+    // ones, a few days ago: the detection script required import.meta.resolve,
+    // an API newer than what plenty of "modern" browsers actually have, and
+    // failing browsers hit a broken fallback path with no catchable error.
+    // renderModernChunks: false removes that decision entirely -- there is
+    // only ever one bundle, transpiled to these targets and loaded via
+    // SystemJS for everyone, so there is nothing left to falsely detect.
+    // Confirmed in the built output: a single plain <script> (not
+    // type="module", not nomodule -- either of those would make a modern
+    // browser skip or mis-load the one and only bundle that exists).
+    legacy({
+      targets: ['chrome >= 35', 'and_chr >= 35', 'and_uc >= 11', 'safari >= 7', 'ios_saf >= 7', 'samsung >= 2', 'firefox >= 30', 'not dead'],
+      renderModernChunks: false,
+      additionalLegacyPolyfills: ['regenerator-runtime/runtime'],
     }),
   ],
   resolve: {
