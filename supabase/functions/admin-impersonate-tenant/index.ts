@@ -46,12 +46,13 @@ serve(async (req) => {
 
     const { data: vendor } = await admin
       .from('users')
-      .select('id, email, name')
+      .select('id, email, name, is_locked, locked_reason')
       .eq('tenant_id', tenant_id)
       .eq('role', 'vendor')
       .eq('is_active', true)
       .maybeSingle()
     if (!vendor?.email) return json({ error: 'No active owner account found for this business' }, 404)
+    if (vendor.is_locked) return json({ error: `Cannot view as this business — the owner account is locked: ${vendor.locked_reason || 'Security measure. Unlock to continue.'}` }, 403)
 
     const { data: linkData, error: linkErr } = await admin.auth.admin.generateLink({
       type: 'magiclink',
