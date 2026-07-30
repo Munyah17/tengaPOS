@@ -44,8 +44,13 @@ export const PRINTER_CONNECTIONS = [
   { key: 'lpt1', label: 'LPT1 (parallel port)' },
   { key: 'network', label: 'Network (Ethernet)' },
   { key: 'wifi', label: 'Wi-Fi' },
-  { key: 'bluetooth', label: 'Bluetooth' },
-  { key: 'serial', label: 'Serial (RS-232)' },
+  // "Bluetooth" here means Web Bluetooth (BLE) directly from the browser —
+  // only works for printers that speak Bluetooth Low Energy. Most cheap/
+  // generic thermal printers (e.g. MPT-11) use classic Bluetooth (SPP)
+  // instead, which no browser can reach at all — those need "Print Bridge".
+  { key: 'bluetooth', label: 'Bluetooth (BLE — rare on cheap printers)' },
+  { key: 'serial', label: 'Serial (RS-232 / Bluetooth paired as COM port)' },
+  { key: 'bridge', label: 'Print Bridge (Windows agent or Android app)' },
 ]
 
 function escPosInit() {
@@ -124,11 +129,16 @@ export async function isPrintAgentRunning() {
   }
 }
 
-async function printViaAgent(bytes) {
+async function printViaAgent(bytes, comPort) {
   const res = await fetchWithTimeout(`${PRINT_AGENT_URL}/print`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ data: bytesToBase64(bytes) }),
+    // comPort routes to Send-BytesToSerialPort in the Windows agent — used
+    // for a classic-Bluetooth (SPP) printer paired as a virtual COM port,
+    // since that bypasses the Windows print spooler/driver entirely (there's
+    // no "printer object" for a bare serial port). Omitted, the agent falls
+    // back to the default/named Windows printer via the spooler as before.
+    body: JSON.stringify(comPort ? { data: bytesToBase64(bytes), comPort } : { data: bytesToBase64(bytes) }),
   }, 8000)
   const result = await res.json().catch(() => null)
   if (!res.ok || !result?.ok) {
@@ -263,7 +273,7 @@ async function printViaBluetooth(bytes) {
  * WebUSB — both of those work the same regardless of USB/LPT1/network,
  * since Windows' print spooler already abstracts those differences away.
  */
-export async function printToPosPrinter(lines, connectionHint) {
+export async function printToPosPrinter(lines, connectionHint, comPort) {
   const bytes = buildEscPosBytes(lines)
 
   if (connectionHint === 'bluetooth') {
@@ -272,7 +282,7 @@ export async function printToPosPrinter(lines, connectionHint) {
   }
 
   try {
-    await printViaAgent(bytes)
+    await printViaAgent(bytes, comPort)
     return
   } catch (agentErr) {
     if (!isWebUsbSupported()) {

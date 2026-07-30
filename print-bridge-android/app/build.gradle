@@ -1,0 +1,45 @@
+plugins {
+    id("com.android.application")
+    id("org.jetbrains.kotlin.android")
+}
+
+android {
+    namespace = "co.zw.tengapos.printbridge"
+    compileSdk = 34
+
+    defaultConfig {
+        applicationId = "co.zw.tengapos.printbridge"
+        // Android 6.0+ — matches the same legacy-device support floor as the
+        // main TengaPOS web app (see vite.config.js / package.json browserslist).
+        minSdk = 23
+        targetSdk = 34
+        versionCode = 1
+        versionName = "1.0"
+    }
+
+    buildTypes {
+        release {
+            isMinifyEnabled = false
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
+    kotlinOptions {
+        jvmTarget = "17"
+    }
+}
+
+dependencies {
+    implementation("androidx.core:core-ktx:1.13.1")
+    implementation("androidx.appcompat:appcompat:1.7.0")
+    implementation("com.google.android.material:material:1.12.0")
+    // Small embeddable HTTP server — this is what lets the PWA (running in
+    // Chrome, same as on a Windows till) talk to this app over
+    // http://127.0.0.1:38471 using the *exact same* request/response contract
+    // as print-agent/TengaPOS-PrintAgent.ps1, so src/lib/posPrinter.js needs
+    // no changes at all to work against either one.
+    implementation("org.nanohttpd:nanohttpd:2.3.1")
+}

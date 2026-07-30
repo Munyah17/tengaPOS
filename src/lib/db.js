@@ -1213,6 +1213,7 @@ export async function submitReceiptConfig(config) {
     p_custom_lines: config.customLines || [],
     p_logo_url: config.logoUrl || null,
     p_bank_details: config.bankDetails || null,
+    p_com_port: config.comPort || null,
   })
   if (error) throw error
   return data

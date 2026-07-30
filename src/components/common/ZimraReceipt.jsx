@@ -293,7 +293,7 @@ export default function ZimraReceipt({ receipt, onClose }) {
       lines.push({ text: '', center: true })
       for (const l of systemFooterLines) lines.push({ text: l, center: true })
 
-      await printToPosPrinter(lines, receiptConfig.printerConnection)
+      await printToPosPrinter(lines, receiptConfig.printerConnection, receiptConfig.comPort)
       toast.success('Sent to POS printer')
     } catch (err) {
       toast.error(err.message || 'Failed to print to POS printer')

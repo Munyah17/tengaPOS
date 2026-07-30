@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Simple printer glyph: body + paper feed, in the app's brand blue -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M30,38 L78,38 L78,52 L86,52 L86,80 L74,80 L74,90 L34,90 L34,80 L22,80 L22,52 L30,52 Z
+                           M38,52 L70,52 L70,44 L38,44 Z
+                           M40,70 L68,70 L68,82 L40,82 Z" />
+    <path
+        android:fillColor="#4AA3FF"
+        android:pathData="M42,58 L66,58 L66,62 L42,62 Z" />
+</vector>

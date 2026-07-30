@@ -87,7 +87,7 @@ export default function Settings() {
   const [receiptForm, setReceiptForm] = useState({
     templateMode: 'zimra_default', storeName: '', storeAddress: '', storeContacts: '',
     tin: '', vatNumber: '', footerMessage: '', paperWidthMm: 80, printerConnection: 'usb',
-    showPosPrint: true, headerMessage: '', customLines: [], logoUrl: '', bankDetails: '',
+    showPosPrint: true, headerMessage: '', customLines: [], logoUrl: '', bankDetails: '', comPort: '',
   })
   const [uploadingLogo, setUploadingLogo] = useState(false)
   const [savingReceiptConfig, setSavingReceiptConfig] = useState(false)
@@ -129,6 +129,7 @@ export default function Settings() {
       customLines: Array.isArray(existing?.custom_lines) ? existing.custom_lines : [],
       logoUrl: existing?.logo_url || '',
       bankDetails: existing?.bank_details || '',
+      comPort: existing?.com_port || '',
     })
   }, [scopeBranchId, receiptConfigs])
 
@@ -153,6 +154,7 @@ export default function Settings() {
           custom_lines: receiptForm.customLines,
           logo_url: receiptForm.logoUrl,
           bank_details: receiptForm.bankDetails,
+          com_port: receiptForm.comPort,
         })
         toast.success("Receipt config updated — awaiting the owner's approval (reverts automatically in 48h if not approved)")
         loadPendingChanges()
@@ -2032,6 +2034,25 @@ export default function Settings() {
                     </select>
                   </div>
                 </div>
+
+                {(receiptForm.printerConnection === 'serial' || receiptForm.printerConnection === 'bridge') && (
+                  <div>
+                    <label className="mb-1.5 block text-sm font-medium text-slate-700 dark:text-slate-300">COM Port (Windows only)</label>
+                    <input
+                      type="text"
+                      value={receiptForm.comPort}
+                      onChange={(e) => setReceiptForm((f) => ({ ...f, comPort: e.target.value }))}
+                      placeholder="e.g. COM5"
+                      className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                    />
+                    <p className="mt-1 text-xs text-slate-500">
+                      For a Bluetooth thermal printer that only supports classic Bluetooth (most cheap/generic printers,
+                      e.g. MPT-11) — Web Bluetooth can't reach these at all. Pair it in Windows' own Bluetooth settings
+                      first (it'll appear as a COM port there), enter that port here, and the TengaPOS Print Agent will
+                      send print jobs straight to it. Leave blank to print via the normal Windows printer/spooler instead.
+                    </p>
+                  </div>
+                )}
 
                 {/* Optional POS Printer button on the receipt modal */}
                 <div className="flex items-center justify-between rounded-xl border border-slate-200 p-4 dark:border-slate-700">
