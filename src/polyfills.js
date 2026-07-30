@@ -22,3 +22,19 @@
 // every one of these exists before any other module (including
 // dependencies) has a chance to run and assume it does.
 import 'core-js/stable'
+
+// core-js is ECMAScript-standard-library only (Object/Array/Promise/etc) --
+// it does NOT cover Web/DOM APIs, which is a separate spec track entirely.
+// Confirmed live: "AbortController is not defined", thrown as soon as the
+// first data fetch ran (React Query and the Supabase client both construct
+// one internally to cancel in-flight requests) -- got past module loading
+// and the initial render, then crashed on the very first network call.
+// whatwg-fetch first: real 2014-era targets (Chrome 35, Safari 7) predate
+// native fetch entirely (landed Chrome 42/Safari 10.1), so without this,
+// EVERY request in this cloud-based app fails outright, not just aborts.
+// polyfill-patch-fetch after it: supplies AbortController/AbortSignal and
+// patches whichever fetch now exists (native or just-polyfilled) to
+// actually honor the `signal` option, since a plain fetch polyfill on its
+// own doesn't understand abort signals.
+import 'whatwg-fetch'
+import 'abortcontroller-polyfill/dist/polyfill-patch-fetch'
