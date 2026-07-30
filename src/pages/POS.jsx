@@ -18,6 +18,7 @@ import { FRACTIONAL_UNITS, unitStep } from '@/lib/units'
 import { initiatePaynowCheckout } from '@/lib/paynow'
 import { fetchProducts, saveCheckout, fetchStaff, completeJobCard, recordPrescriptionDispense } from '@/lib/db'
 import { getOfflineProducts, queueOfflineSale } from '@/lib/offlineSync'
+import { isNetworkError } from '@/lib/authRetry'
 import { supabase } from '@/lib/supabase'
 import { useFiscalStore } from '@/stores/fiscalStore'
 import toast from 'react-hot-toast'
@@ -307,8 +308,16 @@ export default function POS() {
           queryClient.invalidateQueries({ queryKey: ['products', tenant.id] })
           return
         }
-        // Network/server error mid-sale (or genuinely offline) — queue it
-        // rather than lose the sale.
+        if (!isNetworkError(err)) {
+          // A real server-side rejection (auth, validation, a bad request) —
+          // never silently queue this as if it were a dropped connection.
+          // Queuing it would just retry the exact same bad request forever
+          // and hide the actual problem behind a misleading "offline" toast.
+          toast.error(msg)
+          setCheckingOut(false)
+          return
+        }
+        // Genuine connectivity failure — queue it rather than lose the sale.
         await queueOfflineSale(checkoutPayload)
         toast('Connection issue — sale saved, will sync automatically', { icon: '📴' })
       }
