@@ -3,16 +3,22 @@ import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
 
 export default defineConfig({
-  // Confirmed live (via the fatal-error safety net in index.html) on a real
-  // budget Android tablet: "Uncaught SyntaxError: Unexpected token" -- the
-  // page loads completely over the network but the browser's JS engine
-  // can't even parse the bundle. Vite 8's default output target is more
-  // modern than what a lot of real-world Android WebView/older-Chrome
-  // devices support. Pinning an explicit, conservative target makes esbuild/
-  // rolldown down-level syntax (optional chaining, nullish coalescing,
-  // class fields, etc.) instead of emitting it as-is.
+  // Confirmed live (via the fatal-error safety net in index.html) on real
+  // budget Android tablets: syntax the JS engine can't even parse (optional
+  // chaining, nullish coalescing, optional catch binding, logical
+  // assignment). Vite/esbuild's default target is newer than a lot of
+  // real-world Android WebView/older-Chrome versions support. es2018 (not
+  // es2015) specifically: Chrome 64/Android 8, the oldest confirmed device
+  // this needs to run on, already has native async/await, object spread,
+  // and Promise.finally (all ES2017-2018) -- down-leveling those into
+  // regenerator-based ES5 would be pure overhead for zero benefit. It's
+  // missing genuinely newer syntax (ES2019's optional catch binding,
+  // ES2020's optional chaining/nullish coalescing) and runtime APIs syntax
+  // transforms can't supply (globalThis, Array.flat/flatMap,
+  // Object.fromEntries, Promise.allSettled) -- see src/polyfills.js for
+  // those, imported first in main.jsx.
   build: {
-    target: 'es2015',
+    target: 'es2018',
   },
   // Tailwind runs through PostCSS now (postcss.config.js + tailwind.config.js)
   // instead of the @tailwindcss/vite plugin -- see index.css for why (v3, not
