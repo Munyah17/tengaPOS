@@ -24,7 +24,7 @@ const BLANK = {
   name: '', brand: '', sku: '', barcode: '', price: '', landingPrice: '',
   stock: '', lowStockThreshold: '10', imageUrl: '', imageUnavailable: false,
   vatTreatment: 'standard', attributePairs: [], branchIds: [], categoryId: '',
-  priceTiers: [],
+  priceTiers: [], dispensingClass: 'otc', controlledSchedule: '',
 }
 
 const BLANK_PRICE_TIER = { min_qty: '', price: '' }
@@ -37,11 +37,18 @@ const VAT_TREATMENTS = [
   { key: 'exempt', label: 'Exempt', hint: 'Outside VAT entirely (e.g. medicines, education)' },
 ]
 
+const DISPENSING_CLASSES = [
+  { key: 'otc', label: 'Over-the-counter', hint: 'No prescription needed — sells like any other product' },
+  { key: 'prescription', label: 'Prescription required', hint: 'POS requires customer + prescriber details before this can be sold' },
+  { key: 'controlled', label: 'Controlled substance', hint: 'Same as prescription, plus a schedule/class recorded on every dispense' },
+]
+
 export default function Inventory() {
   const { posMode } = useThemeStore()
   const { tenant, branch } = useAuthStore()
   const isRestaurant = posMode === 'restaurant'
   const isHardware = posMode === 'hardware'
+  const isPharmacy = posMode === 'pharmacy'
   const [search, setSearch] = useState('')
   const [showAdd, setShowAdd] = useState(false)
   const [showImport, setShowImport] = useState(false)
@@ -221,6 +228,8 @@ export default function Inventory() {
       branchIds,
       categoryId: p.category_id || '',
       priceTiers: (p.price_tiers || []).map((t) => ({ min_qty: t.min_qty, price: t.price })),
+      dispensingClass: p.dispensing_class || 'otc',
+      controlledSchedule: p.controlled_schedule || '',
     })
     setOriginalBranchIds(branchIds)
     setEditTarget(p)
@@ -441,7 +450,7 @@ export default function Inventory() {
               <ArrowLeftRight className="h-4 w-4" /> Transfer Stock
             </Button>
           )}
-          <Button variant={isRestaurant ? 'restaurant' : isHardware ? 'hardware' : 'primary'} onClick={openAdd}>
+          <Button variant={isRestaurant ? 'restaurant' : isHardware ? 'hardware' : isPharmacy ? 'pharmacy' : 'primary'} onClick={openAdd}>
             <Plus className="h-4 w-4" /> Add Product
           </Button>
         </div>
@@ -717,7 +726,6 @@ export default function Inventory() {
                 onChange={e => setForm({ ...form, [f.field]: e.target.value })}
                 className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
                 required={f.required}
-                step={f.type === 'number' ? '0.01' : undefined}
                 min={f.type === 'number' ? '0' : undefined}
               />
             </div>
@@ -763,6 +771,30 @@ export default function Inventory() {
               {VAT_TREATMENTS.find(t => t.key === form.vatTreatment)?.hint}
             </p>
           </div>
+          {isPharmacy && (
+            <div>
+              <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">Dispensing Class</label>
+              <select
+                value={form.dispensingClass}
+                onChange={e => setForm({ ...form, dispensingClass: e.target.value })}
+                className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+              >
+                {DISPENSING_CLASSES.map(c => <option key={c.key} value={c.key}>{c.label}</option>)}
+              </select>
+              <p className="mt-1 text-xs text-slate-500">
+                {DISPENSING_CLASSES.find(c => c.key === form.dispensingClass)?.hint}
+              </p>
+              {form.dispensingClass === 'controlled' && (
+                <input
+                  type="text"
+                  value={form.controlledSchedule}
+                  onChange={e => setForm({ ...form, controlledSchedule: e.target.value })}
+                  placeholder="Schedule / class — e.g. Schedule II"
+                  className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                />
+              )}
+            </div>
+          )}
           <div>
             <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">Attributes</label>
             <div className="mb-2 flex flex-wrap gap-1.5">
@@ -836,7 +868,7 @@ export default function Inventory() {
                       />
                       <span className="flex-shrink-0 text-xs text-slate-500">→ price</span>
                       <input
-                        type="number" min="0" step="0.01" value={tier.price}
+                        type="number" min="0" value={tier.price}
                         onChange={(e) => updatePriceTier(i, 'price', e.target.value)}
                         placeholder="4.50"
                         className="flex-1 rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
