@@ -227,7 +227,7 @@ export default function Inventory() {
       attributePairs: Object.entries(p.attributes || {}).map(([key, value]) => ({ key, value })),
       branchIds,
       categoryId: p.category_id || '',
-      priceTiers: (p.price_tiers || []).map((t) => ({ min_qty: t.min_qty, price: t.price })),
+      priceTiers: (p.price_tiers || []).map((t) => ({ min_qty: String(t.min_qty), price: String(t.price) })),
       dispensingClass: p.dispensing_class || 'otc',
       controlledSchedule: p.controlled_schedule || '',
     })
