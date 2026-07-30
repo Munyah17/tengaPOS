@@ -122,7 +122,12 @@ export default function Staff() {
       toast.success('Details saved')
       setUsernameEdit(null)
     } catch (err) {
-      toast.error(err.message?.includes('duplicate') || err.code === '23505' ? 'That username is already taken in your business — try another' : (err.message || 'Failed to save details'))
+      // Matching on any 23505/'duplicate' was wrong -- users_tenant_username_key
+      // is the *only* unique constraint that could plausibly fire here (no
+      // unique constraint on employee_no at all), so anything else was being
+      // mislabeled as a username conflict, hiding what actually failed.
+      const msg = err.message || ''
+      toast.error(msg.includes('users_tenant_username_key') ? 'That username is already taken in your business — try another' : (msg || 'Failed to save details'))
     } finally {
       setSavingUsername(false)
     }
