@@ -1,0 +1,5 @@
+Product Name,SKU,Category,Base Price,Stock Quantity,Price Tier 1 Min Qty,Price Tier 1 Price,Price Tier 2 Min Qty,Price Tier 2 Price,Price Tier 3 Min Qty,Price Tier 3 Price,Notes
+"Example: Copper Wire (1mm)",CW-1MM,Electrical,150.00,500,"10,500.00",,,,,"Import this row as-is to see the format"
+"Example: Nails (2 inch box)",NAIL-2IN,Hardware,45.50,1200,"50,40.00","100,35.00","500,30.00","Bulk pricing reduces per-unit cost"
+"Power Drill - 20V",DRILL-20V,Power Tools,2500.00,45,"5,2400.00","10,2300.00",,,"Professional grade"
+"Screwdriver Set (18pc)",SCREWSET-18,Hand Tools,350.00,120,"10,320.00","50,290.00",,,"Assorted sizes"
