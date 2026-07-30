@@ -212,8 +212,15 @@ export default function ZimraReceipt({ receipt, onClose }) {
     printWindow.document.write(html)
     printWindow.document.close()
     printWindow.focus()
+    // Closing right after print() cancels the job on Chrome/Edge before the
+    // dialog even finishes rendering — the OS never gets a chance to hand it
+    // to the printer, so it silently falls back to "Save as PDF" or nothing.
+    // Wait for the browser's own afterprint signal (fired whether the user
+    // printed or cancelled) before closing, with a generous fallback in case
+    // a browser never fires it at all.
+    printWindow.onafterprint = () => printWindow.close()
     printWindow.print()
-    printWindow.close()
+    setTimeout(() => { try { printWindow.close() } catch { /* already closed */ } }, 60000)
   }
 
   const handlePosPrint = async () => {
