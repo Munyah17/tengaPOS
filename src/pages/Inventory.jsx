@@ -25,6 +25,7 @@ const BLANK = {
   stock: '', lowStockThreshold: '10', imageUrl: '', imageUnavailable: false,
   vatTreatment: 'standard', attributePairs: [], branchIds: [], categoryId: '',
   priceTiers: [], dispensingClass: 'otc', controlledSchedule: '', isService: false,
+  ageRestricted: false,
 }
 
 const BLANK_PRICE_TIER = { min_qty: '', price: '' }
@@ -49,6 +50,7 @@ export default function Inventory() {
   const isRestaurant = posMode === 'restaurant'
   const isHardware = posMode === 'hardware'
   const isPharmacy = posMode === 'pharmacy'
+  const isBar = posMode === 'bar'
   const [search, setSearch] = useState('')
   const [showAdd, setShowAdd] = useState(false)
   const [showImport, setShowImport] = useState(false)
@@ -231,6 +233,7 @@ export default function Inventory() {
       dispensingClass: p.dispensing_class || 'otc',
       controlledSchedule: p.controlled_schedule || '',
       isService: p.is_service === true,
+      ageRestricted: p.age_restricted === true,
     })
     setOriginalBranchIds(branchIds)
     setEditTarget(p)
@@ -827,6 +830,20 @@ export default function Inventory() {
                 />
               )}
             </div>
+          )}
+          {isBar && (
+            <label className="flex items-center gap-2 rounded-xl border border-slate-200 p-3 text-sm dark:border-slate-700">
+              <input
+                type="checkbox"
+                checked={form.ageRestricted}
+                onChange={(e) => setForm({ ...form, ageRestricted: e.target.checked })}
+                className="h-4 w-4 rounded border-slate-300"
+              />
+              <span>
+                <span className="font-medium text-slate-700 dark:text-slate-300">Age-Restricted (18+)</span>
+                <span className="block text-xs text-slate-500">Requires an ID check at checkout before this can be sold.</span>
+              </span>
+            </label>
           )}
           <div>
             <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">Attributes</label>

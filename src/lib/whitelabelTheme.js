@@ -127,6 +127,7 @@ export const INDUSTRIES = [
   { key: 'fragrance', label: 'Fragrance & Cosmetics' },
   { key: 'gas_lp', label: 'LP Gas Retail' },
   { key: 'grocery', label: 'Grocery / Supermarket' },
+  { key: 'bar', label: 'Bar / Liquor Store' },
   { key: 'restaurant', label: 'Restaurant / Food Service' },
   { key: 'electronics', label: 'Electronics & Gadgets' },
   { key: 'hardware', label: 'Hardware & Building' },

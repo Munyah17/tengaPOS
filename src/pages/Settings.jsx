@@ -964,6 +964,7 @@ export default function Settings() {
                         { key: 'hardware', label: 'Hardware (Orange)', barClass: 'bg-orange-500', activeClass: 'border-orange-500 bg-orange-50 dark:bg-orange-950/40' },
                         { key: 'manufacturing', label: 'Manufacturing (Indigo)', barClass: 'bg-indigo-500', activeClass: 'border-indigo-500 bg-indigo-50 dark:bg-indigo-950/40' },
                         { key: 'pharmacy', label: 'Pharmacy (Teal)', barClass: 'bg-teal-500', activeClass: 'border-teal-500 bg-teal-50 dark:bg-teal-950/40' },
+                        { key: 'bar', label: 'Bar / Liquor Store (Violet)', barClass: 'bg-violet-500', activeClass: 'border-violet-500 bg-violet-50 dark:bg-violet-950/40' },
                       ].filter((m) => enabledModes.includes(m.key)).map((m) => (
                         <button
                           key={m.key}
@@ -979,7 +980,7 @@ export default function Settings() {
                     </div>
                   ) : (
                     <p className="text-sm text-slate-500">
-                      Your account is set to {posMode === 'restaurant' ? 'Restaurant' : posMode === 'workshop' ? 'Workshop' : posMode === 'hardware' ? 'Hardware' : posMode === 'manufacturing' ? 'Manufacturing' : posMode === 'pharmacy' ? 'Pharmacy' : 'Retail'} mode. Contact us if you need a different or additional mode enabled.
+                      Your account is set to {posMode === 'restaurant' ? 'Restaurant' : posMode === 'workshop' ? 'Workshop' : posMode === 'hardware' ? 'Hardware' : posMode === 'manufacturing' ? 'Manufacturing' : posMode === 'pharmacy' ? 'Pharmacy' : posMode === 'bar' ? 'Bar / Liquor Store' : 'Retail'} mode. Contact us if you need a different or additional mode enabled.
                     </p>
                   )}
                 </div>

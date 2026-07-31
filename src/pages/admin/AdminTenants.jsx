@@ -171,6 +171,7 @@ const BUSINESS_MODES = [
   { key: 'hardware', label: 'Hardware' },
   { key: 'manufacturing', label: 'Manufacturing' },
   { key: 'pharmacy', label: 'Pharmacy' },
+  { key: 'bar', label: 'Bar / Liquor Store' },
 ]
 
 const BACKUP_OPTIONS = [

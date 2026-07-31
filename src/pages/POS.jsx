@@ -16,7 +16,7 @@ import { PAYMENT_METHODS } from '@/utils/constants'
 import { formatCurrency, generateReceiptNumber } from '@/utils/formatters'
 import { FRACTIONAL_UNITS, unitStep } from '@/lib/units'
 import { initiatePaynowCheckout } from '@/lib/paynow'
-import { fetchProducts, saveCheckout, fetchStaff, completeJobCard, recordPrescriptionDispense } from '@/lib/db'
+import { fetchProducts, saveCheckout, fetchStaff, completeJobCard, recordPrescriptionDispense, recordAgeVerification } from '@/lib/db'
 import { getOfflineProducts, queueOfflineSale } from '@/lib/offlineSync'
 import { isNetworkError } from '@/lib/authRetry'
 import { generateUUID } from '@/lib/uuid'
@@ -80,6 +80,9 @@ export default function POS() {
   // skippable just because the tenant's overall mode is something else.
   const [showPrescriptionModal, setShowPrescriptionModal] = useState(false)
   const [prescriptionForm, setPrescriptionForm] = useState({ customerName: '', prescriberName: '', prescriberLicenseNo: '' })
+  // Bar/Liquor Store Mode: same data-driven pattern as pharmacyItems above.
+  const [showAgeVerifyModal, setShowAgeVerifyModal] = useState(false)
+  const [ageVerifyForm, setAgeVerifyForm] = useState({ verified: false, idType: '', idLast4: '' })
   const videoRef = useRef(null)
   const scanStreamRef = useRef(null)
   const fmt = (n) => formatCurrency(n, tenant?.currency)
@@ -216,6 +219,10 @@ export default function POS() {
     () => cart.items.filter((i) => i.dispensing_class === 'prescription' || i.dispensing_class === 'controlled'),
     [cart.items]
   )
+  const barItems = useMemo(
+    () => cart.items.filter((i) => i.age_restricted === true),
+    [cart.items]
+  )
 
   // Mobile-money methods run through Paynow's hosted checkout, never manually
   const PAYNOW_METHODS = ['ecocash', 'innbucks', 'omari', 'onemoney', 'zipit']
@@ -242,12 +249,16 @@ export default function POS() {
     setSalespersonManualEmpNo('')
   }
 
-  // Gate on the prescriber capture before actually charging anything —
-  // never take payment for a prescription/controlled item without the
-  // compliance details already in hand.
+  // Gate on the prescriber/ID capture before actually charging anything —
+  // never take payment for a prescription/controlled or age-restricted
+  // item without the compliance details already in hand.
   const handleCheckoutClick = () => {
     if (pharmacyItems.length > 0 && !prescriptionForm.prescriberName.trim()) {
       setShowPrescriptionModal(true)
+      return
+    }
+    if (barItems.length > 0 && !ageVerifyForm.verified) {
+      setShowAgeVerifyModal(true)
       return
     }
     handleCheckout()
@@ -428,6 +439,25 @@ export default function POS() {
         })
       }
       setPrescriptionForm({ customerName: '', prescriberName: '', prescriberLicenseNo: '' })
+    }
+
+    // Bar/Liquor Store Mode compliance log — same best-effort, never-silent
+    // treatment as the prescription log above.
+    if (barItems.length > 0 && completedOrderId) {
+      for (const item of barItems) {
+        recordAgeVerification(tenant.id, {
+          branchId: branch?.id || null,
+          orderId: completedOrderId,
+          productId: item.id,
+          qty: item.quantity,
+          idType: ageVerifyForm.idType.trim() || null,
+          idLast4: ageVerifyForm.idLast4.trim() || null,
+          userId: user?.id || null,
+        }).catch((err) => {
+          toast.error(`Sale completed, but couldn't log the age verification for ${item.name}: ${err.message || 'unknown error'} — record it manually.`, { duration: 8000 })
+        })
+      }
+      setAgeVerifyForm({ verified: false, idType: '', idLast4: '' })
     }
 
     const grossTotal = cart.items.reduce((s, i) => s + i.price * i.quantity, 0)
@@ -1075,6 +1105,70 @@ export default function POS() {
                 onClick={() => {
                   if (!prescriptionForm.prescriberName.trim()) { toast.error('Prescriber name is required'); return }
                   setShowPrescriptionModal(false)
+                  // Re-check rather than jumping straight to handleCheckout --
+                  // the basket might also have an age-restricted item still
+                  // needing its own gate.
+                  handleCheckoutClick()
+                }}
+                className="rounded-xl bg-brand-600 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-700"
+              >
+                Continue to Payment
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bar/Liquor Store Mode — ID/age verification before charging for a
+          restricted item. */}
+      {showAgeVerifyModal && (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/70 px-4">
+          <div className="w-full max-w-md rounded-2xl bg-white p-5 shadow-2xl dark:bg-slate-900">
+            <h3 className="text-base font-bold text-slate-900 dark:text-white">Age Verification Required</h3>
+            <p className="mt-1 text-sm text-slate-500">
+              This sale includes {barItems.length === 1 ? barItems[0].name : `${barItems.length} age-restricted items`} — confirm ID has been checked before completing the sale.
+            </p>
+            <div className="mt-4 space-y-3">
+              <label className="flex items-start gap-2 rounded-xl border border-slate-200 p-3 text-sm dark:border-slate-700">
+                <input
+                  type="checkbox"
+                  checked={ageVerifyForm.verified}
+                  onChange={(e) => setAgeVerifyForm((f) => ({ ...f, verified: e.target.checked }))}
+                  className="mt-0.5 h-4 w-4 rounded border-slate-300"
+                />
+                <span className="font-medium text-slate-700 dark:text-slate-300">I have checked the customer's ID and confirmed they are of legal age.</span>
+              </label>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">ID Type</label>
+                  <input
+                    value={ageVerifyForm.idType}
+                    onChange={(e) => setAgeVerifyForm((f) => ({ ...f, idType: e.target.value }))}
+                    placeholder="e.g. National ID, Passport"
+                    className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">ID Last 4 Digits</label>
+                  <input
+                    value={ageVerifyForm.idLast4}
+                    onChange={(e) => setAgeVerifyForm((f) => ({ ...f, idLast4: e.target.value.slice(0, 4) }))}
+                    className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                  />
+                </div>
+              </div>
+            </div>
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                onClick={() => setShowAgeVerifyModal(false)}
+                className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  if (!ageVerifyForm.verified) { toast.error('Confirm the ID check before continuing'); return }
+                  setShowAgeVerifyModal(false)
                   handleCheckout()
                 }}
                 className="rounded-xl bg-brand-600 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-700"

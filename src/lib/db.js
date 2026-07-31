@@ -65,6 +65,8 @@ export async function insertProduct(tenantId, product) {
       // 'prescription'/'controlled' gate the sale on prescriber details.
       dispensing_class: product.dispensingClass || 'otc',
       controlled_schedule: product.dispensingClass === 'controlled' ? (product.controlledSchedule || null) : null,
+      // Bar/Liquor Store Mode — gates the sale on an ID/age check at checkout.
+      age_restricted: product.ageRestricted === true,
       is_active: true,
       pos_visible: true,
     })
@@ -96,6 +98,7 @@ export async function updateProduct(id, updates) {
       price_tiers: (updates.priceTiers || []).filter((t) => t.min_qty > 0 && t.price >= 0),
       dispensing_class: updates.dispensingClass || 'otc',
       controlled_schedule: updates.dispensingClass === 'controlled' ? (updates.controlledSchedule || null) : null,
+      age_restricted: updates.ageRestricted === true,
       updated_at: new Date().toISOString(),
     })
     .eq('id', id)
@@ -693,6 +696,38 @@ export async function recordPrescriptionDispense(tenantId, {
     dispensing_class: dispensingClass,
     controlled_schedule: controlledSchedule || null,
     created_by: userId || null,
+  })
+  if (error) throw error
+}
+
+// ─── Bar/Liquor Store Mode: Age Verification ───────────────────────────────
+
+export async function fetchAgeVerifications(tenantId) {
+  const { data, error } = await supabase
+    .from('age_verifications')
+    .select('*, products(name), branches(name), users(name)')
+    .eq('tenant_id', tenantId)
+    .order('created_at', { ascending: false })
+    .limit(200)
+  if (error) throw error
+  return data
+}
+
+// Compliance log for one age-restricted line item — separate from the order
+// itself, and never blocks the sale if it fails (called best-effort after
+// checkout already succeeded, same as recordPrescriptionDispense).
+export async function recordAgeVerification(tenantId, {
+  branchId, orderId, productId, qty, idType, idLast4, userId,
+}) {
+  const { error } = await supabase.from('age_verifications').insert({
+    tenant_id: tenantId,
+    branch_id: branchId || null,
+    order_id: orderId || null,
+    product_id: productId,
+    qty,
+    id_type: idType || null,
+    id_last4: idLast4 || null,
+    verified_by: userId || null,
   })
   if (error) throw error
 }

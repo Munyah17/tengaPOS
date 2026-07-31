@@ -4,7 +4,7 @@ import {
   LayoutDashboard, ShoppingCart, Package, ClipboardList, BarChart3,
   Settings, Users, ChefHat, ListTodo, LogOut, ChevronLeft, ChevronRight, ChevronDown,
   Store, Receipt, Cpu, X, Sparkles, CreditCard, BriefcaseBusiness, FileText, Inbox, Calculator,
-  Wrench, Car, HardHat, FileSignature, Factory, Pill,
+  Wrench, Car, HardHat, FileSignature, Factory, Pill, ShieldCheck,
 } from 'lucide-react'
 import { useState } from 'react'
 import { useThemeStore } from '@/stores/themeStore'
@@ -24,6 +24,7 @@ const ALL_NAV_ITEMS = [
   { key: 'quotations', icon: FileSignature, label: 'Quotations', path: '/app/quotations', workshopOnly: true },
   { key: 'production', icon: Factory, label: 'Production', path: '/app/production', manufacturingOnly: true },
   { key: 'prescriptions', icon: Pill, label: 'Prescriptions', path: '/app/prescriptions', pharmacyOnly: true },
+  { key: 'age_verifications', icon: ShieldCheck, label: 'Age Verifications', path: '/app/age-verifications', barOnly: true },
   { key: 'transactions', icon: Receipt, label: 'Transactions', path: '/app/transactions' },
   { key: 'reports', icon: BarChart3, label: 'Reports', path: '/app/reports' },
   { key: 'insights', icon: Sparkles, label: 'AI Insights', path: '/app/insights', addonFeature: 'ai_insights', addonTitle: 'AI Insights is an optional add-on — request it in Settings' },
@@ -54,6 +55,7 @@ export default function Sidebar({ open = false, onClose }) {
   const isWorkshop = posMode === 'workshop'
   const isManufacturing = posMode === 'manufacturing'
   const isPharmacy = posMode === 'pharmacy'
+  const isBar = posMode === 'bar'
 
   const allowedKeys = NAV_PERMISSIONS[role] || NAV_PERMISSIONS.vendor
   const visibleItems = ALL_NAV_ITEMS.map((item) => {
@@ -68,6 +70,7 @@ export default function Sidebar({ open = false, onClose }) {
     if (item.workshopOnly && !isWorkshop) return false
     if (item.manufacturingOnly && !isManufacturing) return false
     if (item.pharmacyOnly && !isPharmacy) return false
+    if (item.barOnly && !isBar) return false
     return true
   })
 

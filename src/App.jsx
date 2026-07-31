@@ -19,6 +19,7 @@ const POS = lazy(() => import('@/pages/POS'))
 const Inventory = lazy(() => import('@/pages/Inventory'))
 const Orders = lazy(() => import('@/pages/Orders'))
 const Prescriptions = lazy(() => import('@/pages/Prescriptions'))
+const AgeVerifications = lazy(() => import('@/pages/AgeVerifications'))
 const Kitchen = lazy(() => import('@/pages/Kitchen'))
 const JobCards = lazy(() => import('@/pages/JobCards'))
 const VehicleRegistry = lazy(() => import('@/pages/VehicleRegistry'))
@@ -187,6 +188,7 @@ export default function App() {
             <Route path="inventory" element={<RequireNav navKey="inventory"><Inventory /></RequireNav>} />
             <Route path="orders" element={<RequireNav navKey="orders"><Orders /></RequireNav>} />
             <Route path="prescriptions" element={<RequireNav navKey="prescriptions"><Prescriptions /></RequireNav>} />
+            <Route path="age-verifications" element={<RequireNav navKey="age_verifications"><AgeVerifications /></RequireNav>} />
             <Route path="kitchen" element={<RequireNav navKey="kitchen"><Kitchen /></RequireNav>} />
             <Route path="job-cards" element={<RequireNav navKey="job_cards"><JobCards /></RequireNav>} />
             <Route path="vehicle-registry" element={<RequireNav navKey="vehicle_registry"><VehicleRegistry /></RequireNav>} />
