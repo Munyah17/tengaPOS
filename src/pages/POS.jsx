@@ -36,6 +36,13 @@ export default function POS() {
   const { posMode } = useThemeStore()
   const { tenant, user, branch } = useAuthStore()
   const isRestaurant = posMode === 'restaurant'
+  // VAT only actually applies when it's both activated as a plan feature
+  // (tenant.features.vat -- a Super Admin-approved add-on) AND not switched
+  // off by the tenant themselves. tenant.vat_enabled alone isn't enough --
+  // it defaults truthy even for tenants who never activated VAT at all, so
+  // gating on it alone would silently charge VAT despite the feature never
+  // being turned on.
+  const vatActive = tenant?.features?.vat === true && tenant?.vat_enabled !== false
   const cart = useCartStore()
   const fiscal = useFiscalStore()
   const [search, setSearch] = useState('')
@@ -101,9 +108,9 @@ export default function POS() {
 
   // VAT config comes from the tenant's own settings (inclusive pricing)
   useEffect(() => {
-    if (tenant) cart.setVatConfig(tenant.vat_enabled, tenant.vat_rate)
+    if (tenant) cart.setVatConfig(vatActive, tenant.vat_rate)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tenant?.vat_enabled, tenant?.vat_rate])
+  }, [vatActive, tenant?.vat_rate])
 
   // Staff available to pick as Salesperson — scoped to this branch when one
   // is set, otherwise every staff member on the tenant.
@@ -400,7 +407,7 @@ export default function POS() {
     // The VAT toggle above only overrides the current sale -- snap it back
     // to the tenant's own default for the next one, so turning it off for
     // one exempt item can't quietly carry over and under-charge VAT later.
-    if (tenant) cart.setVatConfig(tenant.vat_enabled, tenant.vat_rate)
+    if (tenant) cart.setVatConfig(vatActive, tenant.vat_rate)
     setAmountTendered('')
     resetSalesperson()
     setCheckingOut(false)
@@ -420,7 +427,7 @@ export default function POS() {
       })
       // Clear cart before leaving the POS — the return page handles success/failure
       cart.clearCart()
-      if (tenant) cart.setVatConfig(tenant.vat_enabled, tenant.vat_rate)
+      if (tenant) cart.setVatConfig(vatActive, tenant.vat_rate)
       window.location.href = browserUrl
     } catch (err) {
       toast.error(err.message || 'Failed to initiate Paynow checkout')
@@ -893,10 +900,14 @@ export default function POS() {
             {/* VAT is a tenant-wide default, but not every sale should
                 necessarily carry it (e.g. a zero-rated or exempt walk-in
                 item) -- this only changes the current sale, not the
-                tenant's own setting. Only shown at all if the tenant has
-                VAT activated in Settings -- a tenant that doesn't run VAT
-                shouldn't see any trace of it here. */}
-            {tenant?.vat_enabled && (
+                tenant's own setting. Only shown at all if VAT is both
+                activated as a plan feature (tenant.features.vat -- a
+                Super Admin-approved add-on, see AdminVatRequests.jsx) AND
+                not switched off by the tenant themselves in General
+                settings (tenant.vat_enabled). A tenant that never
+                activated VAT at all shouldn't see any trace of it here,
+                regardless of what vat_enabled happens to default to. */}
+            {vatActive && (
               <div className="flex items-center justify-between text-sm">
                 <label className="flex items-center gap-1.5 text-slate-500">
                   <input

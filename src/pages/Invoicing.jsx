@@ -80,10 +80,15 @@ export default function Invoicing({ standalone = false } = {}) {
     fetchCustomers(tenant.id).then(setCustomers).catch(() => {})
   }, [tenant?.id])
 
+  // VAT only actually applies when it's both activated as a plan feature
+  // (tenant.features.vat -- a Super Admin-approved add-on) AND not switched
+  // off by the tenant themselves -- vat_enabled alone defaults truthy even
+  // for tenants who never activated VAT at all.
+  const vatActive = tenant?.features?.vat === true && tenant?.vat_enabled !== false
   // Tenant-wide default -- each document can still override this (see
   // form.vatEnabled), since not every quote/invoice should be VAT-rated
   // (e.g. exempt customers, export jobs).
-  const tenantVatDefault = tenant?.vat_enabled !== false
+  const tenantVatDefault = vatActive
   const vatRate = tenant?.vat_rate ?? 15.5
   const fmt = (n) => formatCurrency(n, tenant?.currency)
 
@@ -535,15 +540,17 @@ export default function Invoicing({ standalone = false } = {}) {
           </div>
 
           <div className="space-y-1 rounded-xl border border-slate-200 p-3 text-sm dark:border-slate-700">
-            <label className="mb-1 flex items-center gap-2 text-xs font-semibold text-slate-500">
-              <input
-                type="checkbox"
-                checked={form.vatEnabled}
-                onChange={(e) => setForm((f) => ({ ...f, vatEnabled: e.target.checked }))}
-                className="h-3.5 w-3.5 rounded border-slate-300"
-              />
-              Charge VAT on this {docType === 'invoice' ? 'invoice' : 'quotation'}
-            </label>
+            {vatActive && (
+              <label className="mb-1 flex items-center gap-2 text-xs font-semibold text-slate-500">
+                <input
+                  type="checkbox"
+                  checked={form.vatEnabled}
+                  onChange={(e) => setForm((f) => ({ ...f, vatEnabled: e.target.checked }))}
+                  className="h-3.5 w-3.5 rounded border-slate-300"
+                />
+                Charge VAT on this {docType === 'invoice' ? 'invoice' : 'quotation'}
+              </label>
+            )}
             <div className="flex justify-between text-slate-500"><span>Subtotal{form.vatEnabled ? ' (ex VAT)' : ''}</span><span>{fmt(formSubtotal)}</span></div>
             {form.vatEnabled && <div className="flex justify-between text-slate-500"><span>VAT {vatRate}%</span><span>{fmt(formVat)}</span></div>}
             <div className="flex justify-between border-t border-slate-200 pt-1 font-bold text-slate-900 dark:border-slate-700 dark:text-white"><span>Total</span><span>{fmt(formTotal)}</span></div>

@@ -2,7 +2,7 @@
  * Runtime white-label theming.
  *
  * Every `bg-brand-600`, `text-brand-400`, gradient, etc. is defined in
- * tailwind.config.js as `rgb(var(--color-brand-600) / <alpha>)`, reading
+ * tailwind.config.js as `rgba(var(--color-brand-600), <alpha>)`, reading
  * from the --color-brand-50 … --color-brand-950 custom properties declared
  * in index.css. So re-branding a tenant's whole portal is just overriding
  * those variables on <html> with a shade scale generated from their primary
@@ -48,10 +48,10 @@ function toHex([r, g, b]) {
   return `#${[r, g, b].map((c) => c.toString(16).padStart(2, '0')).join('')}`
 }
 
-// tailwind.config.js's color functions read these as `rgb(var(--color-brand-600) / <alpha>)`,
-// which needs space-separated channel numbers, not a hex string.
+// tailwind.config.js's color functions read these as `rgba(var(--color-brand-600), <alpha>)`,
+// which needs comma-separated channel numbers, not a hex string.
 function toRgbTriple([r, g, b]) {
-  return `${r} ${g} ${b}`
+  return `${r}, ${g}, ${b}`
 }
 
 /** Full 50–900 Tailwind-style scale from one hex colour. */

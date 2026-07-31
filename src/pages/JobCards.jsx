@@ -115,7 +115,10 @@ function JobCardModal({ tenant, branch, customers, technicians, products, existi
         diagnosis,
         items: items.filter((it) => it.description.trim()),
       }, {
-        vatEnabled: tenant?.vat_enabled !== false, vatRate: tenant?.vat_rate ?? 15.5,
+        // VAT only actually applies when activated as a plan feature AND
+        // not switched off by the tenant -- see POS.jsx's vatActive for the
+        // same gate applied consistently across checkout/invoicing.
+        vatEnabled: tenant?.features?.vat === true && tenant?.vat_enabled !== false, vatRate: tenant?.vat_rate ?? 15.5,
       })
       toast.success(`Quotation ${doc.doc_number} created`)
     } catch (err) {
