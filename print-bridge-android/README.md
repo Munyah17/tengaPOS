@@ -7,6 +7,14 @@ Chromium browser, not something fixable from the web app. This app does the
 one thing a browser can't: hold a classic Bluetooth socket open to the
 printer and forward raw ESC/POS bytes to it.
 
+**Before building this: try RawBT first.** RawBT (Play Store: "RawBT Print
+Service") solves the exact same problem with zero development — TengaPOS
+already supports it as a "Printer Connection" option in Settings → Receipts.
+It's the practical choice for a cheap tablet with no dev environment set up.
+This custom app only matters if RawBT's ESC/POS support doesn't fit some
+specific printer or workflow, or you want the extra endpoints (cash drawer,
+future peripherals) under your own control instead of a third-party app.
+
 ## Why the web app needs zero changes
 
 This app runs a tiny local HTTP server on `127.0.0.1:38471` — the exact same

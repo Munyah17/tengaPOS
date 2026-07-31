@@ -1,16 +1,23 @@
 // Direct printing to the built-in printer on all-in-one POS terminals,
 // bypassing the OS print dialog entirely.
 //
-// Two transports, tried in order:
+// Transports, selected by the tenant's Printer Connection setting:
 // 1. TengaPOS Print Agent — a small local helper (see /print-agent) that
 //    runs on the till and forwards raw bytes to the Windows print spooler
 //    as a RAW job, so it works no matter which driver the printer has
-//    installed. This is the primary path on Windows tills.
+//    installed. This is the primary path on Windows tills (tried by default
+//    for any connection type other than 'bluetooth'/'rawbt').
 // 2. WebUSB — talks to the printer directly over USB with no agent needed.
-//    Works on some Android all-in-ones, but on Windows the printer's own
-//    driver usually claims the USB interface first and blocks this, which
-//    is exactly why the agent exists.
-// Neither works in Safari/Firefox or on iOS; those keep using "Print Receipt".
+//    Falls back from the agent automatically.
+// 3. Web Bluetooth ('bluetooth') — BLE only, per the W3C spec; most cheap
+//    generic thermal printers use classic Bluetooth (SPP) instead and are
+//    invisible to this transport no matter what.
+// 4. RawBT ('rawbt') — hands raw bytes to the RawBT Android app via its URL
+//    scheme, which talks to classic-Bluetooth printers directly. This is
+//    the practical option for cheap Android tablet + cheap BT thermal
+//    printer setups (e.g. MPT-11) with no native app development needed.
+// None of the direct transports work in Safari/Firefox or on iOS; those
+// keep using "Print Receipt" (the OS print dialog).
 
 const ESC = 0x1b
 const GS = 0x1d
@@ -47,10 +54,17 @@ export const PRINTER_CONNECTIONS = [
   // "Bluetooth" here means Web Bluetooth (BLE) directly from the browser —
   // only works for printers that speak Bluetooth Low Energy. Most cheap/
   // generic thermal printers (e.g. MPT-11) use classic Bluetooth (SPP)
-  // instead, which no browser can reach at all — those need "Print Bridge".
+  // instead, which no browser can reach at all — those need RawBT or Print Bridge.
   { key: 'bluetooth', label: 'Bluetooth (BLE — rare on cheap printers)' },
   { key: 'serial', label: 'Serial (RS-232 / Bluetooth paired as COM port)' },
   { key: 'bridge', label: 'Print Bridge (Windows agent or Android app)' },
+  // Android + classic-Bluetooth ESC/POS printer (most cheap generic thermal
+  // printers, e.g. MPT-11) — hands the raw bytes to the RawBT app via its
+  // documented URL scheme instead of talking to the printer directly, which
+  // sidesteps Web Bluetooth's BLE-only limitation entirely. Requires
+  // installing "RawBT Print Service" from the Play Store and setting it as
+  // default for the paired printer once — no APK building needed.
+  { key: 'rawbt', label: 'RawBT (Android — cheap Bluetooth thermal printers)' },
 ]
 
 function escPosInit() {
@@ -263,6 +277,27 @@ async function printViaBluetooth(bytes) {
   }
 }
 
+// RawBT (Play Store: "RawBT Print Service") is a widely-used Android app
+// built exactly for this: a web page hands it raw ESC/POS bytes via a
+// custom URL scheme, and RawBT forwards them to whatever printer it's
+// configured for — including classic-Bluetooth printers Web Bluetooth can
+// never see, with no APK building or native bridge required. The printer
+// manufacturer's own manual for the MPT-II lists RawBT by name as a
+// supported app. One-time setup on the till: install RawBT, pair the
+// printer in Android's Bluetooth settings (PIN usually 0000), open RawBT
+// and select it as the default printer.
+function printViaRawBT(bytes) {
+  let binary = ''
+  for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i])
+  const base64 = btoa(binary)
+  // Custom URL scheme hand-off — Android intercepts this and offers to open
+  // RawBT (or opens it directly if it's the only/default handler). There's
+  // no JS-visible success/failure signal for a scheme hand-off like this;
+  // RawBT itself surfaces any printer-side error (not paired, out of paper,
+  // etc.) in its own UI/notification once it receives the job.
+  window.location.href = `rawbt:base64,${base64}`
+}
+
 /**
  * Prints plain receipt text to the built-in printer. `lines` is an array of
  * { text, bold, center } objects (or plain strings) — the caller builds
@@ -278,6 +313,11 @@ export async function printToPosPrinter(lines, connectionHint, comPort) {
 
   if (connectionHint === 'bluetooth') {
     await printViaBluetooth(bytes)
+    return
+  }
+
+  if (connectionHint === 'rawbt') {
+    printViaRawBT(bytes)
     return
   }
 

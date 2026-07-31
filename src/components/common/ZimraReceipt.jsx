@@ -294,7 +294,10 @@ export default function ZimraReceipt({ receipt, onClose }) {
       for (const l of systemFooterLines) lines.push({ text: l, center: true })
 
       await printToPosPrinter(lines, receiptConfig.printerConnection, receiptConfig.comPort)
-      toast.success('Sent to POS printer')
+      // RawBT is a fire-and-forget hand-off to another app -- there's no
+      // signal here for whether it actually printed, unlike the other
+      // transports which only resolve after a real success/failure response.
+      toast.success(receiptConfig.printerConnection === 'rawbt' ? 'Sent to RawBT' : 'Sent to POS printer')
     } catch (err) {
       toast.error(err.message || 'Failed to print to POS printer')
     } finally {
