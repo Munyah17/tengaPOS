@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import {
-  Settings as SettingsIcon, Store, CreditCard, Receipt,
+  Settings as SettingsIcon, Store, CreditCard,
   Bell, Shield, Palette, Globe, ExternalLink, Cpu,
   CheckCircle, AlertTriangle, Loader, Power, PowerOff, Eye, EyeOff, X,
 } from 'lucide-react'
@@ -30,7 +30,6 @@ const sections = [
   { id: 'general', label: 'General', icon: SettingsIcon },
   { id: 'store', label: 'Receipts Config', icon: Printer },
   { id: 'payments', label: 'Payments', icon: CreditCard },
-  { id: 'receipts', label: 'Receipts', icon: Receipt },
   { id: 'fiscalisation', label: 'ZIMRA Fiscal', icon: Cpu },
   { id: 'accounting_erp', label: 'Accounting & ERP', icon: BriefcaseBusiness },
   { id: 'ai_insights_addon', label: 'AI Insights', icon: Sparkles },
@@ -1152,20 +1151,6 @@ export default function Settings() {
                     </Button>
                   </div>
                 </div>
-              </div>
-            )}
-
-            {activeSection === 'receipts' && (
-              <div className="space-y-6">
-                <h3 className="text-lg font-bold text-slate-900 dark:text-white">Receipt Settings</h3>
-                <p className="text-sm text-slate-500">
-                  Everything that prints on your receipts — store details, TIN, footer message, paper
-                  size, and the optional POS Printer button — is managed under <b>Receipts Config</b> in
-                  the sidebar. ZIMRA Fiscalisation has its own <b>ZIMRA Fiscal</b> tab.
-                </p>
-                <Button variant="secondary" onClick={() => setActiveSection('store')}>
-                  Open Receipts Config
-                </Button>
               </div>
             )}
 
