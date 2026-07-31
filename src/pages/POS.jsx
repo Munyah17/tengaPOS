@@ -73,6 +73,13 @@ export default function POS() {
   const [salespersonStaffId, setSalespersonStaffId] = useState('')
   const [salespersonManualName, setSalespersonManualName] = useState('')
   const [salespersonManualEmpNo, setSalespersonManualEmpNo] = useState('')
+  // Pharmacy Mode: prescription/controlled-substance capture. Data-driven
+  // (checks each cart line's own dispensing_class) rather than gated on
+  // posMode === 'pharmacy' -- a non-pharmacy tenant could still stock a
+  // handful of scheduled items, and the compliance record should never be
+  // skippable just because the tenant's overall mode is something else.
+  const [showPrescriptionModal, setShowPrescriptionModal] = useState(false)
+  const [prescriptionForm, setPrescriptionForm] = useState({ customerName: '', prescriberName: '', prescriberLicenseNo: '' })
   const videoRef = useRef(null)
   const scanStreamRef = useRef(null)
   const fmt = (n) => formatCurrency(n, tenant?.currency)
@@ -205,6 +212,11 @@ export default function POS() {
     })
   }, [products, search, category])
 
+  const pharmacyItems = useMemo(
+    () => cart.items.filter((i) => i.dispensing_class === 'prescription' || i.dispensing_class === 'controlled'),
+    [cart.items]
+  )
+
   // Mobile-money methods run through Paynow's hosted checkout, never manually
   const PAYNOW_METHODS = ['ecocash', 'innbucks', 'omari', 'onemoney', 'zipit']
   const tenderedAmount = parseFloat(amountTendered) || 0
@@ -228,6 +240,17 @@ export default function POS() {
     setSalespersonStaffId('')
     setSalespersonManualName('')
     setSalespersonManualEmpNo('')
+  }
+
+  // Gate on the prescriber capture before actually charging anything —
+  // never take payment for a prescription/controlled item without the
+  // compliance details already in hand.
+  const handleCheckoutClick = () => {
+    if (pharmacyItems.length > 0 && !prescriptionForm.prescriberName.trim()) {
+      setShowPrescriptionModal(true)
+      return
+    }
+    handleCheckout()
   }
 
   const handleCheckout = async () => {
@@ -378,6 +401,33 @@ export default function POS() {
       completeJobCard(cart.sourceJobCardId, completedOrderId).catch((err) => {
         toast.error(`Payment taken, but couldn't mark the job card complete: ${err.message || 'unknown error'} — mark it manually.`, { duration: 8000 })
       })
+    }
+
+    // Pharmacy Mode compliance log — one row per prescription/controlled
+    // line item, same prescriber/customer details captured once for the
+    // whole basket. Best-effort like the fiscal submission above: the sale
+    // itself already succeeded, so a logging failure here shouldn't look
+    // like the transaction failed, but it also shouldn't be silent —
+    // missing a controlled-substance compliance record is a real problem
+    // someone needs to know about and fix (e.g. re-enter it manually).
+    if (pharmacyItems.length > 0 && completedOrderId) {
+      for (const item of pharmacyItems) {
+        recordPrescriptionDispense(tenant.id, {
+          branchId: branch?.id || null,
+          orderId: completedOrderId,
+          productId: item.id,
+          qty: item.quantity,
+          customerName: prescriptionForm.customerName.trim() || null,
+          prescriberName: prescriptionForm.prescriberName.trim(),
+          prescriberLicenseNo: prescriptionForm.prescriberLicenseNo.trim() || null,
+          dispensingClass: item.dispensing_class,
+          controlledSchedule: item.controlled_schedule || null,
+          userId: user?.id || null,
+        }).catch((err) => {
+          toast.error(`Sale completed, but couldn't log the dispensing record for ${item.name}: ${err.message || 'unknown error'} — record it manually.`, { duration: 8000 })
+        })
+      }
+      setPrescriptionForm({ customerName: '', prescriberName: '', prescriberLicenseNo: '' })
     }
 
     const grossTotal = cart.items.reduce((s, i) => s + i.price * i.quantity, 0)
@@ -949,7 +999,7 @@ export default function POS() {
             variant={isRestaurant ? 'restaurant' : 'primary'}
             size="lg"
             className="mt-3 w-full"
-            onClick={handleCheckout}
+            onClick={handleCheckoutClick}
             disabled={cart.items.length === 0 || checkingOut || cashShortfall || !tenant?.id}
           >
             {checkingOut ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Receipt className="h-4 w-4" />}
@@ -976,6 +1026,65 @@ export default function POS() {
           </p>
         </div>
       </div>
+
+      {/* Pharmacy Mode — capture prescriber/customer details before charging
+          for a prescription/controlled item. One capture covers every
+          qualifying line in the basket. */}
+      {showPrescriptionModal && (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/70 px-4">
+          <div className="w-full max-w-md rounded-2xl bg-white p-5 shadow-2xl dark:bg-slate-900">
+            <h3 className="text-base font-bold text-slate-900 dark:text-white">Prescription Details Required</h3>
+            <p className="mt-1 text-sm text-slate-500">
+              This sale includes {pharmacyItems.length === 1 ? pharmacyItems[0].name : `${pharmacyItems.length} controlled/prescription items`} — capture the prescriber before completing the sale.
+            </p>
+            <div className="mt-4 space-y-3">
+              <div>
+                <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">Prescriber Name *</label>
+                <input
+                  autoFocus
+                  value={prescriptionForm.prescriberName}
+                  onChange={(e) => setPrescriptionForm((f) => ({ ...f, prescriberName: e.target.value }))}
+                  className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">Prescriber License No.</label>
+                <input
+                  value={prescriptionForm.prescriberLicenseNo}
+                  onChange={(e) => setPrescriptionForm((f) => ({ ...f, prescriberLicenseNo: e.target.value }))}
+                  className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">Customer Name</label>
+                <input
+                  value={prescriptionForm.customerName}
+                  onChange={(e) => setPrescriptionForm((f) => ({ ...f, customerName: e.target.value }))}
+                  className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                />
+              </div>
+            </div>
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                onClick={() => setShowPrescriptionModal(false)}
+                className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  if (!prescriptionForm.prescriberName.trim()) { toast.error('Prescriber name is required'); return }
+                  setShowPrescriptionModal(false)
+                  handleCheckout()
+                }}
+                className="rounded-xl bg-brand-600 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-700"
+              >
+                Continue to Payment
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Receipt Modal — ZIMRA Receipt48 format */}
       {showReceipt && receiptData && (

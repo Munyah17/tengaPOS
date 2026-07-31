@@ -8,6 +8,7 @@ import {
 import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/stores/authStore'
 import { buildShadeScale, INDUSTRIES } from '@/lib/whitelabelTheme'
+import { invokeEdgeFunction } from '@/lib/edgeFunction'
 import toast from 'react-hot-toast'
 
 // ─── Plan metadata ────────────────────────────────────────────────────────────
@@ -1258,6 +1259,157 @@ export function TenantModal({ tenant, technicians, onClose, onSaved }) {
   )
 }
 
+// ─── Create Tenant (Super Admin direct creation) ───────────────────────────────
+// For businesses onboarded over the phone/WhatsApp, or any case where a
+// tenant shouldn't have to go through the public /register + approval flow.
+// Creates the tenant, the vendor's auth account, and the main branch as one
+// atomic unit (see supabase/functions/admin-create-tenant) — status is
+// 'active' immediately since the Super Admin creating it directly is itself
+// the approval.
+function CreateTenantModal({ onClose, onCreated }) {
+  const [form, setForm] = useState({
+    businessName: '', ownerName: '', email: '', password: '', phone: '',
+    posMode: 'retail', planType: 'standard_plan', currency: 'USD',
+  })
+  const [creating, setCreating] = useState(false)
+  const set = (key, val) => setForm((f) => ({ ...f, [key]: val }))
+
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+    if (form.password.length < 8) { toast.error('Password must be at least 8 characters'); return }
+    setCreating(true)
+    try {
+      const data = await invokeEdgeFunction('admin-create-tenant', {
+        businessName: form.businessName.trim(),
+        ownerName: form.ownerName.trim(),
+        email: form.email.trim(),
+        password: form.password,
+        phone: form.phone.trim() || null,
+        posMode: form.posMode,
+        planType: form.planType,
+        features: DEFAULT_FEATURES[form.planType] || {},
+        currency: form.currency,
+      })
+      toast.success(`${form.businessName} created — ${form.ownerName} can sign in now`)
+      onCreated(data)
+    } catch (err) {
+      toast.error(err.message || 'Failed to create tenant')
+    } finally {
+      setCreating(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4 backdrop-blur-sm">
+      <div className="flex w-full max-w-lg flex-col rounded-2xl border border-white/10 bg-white shadow-2xl dark:bg-slate-900" style={{ maxHeight: '90vh' }}>
+        <div className="flex flex-shrink-0 items-center justify-between border-b border-white/10 p-5">
+          <div>
+            <p className="font-bold text-slate-900 dark:text-white">Create Tenant</p>
+            <p className="text-xs text-slate-500">Sets up the business and its owner account immediately — no approval step needed.</p>
+          </div>
+          <button onClick={onClose} className="flex-shrink-0 rounded-lg p-1.5 text-slate-500 hover:bg-white/10 hover:text-white">
+            <XCircle className="h-5 w-5" />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="flex-1 space-y-4 overflow-y-auto p-5">
+          <div>
+            <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">Business Name *</label>
+            <input
+              value={form.businessName}
+              onChange={(e) => set('businessName', e.target.value)}
+              required
+              className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">Business Type</label>
+              <select
+                value={form.posMode}
+                onChange={(e) => set('posMode', e.target.value)}
+                className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+              >
+                {BUSINESS_MODES.map((m) => <option key={m.key} value={m.key}>{m.label}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">Plan</label>
+              <select
+                value={form.planType}
+                onChange={(e) => set('planType', e.target.value)}
+                className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+              >
+                {Object.entries(PLANS).map(([key, p]) => <option key={key} value={key}>{p.label}</option>)}
+              </select>
+            </div>
+          </div>
+
+          <div className="border-t border-slate-200 pt-4 dark:border-slate-700">
+            <p className="mb-3 text-sm font-semibold text-slate-700 dark:text-slate-300">Business Owner (Vendor)</p>
+            <div className="space-y-3">
+              <div>
+                <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">Full Name *</label>
+                <input
+                  value={form.ownerName}
+                  onChange={(e) => set('ownerName', e.target.value)}
+                  required
+                  className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">Email *</label>
+                <input
+                  type="email"
+                  value={form.email}
+                  onChange={(e) => set('email', e.target.value)}
+                  required
+                  className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">Phone</label>
+                  <input
+                    value={form.phone}
+                    onChange={(e) => set('phone', e.target.value)}
+                    className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">Password *</label>
+                  <input
+                    type="text"
+                    value={form.password}
+                    onChange={(e) => set('password', e.target.value)}
+                    placeholder="Min. 8 characters"
+                    required
+                    className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-2 border-t border-slate-200 pt-4 dark:border-slate-700">
+            <button type="button" onClick={onClose} className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800">
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={creating}
+              className="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500 disabled:opacity-60"
+            >
+              {creating ? 'Creating…' : 'Create Tenant'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
+
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export default function AdminTenants() {
@@ -1268,7 +1420,9 @@ export default function AdminTenants() {
   const [search, setSearch] = useState('')
   const [tab, setTab] = useState('all')
   const [selected, setSelected] = useState(null)
+  const [showCreate, setShowCreate] = useState(false)
   const canManage = role === 'super_admin' || role === 'admin'
+  const isSuperAdmin = role === 'super_admin'
 
   const load = async () => {
     setLoading(true)
@@ -1323,14 +1477,24 @@ export default function AdminTenants() {
           <h1 className="text-2xl font-extrabold text-white">Tenants</h1>
           <p className="mt-1 text-sm text-slate-400">{tenants.length} registered businesses</p>
         </div>
-        <div className="relative max-w-xs flex-1 sm:flex-none">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
-          <input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search tenants…"
-            className="w-full rounded-xl border border-slate-200 bg-white dark:border-white/10 dark:bg-white/5 py-2 pl-10 pr-4 text-sm text-white placeholder-slate-500 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
-          />
+        <div className="flex flex-1 items-center gap-3 sm:flex-none">
+          <div className="relative max-w-xs flex-1 sm:flex-none">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search tenants…"
+              className="w-full rounded-xl border border-slate-200 bg-white dark:border-white/10 dark:bg-white/5 py-2 pl-10 pr-4 text-sm text-white placeholder-slate-500 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+            />
+          </div>
+          {isSuperAdmin && (
+            <button
+              onClick={() => setShowCreate(true)}
+              className="flex flex-shrink-0 items-center gap-1.5 rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500"
+            >
+              <Building2 className="h-4 w-4" /> Create Tenant
+            </button>
+          )}
         </div>
       </div>
 
@@ -1465,6 +1629,13 @@ export default function AdminTenants() {
           technicians={technicians}
           onClose={() => setSelected(null)}
           onSaved={() => { setSelected(null); load() }}
+        />
+      )}
+
+      {showCreate && (
+        <CreateTenantModal
+          onClose={() => setShowCreate(false)}
+          onCreated={() => { setShowCreate(false); load() }}
         />
       )}
     </div>
