@@ -1,13 +1,13 @@
 import { useState, useEffect, useMemo } from 'react'
 import { motion } from 'framer-motion'
-import { Eye, Bell, CheckCircle, Clock, Flame, Timer, Car, Store, X } from 'lucide-react'
+import { Eye, Bell, CheckCircle, Clock, Flame, Timer, Car, Store, X, Trash2, Loader2 } from 'lucide-react'
 import ExportMenu from '@/components/common/ExportMenu'
 import DateInput from '@/components/common/DateInput'
 import Modal from '@/components/common/Modal'
 import { formatCurrency, formatDateTime } from '@/utils/formatters'
 import { useThemeStore } from '@/stores/themeStore'
 import { useAuthStore } from '@/stores/authStore'
-import { fetchOrders } from '@/lib/db'
+import { fetchOrders, deleteOrder } from '@/lib/db'
 import { supabase } from '@/lib/supabase'
 import { loadWithOfflineCache } from '@/lib/offlineCache'
 import toast from 'react-hot-toast'
@@ -147,12 +147,13 @@ function RestaurantOrders({ orders }) {
 
 export default function Orders() {
   const { posMode } = useThemeStore()
-  const { tenant } = useAuthStore()
+  const { tenant, role } = useAuthStore()
   const isRestaurant = posMode === 'restaurant'
   const [rawOrders, setRawOrders] = useState([])
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
   const [viewOrder, setViewOrder] = useState(null)
+  const [deletingId, setDeletingId] = useState(null)
   // Re-render periodically so "elapsed minutes" on restaurant order cards
   // keeps ticking even with no new realtime events
   const [, setClockTick] = useState(0)
@@ -193,6 +194,20 @@ export default function Orders() {
       window.removeEventListener('tengapos:force-refresh', loadOrders)
     }
   }, [tenant?.id])
+
+  const handleDeleteOrder = async (order) => {
+    if (!window.confirm(`Delete order ${order.id}? This can't be undone.`)) return
+    setDeletingId(order._raw.id)
+    try {
+      await deleteOrder(order._raw.id)
+      setRawOrders((prev) => prev.filter((o) => o.id !== order._raw.id))
+      toast.success('Order deleted')
+    } catch (err) {
+      toast.error(err.message || 'Failed to delete order')
+    } finally {
+      setDeletingId(null)
+    }
+  }
 
   const dbOrders = useMemo(() => rawOrders.map(o => ({
     id: o.order_no || o.id,
@@ -302,13 +317,25 @@ export default function Orders() {
                     </span>
                   </td>
                   <td className="px-4 py-3">
-                    <button
-                      onClick={() => setViewOrder(order)}
-                      className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
-                      title="View order details"
-                    >
-                      <Eye className="h-4 w-4" />
-                    </button>
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={() => setViewOrder(order)}
+                        className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
+                        title="View order details"
+                      >
+                        <Eye className="h-4 w-4" />
+                      </button>
+                      {role === 'vendor' && (
+                        <button
+                          onClick={() => handleDeleteOrder(order)}
+                          disabled={deletingId === order._raw.id}
+                          className="rounded-lg p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-500 disabled:opacity-50 dark:hover:bg-red-950/40"
+                          title="Delete order"
+                        >
+                          {deletingId === order._raw.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                        </button>
+                      )}
+                    </div>
                   </td>
                 </motion.tr>
               ))}

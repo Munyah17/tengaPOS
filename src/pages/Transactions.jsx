@@ -3,7 +3,7 @@ import { useState, useMemo, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { withOfflineCache, seedFromOfflineCache } from '@/lib/offlineCache'
-import { RefreshCw, X, Ban, CheckCircle, ShieldCheck, XCircle, Undo2, Wrench } from 'lucide-react'
+import { RefreshCw, X, Ban, CheckCircle, ShieldCheck, XCircle, Undo2, Wrench, Trash2, Loader2 } from 'lucide-react'
 import ExportMenu from '@/components/common/ExportMenu'
 import DateInput from '@/components/common/DateInput'
 import { formatCurrency, formatDateTime } from '@/utils/formatters'
@@ -11,7 +11,7 @@ import { useAuthStore } from '@/stores/authStore'
 import { useThemeStore } from '@/stores/themeStore'
 import {
   fetchTransactions, fetchVoids, requestVoid, approveVoid, validateVoid, rejectVoid,
-  fetchReturns, requestReturn, approveReturn, validateReturn, rejectReturn,
+  fetchReturns, requestReturn, approveReturn, validateReturn, rejectReturn, deleteOrder,
 } from '@/lib/db'
 import toast from 'react-hot-toast'
 
@@ -140,6 +140,7 @@ export default function Transactions() {
   const [dateTo, setDateTo] = useState('')
   const [voidTarget, setVoidTarget] = useState(null) // order_id currently requesting a void
   const [returnTarget, setReturnTarget] = useState(null) // { orderId, maxAmount } currently requesting a return
+  const [deletingId, setDeletingId] = useState(null)
 
   const canApprove = ['shop_manager', 'supervisor', 'vendor'].includes(role)
   const canValidate = role === 'vendor'
@@ -292,6 +293,21 @@ export default function Transactions() {
     }
   }
 
+  const handleDeleteTransaction = async (t) => {
+    if (!t.orderId) { toast.error('Unavailable for this record'); return }
+    if (!window.confirm(`Delete transaction ${t.id}? This can't be undone.`)) return
+    setDeletingId(t.orderId)
+    try {
+      await deleteOrder(t.orderId)
+      queryClient.setQueryData(['transactions', tenant?.id], (prev) => (prev || []).filter((x) => x.orderId !== t.orderId))
+      toast.success('Transaction deleted')
+    } catch (err) {
+      toast.error(err.message || 'Failed to delete transaction')
+    } finally {
+      setDeletingId(null)
+    }
+  }
+
   const transactions = useMemo(() => {
     if (!dateFrom && !dateTo) return allTransactions
     return allTransactions.filter(t => {
@@ -363,7 +379,7 @@ export default function Transactions() {
           <table className="w-full">
             <thead>
               <tr className="border-b border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-900">
-                {['Receipt #', 'Date', 'Cashier', 'Items', 'Subtotal', 'Tax', 'Total', 'Payment', 'Branch', 'Void / Return', ...(isWorkshop ? [''] : [])].map((h, idx) => (
+                {['Receipt #', 'Date', 'Cashier', 'Items', 'Subtotal', 'Tax', 'Total', 'Payment', 'Branch', 'Void / Return', '', ...(isWorkshop ? [''] : [])].map((h, idx) => (
                   <th key={idx} className="px-4 py-3 text-left text-xs font-semibold uppercase text-slate-500">{h}</th>
                 ))}
               </tr>
@@ -371,7 +387,7 @@ export default function Transactions() {
             <tbody>
               {transactions.length === 0 ? (
                 <tr>
-                  <td colSpan={isWorkshop ? 11 : 10} className="py-16 text-center text-sm text-slate-400">
+                  <td colSpan={isWorkshop ? 12 : 11} className="py-16 text-center text-sm text-slate-400">
                     No transactions yet — complete a sale on the POS to see it here.
                   </td>
                 </tr>
@@ -467,6 +483,18 @@ export default function Transactions() {
                         </div>
                       )
                     })()}
+                  </td>
+                  <td className="px-4 py-3">
+                    {role === 'vendor' && (
+                      <button
+                        onClick={() => handleDeleteTransaction(t)}
+                        disabled={deletingId === t.orderId}
+                        className="rounded-lg p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-500 disabled:opacity-50 dark:hover:bg-red-950/40"
+                        title="Delete transaction"
+                      >
+                        {deletingId === t.orderId ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                      </button>
+                    )}
                   </td>
                   {isWorkshop && (
                     <td className="px-4 py-3">

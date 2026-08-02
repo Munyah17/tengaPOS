@@ -326,6 +326,14 @@ export async function fetchOrders(tenantId, filters = {}) {
   return data
 }
 
+// Vendor-only, deletes the order + its transaction(s) + line items in one
+// go (see delete_order RPC). Same underlying record whether reached from
+// Orders.jsx or Transactions.jsx.
+export async function deleteOrder(orderId) {
+  const { error } = await supabase.rpc('delete_order', { p_order_id: orderId })
+  if (error) throw error
+}
+
 // ─── Transactions ─────────────────────────────────────────────────────────────
 
 export async function fetchTransactions(tenantId) {
@@ -1797,6 +1805,11 @@ export async function findDuplicateVehicle(tenantId, regNumber) {
 
 export async function updateJobCard(jobCardId, updates) {
   const { error } = await supabase.from('job_cards').update(updates).eq('id', jobCardId)
+  if (error) throw error
+}
+
+export async function deleteJobCard(jobCardId) {
+  const { error } = await supabase.from('job_cards').delete().eq('id', jobCardId)
   if (error) throw error
 }
 

@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
-import { Plus, Wrench, Trash2, Car, User, Receipt, Edit3, AlertTriangle } from 'lucide-react'
+import { Plus, Wrench, Trash2, Car, User, Receipt, Edit3, AlertTriangle, Loader2 } from 'lucide-react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import Modal from '@/components/common/Modal'
 import Button from '@/components/common/Button'
@@ -8,7 +8,7 @@ import { formatCurrency } from '@/utils/formatters'
 import { useAuthStore } from '@/stores/authStore'
 import { useCartStore } from '@/stores/cartStore'
 import {
-  fetchJobCards, fetchCustomers, createCustomer, createVehicle, createJobCard, updateJobCard,
+  fetchJobCards, fetchCustomers, createCustomer, createVehicle, createJobCard, updateJobCard, deleteJobCard,
   fetchTechnicians, fetchProducts, findDuplicateCustomer, findDuplicateVehicle, createQuotationFromJobCard,
 } from '@/lib/db'
 import { loadWithOfflineCache } from '@/lib/offlineCache'
@@ -344,7 +344,7 @@ function JobCardModal({ tenant, branch, customers, technicians, products, existi
 }
 
 export default function JobCards() {
-  const { tenant, branch } = useAuthStore()
+  const { tenant, branch, role } = useAuthStore()
   const cart = useCartStore()
   const navigate = useNavigate()
   const location = useLocation()
@@ -355,6 +355,7 @@ export default function JobCards() {
   const [showNew, setShowNew] = useState(false)
   const [editingCard, setEditingCard] = useState(null)
   const [filter, setFilter] = useState('active')
+  const [deletingId, setDeletingId] = useState(null)
 
   // Arrived here via "Create Job Card" on an accepted quotation
   // (Quotations.jsx / Invoicing.jsx) -- pre-fill the new job card with the
@@ -404,6 +405,20 @@ export default function JobCards() {
     status: STATUS_META[jc.status]?.label || jc.status,
     total: formatCurrency(jc.total),
   })), [filtered])
+
+  const handleDeleteJobCard = async (jc) => {
+    if (!window.confirm(`Delete job card ${jc.job_card_no}? This can't be undone.`)) return
+    setDeletingId(jc.id)
+    try {
+      await deleteJobCard(jc.id)
+      setJobCards((prev) => prev.filter((j) => j.id !== jc.id))
+      toast.success('Job card deleted')
+    } catch (err) {
+      toast.error(err.message || 'Failed to delete job card')
+    } finally {
+      setDeletingId(null)
+    }
+  }
 
   const advanceStatus = async (jc, status) => {
     try {
@@ -479,6 +494,16 @@ export default function JobCards() {
                     {jc.status !== 'completed' && (
                       <button onClick={() => setEditingCard(jc)} className="rounded-lg p-1 text-slate-400 hover:bg-white hover:text-slate-600 dark:hover:bg-slate-800">
                         <Edit3 className="h-3.5 w-3.5" />
+                      </button>
+                    )}
+                    {role === 'vendor' && (
+                      <button
+                        onClick={() => handleDeleteJobCard(jc)}
+                        disabled={deletingId === jc.id}
+                        className="rounded-lg p-1 text-slate-400 hover:bg-white hover:text-red-500 disabled:opacity-50 dark:hover:bg-slate-800"
+                        title="Delete job card"
+                      >
+                        {deletingId === jc.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
                       </button>
                     )}
                   </div>
