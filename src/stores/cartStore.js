@@ -58,16 +58,23 @@ export const useCartStore = create((set, get) => ({
   removeItem: (productId) =>
     set((state) => ({ items: state.items.filter((i) => i.id !== productId) })),
 
-  updateQuantity: (productId, quantity) =>
+  // Returns the quantity actually applied (may be less than requested if
+  // capped by stock) so callers can tell the difference between "typing
+  // didn't work" and "capped, here's why" instead of silently truncating.
+  updateQuantity: (productId, quantity) => {
+    let applied = quantity
     set((state) => ({
       items: state.items.map((i) => {
         if (i.id !== productId) return i
         let q = Math.max(0, quantity)
         // Cap at available stock
         if (i.stock != null && i.stock !== 999 && q > i.stock) q = i.stock
+        applied = q
         return { ...i, quantity: q, price: tieredUnitPrice(i.basePrice, i.price_tiers, q) }
       }).filter((i) => i.quantity > 0),
-    })),
+    }))
+    return applied
+  },
 
   setItemDiscount: (productId, discount) =>
     set((state) => ({

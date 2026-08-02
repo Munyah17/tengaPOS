@@ -22,6 +22,10 @@ const ALL_NAV_ITEMS = [
   { key: 'vehicle_registry', icon: Car, label: 'Vehicle Registry', path: '/app/vehicle-registry', workshopOnly: true },
   { key: 'mechanics', icon: HardHat, label: 'Mechanics', path: '/app/mechanics', workshopOnly: true },
   { key: 'quotations', icon: FileSignature, label: 'Quotations', path: '/app/quotations', workshopOnly: true },
+  // Core POS feature, not part of the paid Accounting & ERP add-on — the
+  // advanced payment-tracking layer within this same page is what's
+  // add-on-gated (see accountingErpActive in Invoicing.jsx).
+  { key: 'invoicing', icon: FileText, label: 'Invoicing', path: '/app/invoicing' },
   { key: 'production', icon: Factory, label: 'Production', path: '/app/production', manufacturingOnly: true },
   { key: 'prescriptions', icon: Pill, label: 'Prescriptions', path: '/app/prescriptions', pharmacyOnly: true },
   { key: 'age_verifications', icon: ShieldCheck, label: 'Age Verifications', path: '/app/age-verifications', barOnly: true },
@@ -38,7 +42,6 @@ const ALL_NAV_ITEMS = [
     addonFeature: 'accounting_erp', addonTitle: 'Accounting & ERP is an optional add-on — request it in Settings',
     children: [
       { key: 'hr', icon: BriefcaseBusiness, label: 'HR & Payroll', path: '/app/hr' },
-      { key: 'invoicing', icon: FileText, label: 'Invoicing', path: '/app/invoicing' },
       { key: 'customers', icon: Users, label: 'Customers', path: '/app/customers' },
       { key: 'statements', icon: FileBarChart, label: 'Statements', path: '/app/statements' },
       { key: 'accounting', icon: Landmark, label: 'Accounting', path: '/app/accounting' },

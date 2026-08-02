@@ -728,6 +728,56 @@ export default function Settings() {
     }
   }
 
+  // ─── Delete test data (Vendor-only, own tenant, date-range scoped) ───
+  const [cleanupFrom, setCleanupFrom] = useState('')
+  const [cleanupTo, setCleanupTo] = useState('')
+  const [cleanupPreview, setCleanupPreview] = useState(null)
+  const [cleanupConfirmText, setCleanupConfirmText] = useState('')
+  const [cleanupBusy, setCleanupBusy] = useState(false)
+
+  const previewCleanup = async () => {
+    if (!cleanupFrom || !cleanupTo) { toast.error('Pick a date range'); return }
+    setCleanupBusy(true)
+    setCleanupPreview(null)
+    setCleanupConfirmText('')
+    try {
+      const { data, error } = await supabase.rpc('delete_test_transactions', {
+        p_from: new Date(cleanupFrom).toISOString(),
+        p_to: new Date(cleanupTo + 'T23:59:59').toISOString(),
+        p_dry_run: true,
+      })
+      if (error) throw error
+      setCleanupPreview(data)
+    } catch (err) {
+      toast.error(err.message || 'Failed to preview')
+    } finally {
+      setCleanupBusy(false)
+    }
+  }
+
+  const confirmCleanup = async () => {
+    if (cleanupConfirmText !== 'DELETE') { toast.error('Type DELETE to confirm'); return }
+    setCleanupBusy(true)
+    try {
+      const { data, error } = await supabase.rpc('delete_test_transactions', {
+        p_from: new Date(cleanupFrom).toISOString(),
+        p_to: new Date(cleanupTo + 'T23:59:59').toISOString(),
+        p_dry_run: false,
+      })
+      if (error) throw error
+      toast.success(`Deleted ${data.orders} orders, ${data.transactions} transactions, ${data.documents} documents, ${data.job_cards} job cards`)
+      setCleanupPreview(null)
+      setCleanupFrom('')
+      setCleanupTo('')
+      setCleanupConfirmText('')
+      window.dispatchEvent(new CustomEvent('tengapos:force-refresh'))
+    } catch (err) {
+      toast.error(err.message || 'Failed to delete')
+    } finally {
+      setCleanupBusy(false)
+    }
+  }
+
   const [fiscalForm, setFiscalForm] = useState({
     deviceID: '',
     activationKey: '',
@@ -2263,6 +2313,56 @@ export default function Settings() {
                     Change your password from the sign-in screen using "Forgot password?", or ask an
                     Admin/Shop Manager to reset it for you.
                   </p>
+                </div>
+
+                <div className="rounded-xl border-2 border-red-200 bg-red-50/50 p-4 dark:border-red-900/50 dark:bg-red-950/10">
+                  <span className="text-sm font-semibold text-red-700 dark:text-red-400">Delete Test Data</span>
+                  <p className="mt-0.5 text-xs text-slate-500">
+                    For clearing out test sales made while setting up, before you go live. Permanently deletes
+                    orders, transactions, quotations/invoices, and job cards created in the date range below —
+                    products, customers, staff, and branches are never touched. This does not restore stock
+                    quantities changed by the deleted sales. This cannot be undone.
+                  </p>
+                  <div className="mt-3 flex flex-wrap items-end gap-2">
+                    <div>
+                      <label className="mb-1 block text-xs font-semibold text-slate-500">From</label>
+                      <input type="date" value={cleanupFrom} onChange={(e) => { setCleanupFrom(e.target.value); setCleanupPreview(null) }} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white" />
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-xs font-semibold text-slate-500">To</label>
+                      <input type="date" value={cleanupTo} onChange={(e) => { setCleanupTo(e.target.value); setCleanupPreview(null) }} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white" />
+                    </div>
+                    <Button variant="secondary" onClick={previewCleanup} disabled={cleanupBusy || !cleanupFrom || !cleanupTo}>
+                      {cleanupBusy && !cleanupPreview ? 'Checking…' : 'Preview'}
+                    </Button>
+                  </div>
+
+                  {cleanupPreview && (
+                    <div className="mt-4 rounded-xl border border-red-200 bg-white p-3 dark:border-red-900/50 dark:bg-slate-900">
+                      {cleanupPreview.orders === 0 && cleanupPreview.transactions === 0 && cleanupPreview.documents === 0 && cleanupPreview.job_cards === 0 ? (
+                        <p className="text-sm text-slate-500">Nothing to delete in that range.</p>
+                      ) : (
+                        <>
+                          <p className="text-sm text-slate-700 dark:text-slate-300">
+                            This will permanently delete <b>{cleanupPreview.orders}</b> orders, <b>{cleanupPreview.transactions}</b> transactions,{' '}
+                            <b>{cleanupPreview.documents}</b> quotations/invoices, and <b>{cleanupPreview.job_cards}</b> job cards.
+                          </p>
+                          <label className="mb-1 mt-3 block text-xs font-semibold text-slate-500">Type DELETE to confirm</label>
+                          <div className="flex items-center gap-2">
+                            <input
+                              value={cleanupConfirmText}
+                              onChange={(e) => setCleanupConfirmText(e.target.value)}
+                              placeholder="DELETE"
+                              className="w-40 rounded-xl border border-red-300 bg-white px-3 py-2 text-sm dark:border-red-800 dark:bg-slate-800 dark:text-white"
+                            />
+                            <Button variant="danger" onClick={confirmCleanup} disabled={cleanupBusy || cleanupConfirmText !== 'DELETE'}>
+                              {cleanupBusy ? 'Deleting…' : 'Delete Permanently'}
+                            </Button>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
             )}

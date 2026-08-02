@@ -86,6 +86,27 @@ export default function Customers() {
       || c.email?.toLowerCase().includes(q))
   }, [customers, search])
 
+  // A standalone customer database is Accounting & ERP tier, not core POS --
+  // basic Invoicing/Quotations still work without it (findOrCreateCustomer
+  // there isn't gated), tenants just don't get this dedicated management
+  // page unless they're on the add-on.
+  if (tenant?.features?.accounting_erp !== true) {
+    return (
+      <div className="p-4 sm:p-6">
+        <div className="mb-6">
+          <h1 className="text-2xl font-extrabold text-slate-900 dark:text-white">Customers</h1>
+          <p className="text-sm text-slate-500">Your customer database</p>
+        </div>
+        <div className="rounded-2xl border-2 border-amber-300 bg-amber-50 p-6 dark:border-amber-700/50 dark:bg-amber-900/20">
+          <h4 className="font-bold text-amber-900 dark:text-amber-200">Customers isn't active yet</h4>
+          <p className="mt-1 text-sm text-amber-800 dark:text-amber-300">
+            This is part of the Accounting & ERP add-on ($5/month). Request it from Settings and it'll unlock here once approved.
+          </p>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="p-4 sm:p-6">
       <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">

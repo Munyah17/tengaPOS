@@ -32,6 +32,50 @@ const restaurantCategories = [
   { id: 'desserts', name: 'Desserts' },
 ]
 
+// Cart quantity: always a real input, not a click-to-reveal span. The
+// previous version only became editable after tapping the number, with the
+// only hint being a hover title tooltip -- invisible on the touchscreen
+// tablets this app actually runs on, so bulk-quantity users (manufacturing
+// especially) never discovered it and were stuck clicking +/- one at a
+// time. Own local draft state per row so N cart rows can each be typed
+// into independently without fighting a single shared field.
+function CartQtyField({ item, onCommit }) {
+  const [draft, setDraft] = useState(String(item.quantity))
+  const [focused, setFocused] = useState(false)
+  const isFractional = FRACTIONAL_UNITS.includes(item.unit)
+
+  useEffect(() => {
+    if (!focused) setDraft(String(item.quantity))
+  }, [item.quantity, focused])
+
+  const commit = () => {
+    setFocused(false)
+    const n = isFractional ? parseFloat(draft) : parseInt(draft, 10)
+    if (Number.isFinite(n) && n > 0) {
+      const applied = onCommit(n)
+      // updateQuantity silently caps at available stock -- surface it, or a
+      // bulk quantity that gets quietly truncated reads as "typing didn't work."
+      if (applied != null && applied !== n) toast.error(`Only ${applied} in stock — quantity capped`)
+    } else {
+      setDraft(String(item.quantity))
+    }
+  }
+
+  return (
+    <input
+      type="number"
+      min={unitStep(item.unit)}
+      step={isFractional ? '0.01' : '1'}
+      value={draft}
+      onFocus={(e) => { setFocused(true); e.target.select() }}
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={commit}
+      onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur() }}
+      className="w-14 rounded-lg border border-slate-300 bg-white px-1 py-0.5 text-center text-sm font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-brand-500 dark:border-slate-600 dark:bg-slate-800 dark:text-white"
+    />
+  )
+}
+
 export default function POS() {
   const { posMode } = useThemeStore()
   const { tenant, user, branch } = useAuthStore()
@@ -47,18 +91,6 @@ export default function POS() {
   const fiscal = useFiscalStore()
   const [search, setSearch] = useState('')
   const [category, setCategory] = useState('all')
-  // Cart quantity: click the number to type an exact value directly instead
-  // of clicking +/- one at a time (painful for bulk quantities like 100).
-  const [editingQtyId, setEditingQtyId] = useState(null)
-  const [qtyDraft, setQtyDraft] = useState('')
-  // Hardware Mode items sold by kg/m/L etc. need a real decimal quantity
-  // (2.5kg) rather than being rounded down to a whole unit.
-  const commitQtyDraft = (itemId, unit) => {
-    const isFractional = FRACTIONAL_UNITS.includes(unit)
-    const n = isFractional ? parseFloat(qtyDraft) : parseInt(qtyDraft, 10)
-    if (Number.isFinite(n) && n > 0) cart.updateQuantity(itemId, n)
-    setEditingQtyId(null)
-  }
   const [showReceipt, setShowReceipt] = useState(false)
   const [receiptData, setReceiptData] = useState(null)
   const [paynowLoading, setPaynowLoading] = useState(false)
@@ -768,31 +800,12 @@ export default function POS() {
                         >
                           <Minus className="h-3 w-3" />
                         </button>
-                        {editingQtyId === item.id ? (
-                          <input
-                            type="number"
-                            min={unitStep(item.unit)}
-                            step={FRACTIONAL_UNITS.includes(item.unit) ? '0.01' : '1'}
-                            autoFocus
-                            value={qtyDraft}
-                            onChange={(e) => setQtyDraft(e.target.value)}
-                            onFocus={(e) => e.target.select()}
-                            onBlur={() => commitQtyDraft(item.id, item.unit)}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') { e.currentTarget.blur() }
-                              else if (e.key === 'Escape') { setEditingQtyId(null) }
-                            }}
-                            className="w-14 rounded-lg border border-brand-300 bg-white px-1 py-0.5 text-center text-sm font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-brand-500 dark:border-brand-700 dark:bg-slate-800 dark:text-white"
-                          />
-                        ) : (
-                          <span
-                            onClick={() => { setEditingQtyId(item.id); setQtyDraft(String(item.quantity)) }}
-                            className="min-w-[2rem] cursor-text text-center text-sm font-bold text-slate-900 dark:text-white"
-                            title="Click to type a quantity"
-                          >
-                            {item.quantity}{FRACTIONAL_UNITS.includes(item.unit) ? item.unit : ''}
-                          </span>
-                        )}
+                        <div className="flex items-center gap-1">
+                          <CartQtyField item={item} onCommit={(n) => cart.updateQuantity(item.id, n)} />
+                          {FRACTIONAL_UNITS.includes(item.unit) && (
+                            <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">{item.unit}</span>
+                          )}
+                        </div>
                         <button
                           onClick={() => cart.updateQuantity(item.id, Math.round((item.quantity + unitStep(item.unit)) * 1000) / 1000)}
                           className={`flex h-7 w-7 items-center justify-center rounded-lg text-white ${

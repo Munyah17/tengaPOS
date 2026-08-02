@@ -60,6 +60,25 @@ export default function Statements() {
     { header: 'Paid', key: 'paid' }, { header: 'Balance', key: 'balance' }, { header: 'Running Balance', key: 'running_balance' },
   ]
 
+  // Statements (running balances across invoices) are Accounting & ERP
+  // tier, not core POS -- basic invoicing still works without this.
+  if (tenant?.features?.accounting_erp !== true) {
+    return (
+      <div className="p-4 sm:p-6">
+        <div className="mb-6">
+          <h1 className="text-2xl font-extrabold text-slate-900 dark:text-white">Statements</h1>
+          <p className="text-sm text-slate-500">Every invoice, payment, and running balance for one customer</p>
+        </div>
+        <div className="rounded-2xl border-2 border-amber-300 bg-amber-50 p-6 dark:border-amber-700/50 dark:bg-amber-900/20">
+          <h4 className="font-bold text-amber-900 dark:text-amber-200">Statements isn't active yet</h4>
+          <p className="mt-1 text-sm text-amber-800 dark:text-amber-300">
+            This is part of the Accounting & ERP add-on ($5/month). Request it from Settings and it'll unlock here once approved.
+          </p>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="p-4 sm:p-6">
       <div className="mb-6 flex flex-wrap items-center justify-between gap-3">

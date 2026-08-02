@@ -403,23 +403,12 @@ export default function Invoicing({ standalone = false } = {}) {
     form.vatEnabled,
   )
 
-  const erpUnlocked = standalone || tenant?.features?.accounting_erp === true
-  if (!erpUnlocked) {
-    return (
-      <div className="p-4 sm:p-6">
-        <div className="mb-6">
-          <h1 className="text-2xl font-extrabold text-slate-900 dark:text-white">Invoicing</h1>
-          <p className="text-sm text-slate-500">Quotations and invoices</p>
-        </div>
-        <div className="rounded-2xl border-2 border-amber-300 bg-amber-50 p-6 dark:border-amber-700/50 dark:bg-amber-900/20">
-          <h4 className="font-bold text-amber-900 dark:text-amber-200">Invoicing isn't active yet</h4>
-          <p className="mt-1 text-sm text-amber-800 dark:text-amber-300">
-            This is part of the Accounting & ERP add-on ($5/month). Request it from Settings and it'll unlock here once approved.
-          </p>
-        </div>
-      </div>
-    )
-  }
+  // Invoicing/Quotations themselves are a core POS feature, free for every
+  // tenant — no add-on gate. Partial-payment tracking (Record Payment /
+  // Statements) is the advanced, bookkeeping-tier layer on top of this same
+  // page, gated behind Accounting & ERP: basic tenants get a plain manual
+  // status flip (including 'paid'), subscribers get real payment tracking.
+  const accountingErpActive = tenant?.features?.accounting_erp === true
 
   return (
     <div className="p-4 sm:p-6">
@@ -502,7 +491,7 @@ export default function Invoicing({ standalone = false } = {}) {
                     <td className="px-4 py-3 text-sm text-slate-600 dark:text-slate-400">{formatDate(doc.created_at)}</td>
                     <td className="px-4 py-3 text-sm font-semibold text-slate-900 dark:text-white">{fmt(doc.total)}</td>
                     <td className="px-4 py-3">
-                      {doc.doc_type === 'invoice' && doc.status === 'paid' ? (
+                      {accountingErpActive && doc.doc_type === 'invoice' && doc.status === 'paid' ? (
                         <span className={`rounded-full px-2.5 py-0.5 text-xs font-bold ${STATUS_COLORS.paid}`}>paid</span>
                       ) : (
                         <select
@@ -510,7 +499,10 @@ export default function Invoicing({ standalone = false } = {}) {
                           onChange={(e) => handleStatusChange(doc, e.target.value)}
                           className={`rounded-full border-0 px-2.5 py-0.5 text-xs font-bold ${STATUS_COLORS[doc.status] || STATUS_COLORS.draft}`}
                         >
-                          {(doc.doc_type === 'invoice' ? ['draft', 'sent', 'cancelled'] : ['draft', 'sent', 'accepted', 'cancelled']).map((s) => (
+                          {(doc.doc_type === 'invoice'
+                            ? (accountingErpActive ? ['draft', 'sent', 'cancelled'] : ['draft', 'sent', 'paid', 'cancelled'])
+                            : ['draft', 'sent', 'accepted', 'cancelled']
+                          ).map((s) => (
                             <option key={s} value={s}>{s}</option>
                           ))}
                         </select>
@@ -518,7 +510,7 @@ export default function Invoicing({ standalone = false } = {}) {
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-1">
-                        {doc.doc_type === 'invoice' && doc.status !== 'cancelled' && (
+                        {accountingErpActive && doc.doc_type === 'invoice' && doc.status !== 'cancelled' && (
                           <button onClick={() => setPayingDoc(doc)} className="rounded-lg p-1.5 text-green-600 hover:bg-green-50 dark:text-green-400 dark:hover:bg-green-950/40" title="Record / view payments">
                             <DollarSign className="h-4 w-4" />
                           </button>
