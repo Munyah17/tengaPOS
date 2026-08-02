@@ -304,6 +304,16 @@ export default function Transactions() {
 
   const dateFiltered = dateFrom || dateTo
 
+  // A void only actually reverses the sale once the Vendor gives final
+  // validation (see validate_void) -- 'requested'/'approved' are still
+  // pending, so only 'validated' counts as voided here.
+  const isVoided = (t) => t.orderId && voidByOrder[t.orderId]?.status === 'validated'
+  const voidedStats = useMemo(() => {
+    const voided = transactions.filter(isVoided)
+    return { count: voided.length, total: voided.reduce((s, t) => s + t.total, 0) }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [transactions, voidByOrder])
+
   return (
     <div className="p-6">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
@@ -334,6 +344,20 @@ export default function Transactions() {
         </p>
       )}
 
+      {voidedStats.count > 0 && (
+        <div className="mb-4 flex items-center gap-3 rounded-2xl border border-red-200 bg-red-50 p-4 dark:border-red-900/50 dark:bg-red-950/20">
+          <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-red-100 text-red-600 dark:bg-red-900/40 dark:text-red-400">
+            <Ban className="h-5 w-5" />
+          </div>
+          <div>
+            <p className="text-xs text-red-700 dark:text-red-400">Voided Transactions{dateFiltered ? ' (selected range)' : ''}</p>
+            <p className="text-lg font-extrabold text-red-800 dark:text-red-300">
+              {voidedStats.count} · {formatCurrency(voidedStats.total)}
+            </p>
+          </div>
+        </div>
+      )}
+
       <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
         <div className="overflow-x-auto">
           <table className="w-full">
@@ -356,7 +380,11 @@ export default function Transactions() {
                   key={t.id}
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
-                  className="border-b border-slate-100 hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-800/50"
+                  className={`border-b transition-colors ${
+                    isVoided(t)
+                      ? 'border-red-100 bg-red-50 hover:bg-red-100 dark:border-red-900/40 dark:bg-red-950/20 dark:hover:bg-red-950/30'
+                      : 'border-slate-100 hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-800/50'
+                  }`}
                 >
                   <td className="px-4 py-3 font-mono text-sm font-medium text-slate-900 dark:text-white">{t.id}</td>
                   <td className="px-4 py-3 text-sm text-slate-600 dark:text-slate-400">{formatDateTime(t.date)}</td>

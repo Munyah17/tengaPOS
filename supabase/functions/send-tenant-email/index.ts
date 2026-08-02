@@ -54,9 +54,29 @@ function template(name: string, tenantName: string, extra: Record<string, unknow
       subject: `Your tengaPOS password was reset — ${tenantName}`,
       body: `Your tengaPOS sign-in for ${tenantName} was reset by our support team.\n\nEmail: ${extra.email}\nTemporary password: ${extra.password}\n\nPlease sign in and change this password as soon as you can. If you didn't expect this, contact us right away.`,
     },
+    new_signup: {
+      subject: `Welcome to tengaPOS, ${tenantName}!`,
+      body: `Hi,\n\nYour tengaPOS account for ${tenantName} has been created. Sign in any time to get started.\n\nIf you have questions, reply to this email or reach us on WhatsApp.`,
+    },
+    new_signup_admin: {
+      subject: `New signup: ${tenantName}`,
+      body: `${tenantName} just signed up for tengaPOS.\n\nOwner: ${extra.ownerName || '—'}\nEmail: ${extra.ownerEmail || '—'}\nPhone: ${extra.ownerPhone || '—'}\n\nReview it in the Super Admin portal.`,
+    },
+    trial_expired: {
+      subject: `Your tengaPOS free trial has ended — ${tenantName}`,
+      body: `Your 7-day free trial for ${tenantName} has ended and access has been paused. Pick a plan any time to pick up right where you left off — sign in to see your options.`,
+    },
+    trial_expired_admin: {
+      subject: `Trial expired: ${tenantName}`,
+      body: `${tenantName}'s 7-day free trial just ended with no plan selected, and their account has been suspended.\n\nOwner: ${extra.ownerName || '—'}\nEmail: ${extra.ownerEmail || '—'}\nPhone: ${extra.ownerPhone || '—'}\n\nFollow up if you want to try converting them.`,
+    },
   }
   return templates[name] || null
 }
+
+// These two go to the admin's own SMTP mailbox instead of the tenant owner
+// — a heads-up to act on, not a tenant-facing email.
+const ADMIN_ALERT_TEMPLATES = new Set(['new_signup_admin', 'trial_expired_admin'])
 
 async function sendMail(to: string, subject: string, body: string) {
   const host = Deno.env.get('SMTP_HOST')
@@ -126,14 +146,21 @@ serve(async (req) => {
 
     const [{ data: tenant }, { data: owner }] = await Promise.all([
       admin.from('tenants').select('name').eq('id', tenant_id).maybeSingle(),
-      admin.from('users').select('email').eq('tenant_id', tenant_id).eq('role', 'vendor').maybeSingle(),
+      admin.from('users').select('email, name, phone').eq('tenant_id', tenant_id).eq('role', 'vendor').maybeSingle(),
     ])
-    if (!owner?.email) return json({ error: 'No owner email found for this tenant' }, 404)
 
-    const t = template(templateName, tenant?.name || 'Your business', extra || {})
+    const isAdminAlert = ADMIN_ALERT_TEMPLATES.has(templateName)
+    const recipient = isAdminAlert ? (Deno.env.get('SMTP_FROM') || Deno.env.get('SMTP_USER')) : owner?.email
+    if (!recipient) {
+      return json({ error: isAdminAlert ? 'Admin notification address not configured (SMTP_FROM/SMTP_USER)' : 'No owner email found for this tenant' }, 404)
+    }
+
+    const t = template(templateName, tenant?.name || 'Your business', {
+      ...(extra || {}), ownerName: owner?.name, ownerEmail: owner?.email, ownerPhone: owner?.phone,
+    })
     if (!t) return json({ error: `Unknown template ${templateName}` }, 400)
 
-    await sendMail(owner.email, t.subject, t.body)
+    await sendMail(recipient, t.subject, t.body)
     return json({ sent: true })
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err)
