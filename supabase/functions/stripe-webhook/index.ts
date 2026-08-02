@@ -62,8 +62,47 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
     )
 
-    const months = metaMonths || PLAN_MONTHS[planType] || 6
     const now = new Date()
+
+    if (kind === 'platform_invoice') {
+      const invoiceId = session.metadata?.platform_invoice_id
+      if (!invoiceId) return new Response('Missing platform_invoice_id', { status: 400 })
+
+      // Idempotency: Stripe retries webhook delivery on timeout. Only
+      // proceed (and only insert one ledger row) if this UPDATE actually
+      // flipped a row from a payable status -- a retried delivery for an
+      // already-paid invoice is a no-op here, not a double payment.
+      const { data: updated } = await admin
+        .from('platform_invoices')
+        .update({ status: 'paid', paid_at: now.toISOString(), updated_at: now.toISOString() })
+        .eq('id', invoiceId)
+        .in('status', ['sent', 'overdue'])
+        .select('id, tenant_id, amount, currency')
+        .maybeSingle()
+
+      if (updated) {
+        await admin.from('subscription_payments').insert({
+          tenant_id: updated.tenant_id,
+          platform_invoice_id: updated.id,
+          provider: 'stripe',
+          provider_ref: session.payment_intent || session.id,
+          plan_type: 'platform_invoice',
+          amount: updated.amount,
+          currency: updated.currency,
+        })
+        await admin.from('audit_logs').insert({
+          action: 'platform_invoice_paid',
+          actor_email: 'stripe-webhook',
+          target_type: 'platform_invoice',
+          target_id: updated.id,
+          details: { provider: 'stripe', reference },
+        })
+      }
+
+      return new Response(JSON.stringify({ received: true }), { status: 200 })
+    }
+
+    const months = metaMonths || PLAN_MONTHS[planType] || 6
     const renewal = new Date(now)
     renewal.setMonth(renewal.getMonth() + months)
 
@@ -75,11 +114,19 @@ serve(async (req) => {
         fiscal_expires_at: renewal.toISOString(),
       }).eq('id', tenantId)
     } else if (kind === 'accounting_erp') {
-      // Unlock the Accounting & ERP bundle (HR & Payroll, Invoicing) for the paid period
+      // Unlock the Accounting & ERP bundle for the paid period. Monthly
+      // subscribers are pinned to the 1st of the next calendar month
+      // (rather than "now + 1 month" rolling) so the 5-day-after-expiry
+      // auto-lock (lock_expired_accounting_erp, runs hourly via pg_cron)
+      // lines up with "locked 5 days into an unpaid calendar month."
+      // Quarterly/halfyear/yearly keep the rolling-N-months expiry.
+      const erpExpiry = planType === 'erp_monthly'
+        ? new Date(now.getFullYear(), now.getMonth() + 1, 1)
+        : renewal
       const { data: t } = await admin.from('tenants').select('features').eq('id', tenantId).maybeSingle()
       await admin.from('tenants').update({
         features: { ...(t?.features || {}), accounting_erp: true },
-        accounting_erp_expires_at: renewal.toISOString(),
+        accounting_erp_expires_at: erpExpiry.toISOString(),
       }).eq('id', tenantId)
     } else if (kind === 'ai_insights') {
       // Unlock AI Insights for the paid period

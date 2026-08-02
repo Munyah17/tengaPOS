@@ -21,8 +21,22 @@ createRoot(document.getElementById('root')).render(
 // indefinitely, silently missing new features, with nothing visibly
 // "broken" to tip them off. This surfaces it explicitly and lets them
 // choose when to reload, rather than forcing it mid-transaction.
+//
+// The browser itself only re-checks the service worker script for changes
+// on a fresh navigation/reload — a POS terminal or workshop tablet that's
+// been left open (tab never closed) for days never triggers that check at
+// all, so it silently keeps running whatever build it loaded on first open,
+// forever, with no visible sign anything's wrong. onRegisteredSW below adds
+// an explicit periodic check so a long-lived tab still discovers new
+// deploys instead of only ever checking once at initial load.
+const SW_UPDATE_CHECK_INTERVAL_MS = 30 * 60 * 1000
+
 registerSW({
   immediate: true,
+  onRegisteredSW(swUrl, registration) {
+    if (!registration) return
+    setInterval(() => { registration.update().catch(() => {}) }, SW_UPDATE_CHECK_INTERVAL_MS)
+  },
   onNeedRefresh() {
     toast(
       (t) => (

@@ -1,15 +1,155 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { Factory, Trash2, RefreshCw } from 'lucide-react'
 import Button from '@/components/common/Button'
+import ExportMenu from '@/components/common/ExportMenu'
 import { formatDateTime } from '@/utils/formatters'
 import { useAuthStore } from '@/stores/authStore'
+import { DATE_PRESETS, getPresetRange } from '@/utils/dateRanges'
 import {
   fetchProducts, fetchBranches, fetchBillOfMaterials, saveBillOfMaterials,
-  fetchProductionRuns, recordProductionRun,
+  fetchProductionRuns, recordProductionRun, fetchProductionRunsInRange, fetchAllBillOfMaterials,
 } from '@/lib/db'
 import toast from 'react-hot-toast'
 
 const BLANK_COMPONENT = { component_product_id: '', qty_per_unit: '' }
+
+function ProductionReports({ tenantId }) {
+  const [preset, setPreset] = useState('this_month')
+  const [customStart, setCustomStart] = useState('')
+  const [customEnd, setCustomEnd] = useState('')
+  const [runs, setRuns] = useState([])
+  const [bom, setBom] = useState([])
+  const [loading, setLoading] = useState(false)
+
+  const range = useMemo(() => {
+    if (preset === 'custom') {
+      if (!customStart || !customEnd) return null
+      const end = new Date(customEnd)
+      end.setHours(23, 59, 59, 999)
+      return { start: new Date(customStart), end }
+    }
+    return getPresetRange(preset)
+  }, [preset, customStart, customEnd])
+
+  useEffect(() => {
+    if (!tenantId || !range) return
+    setLoading(true)
+    Promise.all([
+      fetchProductionRunsInRange(tenantId, { startDate: range.start.toISOString(), endDate: range.end.toISOString() }),
+      fetchAllBillOfMaterials(tenantId),
+    ]).then(([r, b]) => { setRuns(r); setBom(b) })
+      .catch(() => toast.error('Failed to load production report'))
+      .finally(() => setLoading(false))
+  }, [tenantId, range])
+
+  const byProduct = useMemo(() => {
+    const map = new Map()
+    for (const r of runs) {
+      const key = r.finished_product_id
+      const existing = map.get(key) || { name: r.products?.name || '—', unit: r.products?.unit || '', qty: 0, runCount: 0 }
+      existing.qty += Number(r.qty_produced) || 0
+      existing.runCount += 1
+      map.set(key, existing)
+    }
+    return [...map.values()].sort((a, b) => b.qty - a.qty)
+  }, [runs])
+
+  const consumption = useMemo(() => {
+    const map = new Map()
+    for (const r of runs) {
+      const components = bom.filter((b) => b.finished_product_id === r.finished_product_id)
+      for (const c of components) {
+        const key = c.component_product_id
+        const existing = map.get(key) || { name: c.component?.name || '—', unit: c.component?.unit || '', qty: 0 }
+        existing.qty += (Number(r.qty_produced) || 0) * (Number(c.qty_per_unit) || 0)
+        map.set(key, existing)
+      }
+    }
+    return [...map.values()].sort((a, b) => b.qty - a.qty)
+  }, [runs, bom])
+
+  const exportRows = runs.map((r) => ({
+    date: formatDateTime(r.created_at),
+    product: r.products?.name || '—',
+    qty: r.qty_produced,
+    branch: r.branches?.name || '—',
+    by: r.users?.name || '—',
+    note: r.note || '',
+  }))
+  const exportColumns = [
+    { header: 'Date', key: 'date' }, { header: 'Product', key: 'product' }, { header: 'Qty', key: 'qty' },
+    { header: 'Branch', key: 'branch' }, { header: 'Recorded By', key: 'by' }, { header: 'Note', key: 'note' },
+  ]
+  const periodLabel = DATE_PRESETS.find((p) => p.key === preset)?.label || 'Selected Period'
+
+  return (
+    <div>
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-2">
+          {DATE_PRESETS.map((p) => (
+            <button
+              key={p.key}
+              onClick={() => setPreset(p.key)}
+              className={`rounded-lg border px-3 py-1.5 text-xs font-semibold transition-colors ${
+                preset === p.key
+                  ? 'border-indigo-600 bg-indigo-600 text-white'
+                  : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700'
+              }`}
+            >
+              {p.label}
+            </button>
+          ))}
+          {preset === 'custom' && (
+            <>
+              <input type="date" value={customStart} onChange={(e) => setCustomStart(e.target.value)} className="rounded-lg border border-slate-200 px-2 py-1.5 text-xs dark:border-slate-700 dark:bg-slate-800 dark:text-white" />
+              <span className="text-xs text-slate-400">—</span>
+              <input type="date" value={customEnd} onChange={(e) => setCustomEnd(e.target.value)} className="rounded-lg border border-slate-200 px-2 py-1.5 text-xs dark:border-slate-700 dark:bg-slate-800 dark:text-white" />
+            </>
+          )}
+        </div>
+        <ExportMenu data={exportRows} columns={exportColumns} title={`Production Report — ${periodLabel}`} filename="tengapos_production_report" />
+      </div>
+
+      {loading ? (
+        <div className="py-16 text-center text-sm text-slate-400"><RefreshCw className="mx-auto mb-2 h-5 w-5 animate-spin" /> Loading…</div>
+      ) : runs.length === 0 ? (
+        <div className="py-16 text-center text-sm text-slate-400">No production runs in this period.</div>
+      ) : (
+        <div className="grid gap-6 lg:grid-cols-2">
+          <div className="rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
+            <h3 className="mb-3 text-sm font-bold text-slate-900 dark:text-white">Units Produced by Product</h3>
+            <div className="space-y-2">
+              {byProduct.map((p) => (
+                <div key={p.name} className="flex items-center justify-between border-b border-slate-100 pb-2 text-sm last:border-0 dark:border-slate-800">
+                  <div>
+                    <p className="font-medium text-slate-900 dark:text-white">{p.name}</p>
+                    <p className="text-xs text-slate-400">{p.runCount} run{p.runCount !== 1 ? 's' : ''}</p>
+                  </div>
+                  <p className="font-bold text-slate-900 dark:text-white">{p.qty} {p.unit}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
+            <h3 className="mb-3 text-sm font-bold text-slate-900 dark:text-white">Estimated Component Consumption</h3>
+            {consumption.length === 0 ? (
+              <p className="text-sm text-slate-400">No bill of materials defined for the products produced this period.</p>
+            ) : (
+              <div className="space-y-2">
+                {consumption.map((c) => (
+                  <div key={c.name} className="flex items-center justify-between border-b border-slate-100 pb-2 text-sm last:border-0 dark:border-slate-800">
+                    <p className="text-slate-700 dark:text-slate-300">{c.name}</p>
+                    <p className="font-bold text-slate-900 dark:text-white">{c.qty.toFixed(2)} {c.unit}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
 
 export default function Production() {
   const { tenant, branch } = useAuthStore()
@@ -24,6 +164,7 @@ export default function Production() {
 
   const [runForm, setRunForm] = useState({ productId: '', qty: '', branchId: '', note: '' })
   const [recording, setRecording] = useState(false)
+  const [tab, setTab] = useState('operations')
 
   const load = () => {
     if (!tenant?.id) return
@@ -98,11 +239,32 @@ export default function Production() {
           <h1 className="text-2xl font-extrabold text-slate-900 dark:text-white">Production</h1>
           <p className="text-sm text-slate-500">Bill of materials and production runs — raw materials in, finished goods out</p>
         </div>
-        <button onClick={load} className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
-          <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-        </button>
+        <div className="flex items-center gap-2">
+          <div className="flex rounded-xl border border-slate-200 bg-white p-1 dark:border-slate-700 dark:bg-slate-800">
+            {[{ key: 'operations', label: 'Operations' }, { key: 'reports', label: 'Reports' }].map((t) => (
+              <button
+                key={t.key}
+                onClick={() => setTab(t.key)}
+                className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${
+                  tab === t.key ? 'bg-indigo-600 text-white' : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-700'
+                }`}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
+          {tab === 'operations' && (
+            <button onClick={load} className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
+              <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+            </button>
+          )}
+        </div>
       </div>
 
+      {tab === 'reports' ? (
+        <ProductionReports tenantId={tenant?.id} />
+      ) : (
+      <>
       <div className="grid gap-6 lg:grid-cols-2">
         {/* Bill of Materials editor */}
         <div className="rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
@@ -250,6 +412,8 @@ export default function Production() {
           </div>
         )}
       </div>
+      </>
+      )}
     </div>
   )
 }

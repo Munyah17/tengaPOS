@@ -258,7 +258,7 @@ export default function Inventory() {
 
   // Product Image is mandatory unless the "not available" override is ticked
   const hasImage = !!(imagePreview || form.imageUrl)
-  const canSave = form.name && form.price && form.stock !== '' && (hasImage || form.imageUnavailable)
+  const canSave = form.name && form.price && (form.isService || form.stock !== '') && (hasImage || form.imageUnavailable)
 
   const addAttributePreset = (preset) => {
     setForm((f) => {

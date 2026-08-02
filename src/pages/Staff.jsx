@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
-import { Plus, RefreshCw, ToggleLeft, ToggleRight, Eye, EyeOff, X, Loader2, Pencil, Building2 } from 'lucide-react'
+import { Plus, RefreshCw, ToggleLeft, ToggleRight, Eye, EyeOff, X, Loader2, Pencil, Building2, Trash2 } from 'lucide-react'
 import Button from '@/components/common/Button'
 import Modal from '@/components/common/Modal'
 import ExportMenu from '@/components/common/ExportMenu'
@@ -53,6 +53,7 @@ export default function Staff() {
   const [savingUsername, setSavingUsername] = useState(false)
   const [branchesEdit, setBranchesEdit] = useState(null) // { id, name, homeBranchId, extraIds } while editing
   const [savingBranches, setSavingBranches] = useState(false)
+  const [deletingId, setDeletingId] = useState(null)
 
   const loadStaff = () => {
     if (!tenant?.id) return
@@ -89,6 +90,20 @@ export default function Staff() {
       toast.error(err.message || 'Failed to update')
       setStaff(prev => prev.map(s => s.id === member.id ? { ...s, is_active: member.is_active } : s))
     })
+  }
+
+  const handleDeleteStaff = async (member) => {
+    if (!window.confirm(`Remove ${member.name}? They'll no longer be able to sign in, and will disappear from your staff list. This can't be undone from here.`)) return
+    setDeletingId(member.id)
+    try {
+      await invokeEdgeFunction('tenant-delete-staff', { user_id: member.id })
+      setStaff(prev => prev.filter(s => s.id !== member.id))
+      toast.success(`${member.name} removed`)
+    } catch (err) {
+      toast.error(err.message || 'Failed to remove staff member')
+    } finally {
+      setDeletingId(null)
+    }
   }
 
   const handleAddStaff = async (e) => {
@@ -261,6 +276,18 @@ export default function Staff() {
                             {member.is_active
                               ? <ToggleRight className="h-5 w-5 text-green-500" />
                               : <ToggleLeft className="h-5 w-5" />}
+                          </button>
+                        )}
+                        {member.role !== 'vendor' && (
+                          <button
+                            onClick={() => handleDeleteStaff(member)}
+                            disabled={deletingId === member.id}
+                            className="rounded-lg p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600 disabled:opacity-50 dark:hover:bg-red-950/40"
+                            title="Remove staff member"
+                          >
+                            {deletingId === member.id
+                              ? <Loader2 className="h-4 w-4 animate-spin" />
+                              : <Trash2 className="h-4 w-4" />}
                           </button>
                         )}
                       </div>

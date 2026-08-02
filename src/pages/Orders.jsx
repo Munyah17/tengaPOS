@@ -3,6 +3,7 @@ import { motion } from 'framer-motion'
 import { Eye, Bell, CheckCircle, Clock, Flame, Timer, Car, Store, X } from 'lucide-react'
 import ExportMenu from '@/components/common/ExportMenu'
 import DateInput from '@/components/common/DateInput'
+import Modal from '@/components/common/Modal'
 import { formatCurrency, formatDateTime } from '@/utils/formatters'
 import { useThemeStore } from '@/stores/themeStore'
 import { useAuthStore } from '@/stores/authStore'
@@ -151,6 +152,7 @@ export default function Orders() {
   const [rawOrders, setRawOrders] = useState([])
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
+  const [viewOrder, setViewOrder] = useState(null)
   // Re-render periodically so "elapsed minutes" on restaurant order cards
   // keeps ticking even with no new realtime events
   const [, setClockTick] = useState(0)
@@ -200,6 +202,7 @@ export default function Orders() {
     total: parseFloat(o.total),
     method: o.payment_method || '—',
     status: o.status,
+    _raw: o,
   })), [rawOrders])
 
   const restaurantOrders = useMemo(() => rawOrders
@@ -299,7 +302,11 @@ export default function Orders() {
                     </span>
                   </td>
                   <td className="px-4 py-3">
-                    <button className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800">
+                    <button
+                      onClick={() => setViewOrder(order)}
+                      className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
+                      title="View order details"
+                    >
                       <Eye className="h-4 w-4" />
                     </button>
                   </td>
@@ -309,6 +316,46 @@ export default function Orders() {
           </table>
         </div>
       )}
+
+      <Modal isOpen={!!viewOrder} onClose={() => setViewOrder(null)} title={`Order ${viewOrder?.id || ''}`}>
+        {viewOrder && (
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-3 text-sm">
+              <div>
+                <p className="text-slate-400">Date</p>
+                <p className="font-medium text-slate-900 dark:text-white">{formatDateTime(viewOrder.date)}</p>
+              </div>
+              <div>
+                <p className="text-slate-400">Status</p>
+                <p className="font-medium text-slate-900 dark:text-white">{viewOrder.status}</p>
+              </div>
+              <div>
+                <p className="text-slate-400">Payment</p>
+                <p className="font-medium text-slate-900 dark:text-white">{viewOrder.method}</p>
+              </div>
+              <div>
+                <p className="text-slate-400">Served by</p>
+                <p className="font-medium text-slate-900 dark:text-white">{viewOrder._raw.users?.name || '—'}</p>
+              </div>
+            </div>
+            <div>
+              <p className="mb-2 text-xs font-semibold uppercase text-slate-400">Items</p>
+              <div className="divide-y divide-slate-100 rounded-xl border border-slate-200 dark:divide-slate-800 dark:border-slate-800">
+                {(viewOrder._raw.order_items || []).map((item) => (
+                  <div key={item.id} className="flex items-center justify-between px-3 py-2 text-sm">
+                    <span className="text-slate-700 dark:text-slate-300">{item.name} <span className="text-slate-400">x{item.qty}</span></span>
+                    <span className="font-medium text-slate-900 dark:text-white">{formatCurrency(item.total ?? item.unit_price * item.qty)}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="flex items-center justify-between border-t border-slate-200 pt-3 text-sm font-bold text-slate-900 dark:border-slate-800 dark:text-white">
+              <span>Total</span>
+              <span>{formatCurrency(viewOrder.total)}</span>
+            </div>
+          </div>
+        )}
+      </Modal>
     </div>
   )
 }

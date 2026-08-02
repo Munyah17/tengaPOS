@@ -81,6 +81,17 @@ export default function Footer() {
             <ExternalLink className="h-3 w-3" />
           </a>
         </div>
+
+        <div className="mt-4 flex justify-center border-t border-slate-800/60 pt-4">
+          <a
+            href="https://globalspaceweb.co.zw"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-xs text-slate-600 transition-colors hover:text-slate-400"
+          >
+            Developed &amp; Powered By Global Space Web. +263773909307
+          </a>
+        </div>
       </div>
     </footer>
   )

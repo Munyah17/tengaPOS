@@ -30,8 +30,13 @@ export default function AdminAccountingErpRequests() {
 
   const activate = async (tenantId, months, tenantName) => {
     const { data: t } = await supabase.from('tenants').select('features').eq('id', tenantId).single()
-    const expires = new Date()
-    expires.setMonth(expires.getMonth() + months)
+    // Monthly is pinned to the 1st of next calendar month (not "+1 month
+    // rolling") so lock_expired_accounting_erp's 5-day grace lines up with
+    // "locked 5 days into an unpaid calendar month" — same rule the
+    // Stripe/Paynow webhooks apply. Longer periods keep rolling N months.
+    const now = new Date()
+    const expires = months === 1 ? new Date(now.getFullYear(), now.getMonth() + 1, 1) : new Date(now)
+    if (months !== 1) expires.setMonth(expires.getMonth() + months)
     const { data: updated, error } = await supabase
       .from('tenants')
       .update({ features: { ...(t?.features || {}), accounting_erp: true }, accounting_erp_expires_at: expires.toISOString() })

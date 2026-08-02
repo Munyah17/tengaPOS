@@ -64,16 +64,40 @@ serve(async (req) => {
     const { data: { user: caller }, error: authErr } = await admin.auth.getUser(jwt)
     if (authErr || !caller) return json({ error: 'Not authenticated' }, 401)
 
-    const { plan_type, provider, return_url, type, period } = await req.json()
+    const { plan_type, provider, return_url, type, period, invoice_id } = await req.json()
     if (!['stripe', 'paynow', 'cash'].includes(provider)) return json({ error: 'provider must be stripe, paynow, or cash' }, 400)
 
     const isFiscal = type === 'fiscalisation'
     const isAccountingErp = type === 'accounting_erp'
     const isAiInsights = type === 'ai_insights'
+    const isPlatformInvoice = type === 'platform_invoice'
+
+    // Resolve the caller's tenant server-side — never trust a client tenant_id
+    const { data: userRow } = await admin
+      .from('users')
+      .select('tenant_id, email, tenants(name)')
+      .eq('id', caller.id)
+      .single()
+    if (!userRow?.tenant_id) return json({ error: 'No tenant found for this account' }, 400)
+    const tenantId = userRow.tenant_id
 
     // Live pricing from platform_settings (Super Admin controlled)
     let plan: { amount: number; label: string; months: number } | null = null
-    if (isFiscal) {
+    let platformInvoice: { id: string } | null = null
+    if (isPlatformInvoice) {
+      // Cash claims never come through here — they go straight to
+      // request_platform_invoice_cash_confirmation from the tenant's own
+      // authenticated session, no service role needed for that path.
+      if (provider === 'cash') return json({ error: 'Use the "paid by cash/transfer" option instead' }, 400)
+      if (!invoice_id) return json({ error: 'Missing invoice_id' }, 400)
+      const { data: inv } = await admin.from('platform_invoices').select('*').eq('id', invoice_id).maybeSingle()
+      if (!inv || inv.tenant_id !== tenantId) return json({ error: 'Invoice not found' }, 404)
+      if (!['sent', 'overdue'].includes(inv.status)) return json({ error: 'This invoice is not payable' }, 400)
+      // Amount/label always come from the invoice row itself — never from
+      // the client — same principle as every other branch here.
+      plan = { amount: Number(inv.amount), label: inv.description, months: 0 }
+      platformInvoice = { id: inv.id }
+    } else if (isFiscal) {
       const { data: fp } = await admin.from('platform_settings').select('value').eq('key', 'fiscalisation_pricing').maybeSingle()
       const table = { ...FALLBACK_FISCAL_PRICES, ...((fp?.value as Record<string, { price: number; months: number; label: string }>) || {}) }
       const p = table[period as string]
@@ -97,18 +121,9 @@ serve(async (req) => {
       plan = { amount: p.price, label: PLAN_LABELS[plan_type] || `tengaPOS ${plan_type}`, months: p.renewalMonths }
     }
 
-    // Resolve the caller's tenant server-side — never trust a client tenant_id
-    const { data: userRow } = await admin
-      .from('users')
-      .select('tenant_id, email, tenants(name)')
-      .eq('id', caller.id)
-      .single()
-    if (!userRow?.tenant_id) return json({ error: 'No tenant found for this account' }, 400)
-
-    const tenantId = userRow.tenant_id
-    const checkoutKind = isFiscal ? 'fiscalisation' : isAccountingErp ? 'accounting_erp' : isAiInsights ? 'ai_insights' : 'plan'
-    const planKey = isFiscal ? `fiscal_${period}` : isAccountingErp ? `erp_${period}` : isAiInsights ? `ai_${period}` : plan_type
-    const refPrefix = isFiscal ? 'FIS' : isAccountingErp ? 'ERP' : isAiInsights ? 'AI' : 'SUB'
+    const checkoutKind = isPlatformInvoice ? 'platform_invoice' : isFiscal ? 'fiscalisation' : isAccountingErp ? 'accounting_erp' : isAiInsights ? 'ai_insights' : 'plan'
+    const planKey = isPlatformInvoice ? 'platform_invoice' : isFiscal ? `fiscal_${period}` : isAccountingErp ? `erp_${period}` : isAiInsights ? `ai_${period}` : plan_type
+    const refPrefix = isPlatformInvoice ? 'PINV' : isFiscal ? 'FIS' : isAccountingErp ? 'ERP' : isAiInsights ? 'AI' : 'SUB'
     const reference = `${refPrefix}-${Date.now()}-${Math.random().toString(36).slice(2, 7).toUpperCase()}`
     const amountStr = plan.amount.toFixed(2)
     const returnUrl = return_url || 'https://www.tengapos.co.zw/checkout'
@@ -159,6 +174,7 @@ serve(async (req) => {
         'metadata[kind]': checkoutKind,
         'metadata[months]': String(plan.months),
         'metadata[reference]': reference,
+        ...(platformInvoice ? { 'metadata[platform_invoice_id]': platformInvoice.id } : {}),
       })
 
       const res = await fetch('https://api.stripe.com/v1/checkout/sessions', {
@@ -225,17 +241,26 @@ serve(async (req) => {
       pollUrl = params.get('pollurl')
     }
 
-    await admin.from('signup_checkouts').insert({
-      tenant_id: tenantId,
-      plan_type: planKey,
-      provider,
-      provider_session_id: providerSessionId,
-      reference,
-      amount: plan.amount,
-      currency: 'USD',
-      status: 'redirected',
-      poll_url: pollUrl,
-    })
+    if (platformInvoice) {
+      await admin.from('platform_invoices').update({
+        reference,
+        provider_session_id: providerSessionId,
+        poll_url: pollUrl,
+        updated_at: new Date().toISOString(),
+      }).eq('id', platformInvoice.id)
+    } else {
+      await admin.from('signup_checkouts').insert({
+        tenant_id: tenantId,
+        plan_type: planKey,
+        provider,
+        provider_session_id: providerSessionId,
+        reference,
+        amount: plan.amount,
+        currency: 'USD',
+        status: 'redirected',
+        poll_url: pollUrl,
+      })
+    }
 
     return json({ url: redirectUrl, reference })
   } catch (err: unknown) {

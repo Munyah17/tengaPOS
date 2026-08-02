@@ -186,8 +186,10 @@ export async function saveCheckout({ tenantId, branchId, userId, cartItems, paym
   const grossTotal = cartItems.reduce((sum, item) => sum + item.price * item.quantity, 0)
   const discountAmount = Math.max(0, grossTotal - total)
 
+  const isUUID = (v) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(v))
+
   const items = cartItems.map(item => ({
-    product_id: item.id && !String(item.id).startsWith('demo') ? item.id : null,
+    product_id: isUUID(item.id) ? item.id : null,
     name: item.name,
     sku: item.sku || null,
     qty: item.quantity,
@@ -306,11 +308,18 @@ export async function fetchOrders(tenantId, filters = {}) {
     .select('*, order_items(*), users(name)')
     .eq('tenant_id', tenantId)
     .order('created_at', { ascending: false })
-    .limit(200)
 
   if (filters.posMode) q = q.eq('pos_mode', filters.posMode)
   if (filters.status) q = q.eq('status', filters.status)
   if (filters.notStatus) q = q.neq('status', filters.notStatus)
+  if (filters.fromDate) q = q.gte('created_at', filters.fromDate)
+  if (filters.toDate) q = q.lte('created_at', filters.toDate)
+  // The 200-row cap only makes sense for unbounded callers (Orders.jsx,
+  // POS.jsx's recent-staff-orders, etc). Callers that scope by date range
+  // (Ledger/Financial Reports) rely on that range to bound the result
+  // instead -- otherwise a busy tenant's "This Year" report would silently
+  // drop older rows within the very range it's supposed to total.
+  if (!filters.fromDate && !filters.toDate) q = q.limit(200)
 
   const { data, error } = await q
   if (error) throw error
@@ -452,6 +461,7 @@ export async function fetchStaff(tenantId) {
     .from('users')
     .select('*')
     .eq('tenant_id', tenantId)
+    .is('deleted_at', null)
     .order('name')
   if (error) throw error
   return data
@@ -609,6 +619,17 @@ export async function fetchBillOfMaterials(tenantId, finishedProductId) {
   return data
 }
 
+// Whole-tenant BOM, for the Production Reports component-consumption
+// breakdown — unlike fetchBillOfMaterials, not scoped to one finished product.
+export async function fetchAllBillOfMaterials(tenantId) {
+  const { data, error } = await supabase
+    .from('bill_of_materials')
+    .select('*, component:products!bill_of_materials_component_product_id_fkey(name, unit)')
+    .eq('tenant_id', tenantId)
+  if (error) throw error
+  return data
+}
+
 // Replaces the whole BOM for a finished product with the given component
 // list — simplest correct way to save an edited list (add/remove/change
 // qty) without diffing row by row.
@@ -643,6 +664,18 @@ export async function fetchProductionRuns(tenantId) {
     .eq('tenant_id', tenantId)
     .order('created_at', { ascending: false })
     .limit(100)
+  if (error) throw error
+  return data
+}
+
+export async function fetchProductionRunsInRange(tenantId, { startDate, endDate }) {
+  const { data, error } = await supabase
+    .from('production_runs')
+    .select('*, products(name, unit), branches(name), users(name)')
+    .eq('tenant_id', tenantId)
+    .gte('created_at', startDate)
+    .lte('created_at', endDate)
+    .order('created_at', { ascending: false })
   if (error) throw error
   return data
 }
@@ -1404,6 +1437,7 @@ export async function insertDocument(tenantId, branchId, userId, doc) {
       doc_type: doc.docType,
       doc_number: doc.docNumber,
       status: doc.status || 'draft',
+      customer_id: doc.customerId || null,
       customer_name: doc.customerName,
       customer_email: doc.customerEmail || null,
       customer_phone: doc.customerPhone || null,
@@ -1455,6 +1489,7 @@ export async function updateDocument(id, updates) {
     .from('documents')
     .update({
       status: updates.status,
+      customer_id: updates.customerId || null,
       customer_name: updates.customerName,
       customer_email: updates.customerEmail || null,
       customer_phone: updates.customerPhone || null,
@@ -1481,6 +1516,73 @@ export async function deleteDocument(id) {
   if (error) throw error
 }
 
+export async function recordInvoicePayment(documentId, { amount, method, paidAt, note }) {
+  const { data, error } = await supabase.rpc('record_invoice_payment', {
+    p_document_id: documentId,
+    p_amount: amount,
+    p_method: method,
+    p_paid_at: paidAt || new Date().toISOString(),
+    p_note: note || null,
+  })
+  if (error) throw error
+  return data
+}
+
+export async function voidInvoicePayment(paymentId) {
+  const { error } = await supabase.rpc('void_invoice_payment', { p_payment_id: paymentId })
+  if (error) throw error
+}
+
+export async function fetchInvoicePayments(documentId) {
+  const { data, error } = await supabase
+    .from('invoice_payments')
+    .select('*, users(name)')
+    .eq('document_id', documentId)
+    .order('paid_at', { ascending: false })
+  if (error) throw error
+  return data
+}
+
+// Every non-voided invoice_payments row for the tenant -- used by the
+// Debtors overview to compute outstanding balances per customer without a
+// per-customer round trip (see fetchCustomerStatement for the single-
+// customer version).
+export async function fetchAllInvoicePaymentsForTenant(tenantId) {
+  const { data, error } = await supabase
+    .from('invoice_payments')
+    .select('document_id, amount')
+    .eq('tenant_id', tenantId)
+    .is('voided_at', null)
+  if (error) throw error
+  return data
+}
+
+// All invoices for one customer, plus every payment against them, for the
+// Statements page's running balance -- two queries instead of a view/RPC,
+// matching this codebase's usual "aggregate in JS" style (see Reports.jsx).
+export async function fetchCustomerStatement(tenantId, customerId) {
+  const { data: documents, error: docErr } = await supabase
+    .from('documents')
+    .select('*')
+    .eq('tenant_id', tenantId)
+    .eq('customer_id', customerId)
+    .eq('doc_type', 'invoice')
+    .order('created_at', { ascending: true })
+  if (docErr) throw docErr
+
+  const ids = (documents || []).map((d) => d.id)
+  if (ids.length === 0) return { documents: [], payments: [] }
+
+  const { data: payments, error: payErr } = await supabase
+    .from('invoice_payments')
+    .select('*')
+    .in('document_id', ids)
+    .is('voided_at', null)
+  if (payErr) throw payErr
+
+  return { documents, payments: payments || [] }
+}
+
 /** Converts an accepted quotation into a new invoice, copying customer/items
  *  across and linking the two records both ways. */
 export async function convertQuotationToInvoice(quotation, docNumber, userId) {
@@ -1492,6 +1594,7 @@ export async function convertQuotationToInvoice(quotation, docNumber, userId) {
       doc_type: 'invoice',
       doc_number: docNumber,
       status: 'draft',
+      customer_id: quotation.customer_id,
       customer_name: quotation.customer_name,
       customer_email: quotation.customer_email,
       customer_phone: quotation.customer_phone,
@@ -1525,6 +1628,7 @@ export async function fetchCustomers(tenantId) {
     .from('customers')
     .select('*, vehicles(*)')
     .eq('tenant_id', tenantId)
+    .is('deleted_at', null)
     .order('name')
   if (error) throw error
   return data
@@ -1538,6 +1642,25 @@ export async function createCustomer(tenantId, { name, phone, email, address, no
     .single()
   if (error) throw error
   return data
+}
+
+export async function updateCustomer(id, { name, phone, email, address, notes }) {
+  const { data, error } = await supabase
+    .from('customers')
+    .update({ name, phone: phone || null, email: email || null, address: address || null, notes: notes || null, updated_at: new Date().toISOString() })
+    .eq('id', id)
+    .select()
+    .single()
+  if (error) throw error
+  return data
+}
+
+export async function deleteCustomer(id) {
+  const { error } = await supabase
+    .from('customers')
+    .update({ deleted_at: new Date().toISOString() })
+    .eq('id', id)
+  if (error) throw error
 }
 
 // Best-effort: reuse an existing customer (matched by phone, then by exact
@@ -1591,7 +1714,8 @@ export async function fetchJobCards(tenantId) {
 }
 
 export async function createJobCard(tenantId, { branchId, customerId, vehicleId, description, mileageIn, diagnosis, partsRequested, items, assignedTo, createdBy, quotationId }) {
-  const jobCardNo = generateDocNumber('JC')
+  // job_card_no is assigned server-side (trg_set_job_card_no), a real atomic
+  // per-tenant counter, so numbers are strictly increasing and never collide.
   const subtotal = items.reduce((s, i) => s + i.unit_price * i.qty, 0)
   const { data, error } = await supabase
     .from('job_cards')
@@ -1600,7 +1724,6 @@ export async function createJobCard(tenantId, { branchId, customerId, vehicleId,
       branch_id: branchId || null,
       customer_id: customerId,
       vehicle_id: vehicleId,
-      job_card_no: jobCardNo,
       description: description || null,
       mileage_in: mileageIn || null,
       diagnosis: diagnosis || null,
@@ -1686,5 +1809,340 @@ export async function completeJobCard(jobCardId, orderId) {
     .from('job_cards')
     .update({ status: 'completed', completed_at: new Date().toISOString(), linked_order_id: orderId })
     .eq('id', jobCardId)
+  if (error) throw error
+}
+
+// ─── Accounting & ERP: Suppliers ───────────────────────────────────────────
+
+export async function fetchSuppliers(tenantId) {
+  const { data, error } = await supabase.from('suppliers').select('*').eq('tenant_id', tenantId).is('deleted_at', null).order('name')
+  if (error) throw error
+  return data
+}
+export async function createSupplier(tenantId, { name, phone, email, address, notes }) {
+  const { data, error } = await supabase.from('suppliers').insert({ tenant_id: tenantId, name, phone: phone || null, email: email || null, address: address || null, notes: notes || null }).select().single()
+  if (error) throw error
+  return data
+}
+export async function updateSupplier(id, { name, phone, email, address, notes }) {
+  const { data, error } = await supabase.from('suppliers').update({ name, phone: phone || null, email: email || null, address: address || null, notes: notes || null, updated_at: new Date().toISOString() }).eq('id', id).select().single()
+  if (error) throw error
+  return data
+}
+export async function deleteSupplier(id) {
+  const { error } = await supabase.from('suppliers').update({ deleted_at: new Date().toISOString() }).eq('id', id)
+  if (error) throw error
+}
+
+// ─── Accounting & ERP: Fixed Assets ────────────────────────────────────────
+
+export async function fetchFixedAssets(tenantId) {
+  const { data, error } = await supabase.from('fixed_assets').select('*').eq('tenant_id', tenantId).order('created_at', { ascending: false })
+  if (error) throw error
+  return data
+}
+export async function createFixedAsset(tenantId, userId, asset) {
+  const { data, error } = await supabase.from('fixed_assets').insert({
+    tenant_id: tenantId, branch_id: asset.branchId || null, name: asset.name, category: asset.category || null,
+    asset_type: asset.assetType || 'fixed', purchase_date: asset.purchaseDate, cost: asset.cost,
+    salvage_value: asset.salvageValue || 0, useful_life_years: asset.usefulLifeYears,
+    custodian: asset.custodian || null, location: asset.location || null, notes: asset.notes || null, created_by: userId || null,
+  }).select().single()
+  if (error) throw error
+  return data
+}
+export async function updateFixedAsset(id, asset) {
+  const { data, error } = await supabase.from('fixed_assets').update({
+    name: asset.name, category: asset.category || null, asset_type: asset.assetType || 'fixed',
+    purchase_date: asset.purchaseDate, cost: asset.cost, salvage_value: asset.salvageValue || 0,
+    useful_life_years: asset.usefulLifeYears, custodian: asset.custodian || null, location: asset.location || null,
+    notes: asset.notes || null, disposed_at: asset.disposedAt || null, disposal_value: asset.disposalValue ?? null,
+    updated_at: new Date().toISOString(),
+  }).eq('id', id).select().single()
+  if (error) throw error
+  return data
+}
+export async function deleteFixedAsset(id) {
+  const { error } = await supabase.from('fixed_assets').delete().eq('id', id)
+  if (error) throw error
+}
+
+// ─── Accounting & ERP: Expenses ────────────────────────────────────────────
+
+export async function fetchExpenses(tenantId, { fromDate, toDate } = {}) {
+  let q = supabase.from('expenses').select('*, suppliers(name)').eq('tenant_id', tenantId).order('expense_date', { ascending: false })
+  if (fromDate) q = q.gte('expense_date', fromDate)
+  if (toDate) q = q.lte('expense_date', toDate)
+  const { data, error } = await q
+  if (error) throw error
+  return data
+}
+export async function createExpense(tenantId, userId, expense) {
+  const { data, error } = await supabase.from('expenses').insert({
+    tenant_id: tenantId, branch_id: expense.branchId || null, expense_date: expense.date, category: expense.category,
+    description: expense.description || null, amount: expense.amount, payment_method: expense.paymentMethod || null,
+    supplier_id: expense.supplierId || null, created_by: userId || null,
+  }).select().single()
+  if (error) throw error
+  return data
+}
+export async function deleteExpense(id) {
+  const { error } = await supabase.from('expenses').delete().eq('id', id)
+  if (error) throw error
+}
+
+// ─── Accounting & ERP: Petty Cash ──────────────────────────────────────────
+
+export async function fetchPettyCashTransactions(tenantId, { fromDate, toDate } = {}) {
+  let q = supabase.from('petty_cash_transactions').select('*, users(name)').eq('tenant_id', tenantId).order('created_at', { ascending: false })
+  if (fromDate) q = q.gte('created_at', fromDate)
+  if (toDate) q = q.lte('created_at', toDate)
+  const { data, error } = await q
+  if (error) throw error
+  return data
+}
+export async function createPettyCashTransaction(tenantId, userId, { branchId, type, amount, description }) {
+  const { data, error } = await supabase.from('petty_cash_transactions').insert({
+    tenant_id: tenantId, branch_id: branchId || null, type, amount, description: description || null, created_by: userId || null,
+  }).select().single()
+  if (error) throw error
+  return data
+}
+
+// ─── Accounting & ERP: Cash Management (Cash at Hand / Cash at Bank) ──────
+
+export async function fetchCashTransactions(tenantId, { fromDate, toDate } = {}) {
+  let q = supabase.from('cash_transactions').select('*, users(name)').eq('tenant_id', tenantId).order('created_at', { ascending: false })
+  if (fromDate) q = q.gte('created_at', fromDate)
+  if (toDate) q = q.lte('created_at', toDate)
+  const { data, error } = await q
+  if (error) throw error
+  return data
+}
+export async function createCashTransaction(tenantId, userId, { branchId, account, type, toAccount, amount, description }) {
+  const { data, error } = await supabase.from('cash_transactions').insert({
+    tenant_id: tenantId, branch_id: branchId || null, account, type, to_account: type === 'transfer' ? toAccount : null,
+    amount, description: description || null, created_by: userId || null,
+  }).select().single()
+  if (error) throw error
+  return data
+}
+
+// ─── Accounting & ERP: Requisitions ────────────────────────────────────────
+
+export async function fetchRequisitions(tenantId) {
+  const { data, error } = await supabase.from('requisitions').select('*, requester:users!requisitions_requested_by_fkey(name), approver:users!requisitions_approved_by_fkey(name)').eq('tenant_id', tenantId).order('created_at', { ascending: false })
+  if (error) throw error
+  return data
+}
+export async function createRequisition(tenantId, userId, { branchId, purpose, amountRequested, notes }) {
+  const { data, error } = await supabase.from('requisitions').insert({
+    tenant_id: tenantId, branch_id: branchId || null, requested_by: userId || null, purpose, amount_requested: amountRequested, notes: notes || null,
+  }).select().single()
+  if (error) throw error
+  return data
+}
+export async function updateRequisitionStatus(id, status, approvedBy) {
+  const updates = { status, updated_at: new Date().toISOString() }
+  if (['approved', 'rejected'].includes(status)) { updates.approved_by = approvedBy; updates.approved_at = new Date().toISOString() }
+  const { data, error } = await supabase.from('requisitions').update(updates).eq('id', id).select().single()
+  if (error) throw error
+  return data
+}
+
+// ─── Accounting & ERP: Creditors (Accounts Payable) ────────────────────────
+
+export async function fetchCreditorBills(tenantId) {
+  const { data, error } = await supabase.from('creditor_bills').select('*, suppliers(name)').eq('tenant_id', tenantId).order('created_at', { ascending: false })
+  if (error) throw error
+  return data
+}
+export async function createCreditorBill(tenantId, userId, { supplierId, billNumber, description, amount, dueDate }) {
+  const { data, error } = await supabase.from('creditor_bills').insert({
+    tenant_id: tenantId, supplier_id: supplierId || null, bill_number: billNumber || null, description: description || null,
+    amount, due_date: dueDate || null, created_by: userId || null,
+  }).select().single()
+  if (error) throw error
+  return data
+}
+export async function fetchCreditorPayments(creditorBillId) {
+  const { data, error } = await supabase.from('creditor_payments').select('*, users(name)').eq('creditor_bill_id', creditorBillId).order('paid_at', { ascending: false })
+  if (error) throw error
+  return data
+}
+
+// Every non-voided creditor_payments row for the tenant, one request instead
+// of one-per-bill -- used by Financial Reports/Balance Sheet to total
+// outstanding creditor balances without an N+1 fan-out as the bill count
+// grows (see fetchAllInvoicePaymentsForTenant for the debtors equivalent).
+export async function fetchAllCreditorPaymentsForTenant(tenantId) {
+  const { data, error } = await supabase
+    .from('creditor_payments')
+    .select('creditor_bill_id, amount')
+    .eq('tenant_id', tenantId)
+    .is('voided_at', null)
+  if (error) throw error
+  return data
+}
+export async function recordCreditorPayment(creditorBillId, { amount, method, paidAt, note }) {
+  const { data, error } = await supabase.rpc('record_creditor_payment', {
+    p_creditor_bill_id: creditorBillId, p_amount: amount, p_method: method, p_paid_at: paidAt || new Date().toISOString(), p_note: note || null,
+  })
+  if (error) throw error
+  return data
+}
+export async function voidCreditorPayment(paymentId) {
+  const { error } = await supabase.rpc('void_creditor_payment', { p_payment_id: paymentId })
+  if (error) throw error
+}
+
+// ─── Accounting & ERP: Debtors (Accounts Receivable) ───────────────────────
+
+export async function fetchManualDebtorEntries(tenantId) {
+  const { data, error } = await supabase.from('manual_debtor_entries').select('*, customers(name)').eq('tenant_id', tenantId).order('created_at', { ascending: false })
+  if (error) throw error
+  return data
+}
+export async function createManualDebtorEntry(tenantId, userId, { customerId, description, amount, dueDate }) {
+  const { data, error } = await supabase.from('manual_debtor_entries').insert({
+    tenant_id: tenantId, customer_id: customerId || null, description, amount, due_date: dueDate || null, created_by: userId || null,
+  }).select().single()
+  if (error) throw error
+  return data
+}
+export async function updateManualDebtorEntryStatus(id, status) {
+  const { error } = await supabase.from('manual_debtor_entries').update({ status, updated_at: new Date().toISOString() }).eq('id', id)
+  if (error) throw error
+}
+
+// ─── Accounting & ERP: Credit / Debit Notes ────────────────────────────────
+
+export async function fetchCreditDebitNotes(tenantId) {
+  const { data, error } = await supabase.from('credit_debit_notes').select('*, customers(name), suppliers(name)').eq('tenant_id', tenantId).order('created_at', { ascending: false })
+  if (error) throw error
+  return data
+}
+export async function createCreditDebitNote(tenantId, userId, note) {
+  const { data, error } = await supabase.from('credit_debit_notes').insert({
+    tenant_id: tenantId, note_type: note.noteType, party_type: note.partyType,
+    customer_id: note.partyType === 'customer' ? note.partyId || null : null,
+    supplier_id: note.partyType === 'supplier' ? note.partyId || null : null,
+    reference_document_id: note.referenceDocumentId || null, note_number: note.noteNumber || null,
+    reason: note.reason || null, amount: note.amount, created_by: userId || null,
+  }).select().single()
+  if (error) throw error
+  return data
+}
+
+// ─── Accounting & ERP: Bill of Quantities ──────────────────────────────────
+
+export async function fetchBoqDocuments(tenantId) {
+  const { data, error } = await supabase.from('boq_documents').select('*').eq('tenant_id', tenantId).order('created_at', { ascending: false })
+  if (error) throw error
+  return data
+}
+export async function createBoqDocument(tenantId, userId, boq) {
+  const { data, error } = await supabase.from('boq_documents').insert({
+    tenant_id: tenantId, boq_number: boq.boqNumber || null, title: boq.title, client_name: boq.clientName || null,
+    items: boq.items || [], total: boq.total || 0, notes: boq.notes || null, created_by: userId || null,
+  }).select().single()
+  if (error) throw error
+  return data
+}
+export async function updateBoqDocument(id, boq) {
+  const { data, error } = await supabase.from('boq_documents').update({
+    boq_number: boq.boqNumber || null, title: boq.title, client_name: boq.clientName || null,
+    items: boq.items || [], total: boq.total || 0, notes: boq.notes || null, status: boq.status || 'draft',
+    updated_at: new Date().toISOString(),
+  }).eq('id', id).select().single()
+  if (error) throw error
+  return data
+}
+export async function deleteBoqDocument(id) {
+  const { error } = await supabase.from('boq_documents').delete().eq('id', id)
+  if (error) throw error
+}
+
+// ─── Accounting & ERP: Release Notes ───────────────────────────────────────
+
+export async function fetchReleaseNotes(tenantId) {
+  const { data, error } = await supabase.from('release_notes').select('*, customers(name), users(name)').eq('tenant_id', tenantId).order('created_at', { ascending: false })
+  if (error) throw error
+  return data
+}
+export async function createReleaseNote(tenantId, userId, note) {
+  const { data, error } = await supabase.from('release_notes').insert({
+    tenant_id: tenantId, release_number: note.releaseNumber || null, customer_id: note.customerId || null,
+    issued_to: note.issuedTo || null, items: note.items || [], notes: note.notes || null,
+    status: note.status || 'draft', issued_by: userId || null,
+  }).select().single()
+  if (error) throw error
+  return data
+}
+
+// ─── Accounting & ERP: Bank Reconciliation ─────────────────────────────────
+
+export async function fetchBankReconciliations(tenantId) {
+  const { data, error } = await supabase.from('bank_reconciliations').select('*').eq('tenant_id', tenantId).order('created_at', { ascending: false })
+  if (error) throw error
+  return data
+}
+export async function createBankReconciliation(tenantId, userId, { branchId, statementStartDate, statementEndDate, statementClosingBalance }) {
+  const { data, error } = await supabase.from('bank_reconciliations').insert({
+    tenant_id: tenantId, branch_id: branchId || null, statement_start_date: statementStartDate,
+    statement_end_date: statementEndDate, statement_closing_balance: statementClosingBalance, created_by: userId || null,
+  }).select().single()
+  if (error) throw error
+  return data
+}
+export async function fetchBankStatementLines(reconciliationId) {
+  const { data, error } = await supabase.from('bank_statement_lines').select('*').eq('reconciliation_id', reconciliationId).order('line_date')
+  if (error) throw error
+  return data
+}
+export async function addBankStatementLine(tenantId, reconciliationId, { lineDate, description, amount }) {
+  const { data, error } = await supabase.from('bank_statement_lines').insert({
+    tenant_id: tenantId, reconciliation_id: reconciliationId, line_date: lineDate, description: description || null, amount,
+  }).select().single()
+  if (error) throw error
+  return data
+}
+export async function matchBankStatementLine(lineId, cashTransactionId) {
+  const { error } = await supabase.from('bank_statement_lines').update({ matched: true, matched_cash_transaction_id: cashTransactionId }).eq('id', lineId)
+  if (error) throw error
+}
+export async function unmatchBankStatementLine(lineId) {
+  const { error } = await supabase.from('bank_statement_lines').update({ matched: false, matched_cash_transaction_id: null }).eq('id', lineId)
+  if (error) throw error
+}
+
+// ─── Accounting & ERP: Balance Sheet support (Other Liabilities / Equity) ──
+
+export async function fetchOtherLiabilities(tenantId) {
+  const { data, error } = await supabase.from('other_liabilities').select('*').eq('tenant_id', tenantId).order('created_at', { ascending: false })
+  if (error) throw error
+  return data
+}
+export async function createOtherLiability(tenantId, userId, { description, amount }) {
+  const { data, error } = await supabase.from('other_liabilities').insert({ tenant_id: tenantId, description, amount, created_by: userId || null }).select().single()
+  if (error) throw error
+  return data
+}
+export async function deleteOtherLiability(id) {
+  const { error } = await supabase.from('other_liabilities').delete().eq('id', id)
+  if (error) throw error
+}
+export async function fetchEquityEntries(tenantId) {
+  const { data, error } = await supabase.from('equity_entries').select('*').eq('tenant_id', tenantId).order('created_at', { ascending: false })
+  if (error) throw error
+  return data
+}
+export async function createEquityEntry(tenantId, userId, { description, amount }) {
+  const { data, error } = await supabase.from('equity_entries').insert({ tenant_id: tenantId, description, amount, created_by: userId || null }).select().single()
+  if (error) throw error
+  return data
+}
+export async function deleteEquityEntry(id) {
+  const { error } = await supabase.from('equity_entries').delete().eq('id', id)
   if (error) throw error
 }

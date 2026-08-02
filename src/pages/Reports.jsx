@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { motion } from 'framer-motion'
-import { BarChart3, TrendingUp, DollarSign, Package, RefreshCw, Calendar, Download } from 'lucide-react'
+import { BarChart3, TrendingUp, DollarSign, Package, RefreshCw, Calendar, Download, Clock } from 'lucide-react'
 import {
   BarChart, Bar, LineChart, Line, XAxis, YAxis, Tooltip,
   ResponsiveContainer, CartesianGrid,
@@ -15,6 +15,32 @@ import { formatCurrency } from '@/utils/formatters'
 import { DATE_PRESETS, getPresetRange } from '@/utils/dateRanges'
 import { exportToCSV, exportToExcel, exportToPDF } from '@/utils/exportUtils'
 import toast from 'react-hot-toast'
+
+// Combines a yyyy-mm-dd date with an optional hh:mm time (falling back to
+// the given default, e.g. start-of-day/end-of-day) into a real Date.
+function combineDateAndTime(dateStr, timeStr, fallbackTime, seconds) {
+  const [h, m] = (timeStr || fallbackTime).split(':').map(Number)
+  const d = new Date(dateStr)
+  d.setHours(h, m, Math.floor(seconds), (seconds % 1) * 1000)
+  return d
+}
+
+function TimeField({ value, onChange, label }) {
+  return (
+    <div>
+      {label && <label className="mb-1 block text-[10px] font-semibold text-slate-500">{label}</label>}
+      <div className="flex h-10 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 dark:border-slate-700 dark:bg-slate-800">
+        <Clock className="h-4 w-4 flex-shrink-0 text-slate-400" />
+        <input
+          type="time"
+          value={value}
+          onChange={onChange}
+          className="w-full bg-transparent text-sm text-slate-900 focus:outline-none dark:text-white [color-scheme:light] dark:[color-scheme:dark]"
+        />
+      </div>
+    </div>
+  )
+}
 
 const TRANSACTION_COLUMNS = [
   { header: 'Reference', key: 'reference' },
@@ -43,13 +69,14 @@ export default function Reports() {
   const [reportPreset, setReportPreset] = useState('this_month')
   const [reportCustomStart, setReportCustomStart] = useState('')
   const [reportCustomEnd, setReportCustomEnd] = useState('')
+  const [reportCustomStartTime, setReportCustomStartTime] = useState('')
+  const [reportCustomEndTime, setReportCustomEndTime] = useState('')
 
   const reportRange = (() => {
     if (reportPreset === 'custom') {
       if (!reportCustomStart || !reportCustomEnd) return null
-      const start = new Date(reportCustomStart)
-      const end = new Date(reportCustomEnd)
-      end.setHours(23, 59, 59, 999)
+      const start = combineDateAndTime(reportCustomStart, reportCustomStartTime, '00:00', 0)
+      const end = combineDateAndTime(reportCustomEnd, reportCustomEndTime, '23:59', 59.999)
       return { start, end }
     }
     return getPresetRange(reportPreset)
@@ -72,15 +99,16 @@ export default function Reports() {
   const [exportPreset, setExportPreset] = useState('this_month')
   const [customStart, setCustomStart] = useState('')
   const [customEnd, setCustomEnd] = useState('')
+  const [customStartTime, setCustomStartTime] = useState('')
+  const [customEndTime, setCustomEndTime] = useState('')
   const [exporting, setExporting] = useState(false)
 
   const resolveExportRange = () => {
     if (exportPreset === 'custom') {
       if (!customStart || !customEnd) throw new Error('Pick both a start and end date')
-      const start = new Date(customStart)
-      const end = new Date(customEnd)
-      end.setHours(23, 59, 59, 999)
-      if (start > end) throw new Error('Start date must be before end date')
+      const start = combineDateAndTime(customStart, customStartTime, '00:00', 0)
+      const end = combineDateAndTime(customEnd, customEndTime, '23:59', 59.999)
+      if (start > end) throw new Error('Start date/time must be before end date/time')
       return { start, end }
     }
     return getPresetRange(exportPreset)
@@ -172,6 +200,8 @@ export default function Reports() {
                     <label className="mb-1 block text-[10px] font-semibold text-slate-500">To</label>
                     <DateInput value={customEnd} onChange={(e) => setCustomEnd(e.target.value)} />
                   </div>
+                  <TimeField label="Start time" value={customStartTime} onChange={(e) => setCustomStartTime(e.target.value)} />
+                  <TimeField label="End time" value={customEndTime} onChange={(e) => setCustomEndTime(e.target.value)} />
                 </div>
               )}
 
@@ -210,10 +240,10 @@ export default function Reports() {
           <button
             key={p.key}
             onClick={() => setReportPreset(p.key)}
-            className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${
+            className={`rounded-lg border px-3 py-1.5 text-xs font-semibold transition-colors ${
               reportPreset === p.key
-                ? 'bg-brand-600 text-white'
-                : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-400'
+                ? 'border-brand-600 bg-brand-600 text-white'
+                : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700'
             }`}
           >
             {p.label}
@@ -221,10 +251,10 @@ export default function Reports() {
         ))}
         <button
           onClick={() => setReportPreset('custom')}
-          className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${
+          className={`rounded-lg border px-3 py-1.5 text-xs font-semibold transition-colors ${
             reportPreset === 'custom'
-              ? 'bg-brand-600 text-white'
-              : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-400'
+              ? 'border-brand-600 bg-brand-600 text-white'
+              : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700'
           }`}
         >
           Custom Range
@@ -232,8 +262,10 @@ export default function Reports() {
         {reportPreset === 'custom' && (
           <>
             <DateInput value={reportCustomStart} onChange={(e) => setReportCustomStart(e.target.value)} placeholder="From" className="w-36" />
+            <TimeField value={reportCustomStartTime} onChange={(e) => setReportCustomStartTime(e.target.value)} label="" />
             <span className="text-xs text-slate-400">—</span>
             <DateInput value={reportCustomEnd} onChange={(e) => setReportCustomEnd(e.target.value)} placeholder="To" className="w-36" />
+            <TimeField value={reportCustomEndTime} onChange={(e) => setReportCustomEndTime(e.target.value)} label="" />
           </>
         )}
       </div>

@@ -157,18 +157,32 @@ function JobCardModal({ tenant, branch, customers, technicians, products, existi
         if (isNewCustomer) {
           const c = await createCustomer(tenant.id, { name: newCustomerName.trim(), phone: newCustomerPhone.trim() })
           finalCustomerId = c.id
+          // Flip to "existing" immediately, before the next network call --
+          // if createVehicle or createJobCard fails below (network drop,
+          // etc.) and the user just hits Save again, this customer is
+          // already made and must be reused, not recreated as a duplicate.
+          setCustomerId(c.id)
         }
         let finalVehicleId = vehicleId
         if (isNewVehicle) {
           const v = await createVehicle(tenant.id, finalCustomerId, newVehicle)
           finalVehicleId = v.id
+          setVehicleId(v.id)
         }
         await createJobCard(tenant.id, { branchId: branch?.id, customerId: finalCustomerId, vehicleId: finalVehicleId, createdBy: user?.id, quotationId: prefill?.quotationId || null, ...patch })
         toast.success('Job card created')
       }
       onSaved()
     } catch (err) {
-      toast.error(err.message || 'Failed to save job card')
+      // "Failed to fetch" is the browser's own message for a request that
+      // never reached the server at all (dropped connection, etc.) -- not a
+      // database/validation error, which would have a specific message
+      // instead. Surface that distinction so the user knows to just retry
+      // rather than assume something's broken; any customer/vehicle already
+      // created above is kept (see setCustomerId/setVehicleId) so retrying
+      // won't duplicate them.
+      const isNetworkError = err instanceof TypeError && /fetch/i.test(err.message || '')
+      toast.error(isNetworkError ? "Couldn't reach the server — check your connection and try again" : (err.message || 'Failed to save job card'))
     } finally {
       setSaving(false)
     }

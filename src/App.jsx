@@ -38,6 +38,9 @@ const PaymentReturn = lazy(() => import('@/pages/PaymentReturn'))
 const Payments = lazy(() => import('@/pages/Payments'))
 const HR = lazy(() => import('@/pages/HR'))
 const Invoicing = lazy(() => import('@/pages/Invoicing'))
+const Customers = lazy(() => import('@/pages/Customers'))
+const Statements = lazy(() => import('@/pages/Statements'))
+const Accounting = lazy(() => import('@/pages/Accounting'))
 const Notifications = lazy(() => import('@/pages/Notifications'))
 const Requests = lazy(() => import('@/pages/Requests'))
 const Dining = lazy(() => import('@/pages/Dining'))
@@ -206,6 +209,9 @@ export default function App() {
             <Route path="payments" element={<RequireNav navKey="payments"><Payments /></RequireNav>} />
             <Route path="hr" element={<RequireNav navKey="hr"><HR /></RequireNav>} />
             <Route path="invoicing" element={<RequireNav navKey="invoicing"><Invoicing /></RequireNav>} />
+            <Route path="customers" element={<RequireNav navKey="customers"><Customers /></RequireNav>} />
+            <Route path="statements" element={<RequireNav navKey="statements"><Statements /></RequireNav>} />
+            <Route path="accounting" element={<RequireNav navKey="accounting"><Accounting /></RequireNav>} />
             <Route path="notifications" element={<Notifications />} />
             <Route path="requests" element={<RequireNav navKey="requests"><Requests /></RequireNav>} />
             <Route path="settings" element={<RequireNav navKey="settings"><Settings /></RequireNav>} />

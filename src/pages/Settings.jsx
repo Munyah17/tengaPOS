@@ -23,7 +23,9 @@ import {
 import { loadWithOfflineCache } from '@/lib/offlineCache'
 import { INDUSTRIES } from '@/lib/whitelabelTheme'
 import { PAPER_SIZES, PRINTER_CONNECTIONS } from '@/lib/posPrinter'
-import { Download, Clock, Printer, BriefcaseBusiness, Sparkles } from 'lucide-react'
+import { Download, Clock, Printer, BriefcaseBusiness, Sparkles, Receipt, Loader2 } from 'lucide-react'
+import { useSearchParams } from 'react-router-dom'
+import { formatCurrency, formatDate } from '@/utils/formatters'
 import toast from 'react-hot-toast'
 
 const sections = [
@@ -33,6 +35,7 @@ const sections = [
   { id: 'fiscalisation', label: 'ZIMRA Fiscal', icon: Cpu },
   { id: 'accounting_erp', label: 'Accounting & ERP', icon: BriefcaseBusiness },
   { id: 'ai_insights_addon', label: 'AI Insights', icon: Sparkles },
+  { id: 'billing', label: 'Billing', icon: Receipt },
   { id: 'notifications', label: 'Notifications', icon: Bell },
   { id: 'security', label: 'Security', icon: Shield },
   { id: 'appearance', label: 'Appearance', icon: Palette },
@@ -59,6 +62,88 @@ export default function Settings() {
     if (!visibleSections.some((s) => s.id === activeSection)) setActiveSection('general')
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [role])
+
+  // ─── Platform Billing — invoices tengaPOS raises against this tenant ───
+  const [searchParams] = useSearchParams()
+  const [platformInvoices, setPlatformInvoices] = useState([])
+  const [loadingInvoices, setLoadingInvoices] = useState(false)
+  const [payingInvoiceId, setPayingInvoiceId] = useState(null)
+  const [confirmingRef, setConfirmingRef] = useState(false)
+  const [claimNoteFor, setClaimNoteFor] = useState(null)
+  const [claimNote, setClaimNote] = useState('')
+
+  const loadPlatformInvoices = () => {
+    if (!tenant?.id) return
+    setLoadingInvoices(true)
+    supabase.from('platform_invoices').select('*').eq('tenant_id', tenant.id).order('created_at', { ascending: false })
+      .then(({ data, error }) => { if (!error) setPlatformInvoices(data || []) })
+      .finally(() => setLoadingInvoices(false))
+  }
+  useEffect(loadPlatformInvoices, [tenant?.id])
+
+  // Returning from a Stripe/Paynow redirect for a platform invoice payment
+  // -- same poll-until-webhook-lands pattern as Checkout.jsx.
+  useEffect(() => {
+    const ref = searchParams.get('ref')
+    const returnStatus = searchParams.get('status')
+    if (!ref || !returnStatus || returnStatus === 'cancelled') return
+    setActiveSection('billing')
+    setConfirmingRef(true)
+    let tries = 0
+    const timer = setInterval(async () => {
+      tries += 1
+      const { data } = await supabase.from('platform_invoices').select('status').eq('reference', ref).maybeSingle()
+      if (data?.status === 'paid') {
+        clearInterval(timer)
+        setConfirmingRef(false)
+        toast.success('Payment confirmed!')
+        loadPlatformInvoices()
+      } else if (tries > 20) {
+        clearInterval(timer)
+        setConfirmingRef(false)
+        toast('Still confirming — this updates automatically once it clears.', { icon: '⏳' })
+      }
+    }, 3000)
+    return () => clearInterval(timer)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams])
+
+  const payPlatformInvoice = async (invoice, provider) => {
+    setPayingInvoiceId(invoice.id)
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      const { data, error } = await supabase.functions.invoke('signup-checkout', {
+        body: { type: 'platform_invoice', invoice_id: invoice.id, provider, return_url: `${window.location.origin}/app/settings` },
+        headers: { Authorization: `Bearer ${session?.access_token}` },
+      })
+      if (error) {
+        let msg = error.message
+        try { const ctx = await error.context?.json(); if (ctx?.error) msg = ctx.error } catch { /* keep default */ }
+        throw new Error(msg)
+      }
+      if (data?.error) throw new Error(data.error)
+      if (!data?.url) throw new Error('No checkout URL returned')
+      window.location.assign(data.url)
+    } catch (err) {
+      toast.error(err.message || 'Could not start payment')
+      setPayingInvoiceId(null)
+    }
+  }
+
+  const submitCashClaim = async (invoice) => {
+    setPayingInvoiceId(invoice.id)
+    try {
+      const { error } = await supabase.rpc('request_platform_invoice_cash_confirmation', { p_invoice_id: invoice.id, p_note: claimNote.trim() || null })
+      if (error) throw error
+      toast.success("We'll confirm your payment shortly")
+      setClaimNoteFor(null)
+      setClaimNote('')
+    } catch (err) {
+      toast.error(err.message || 'Failed to submit')
+    } finally {
+      setPayingInvoiceId(null)
+    }
+  }
 
   // Shop Manager edits apply immediately but revert automatically if the
   // Vendor hasn't approved within 48 hours — this tracks anything still
@@ -1546,6 +1631,85 @@ export default function Settings() {
                     <Button variant="secondary" onClick={() => window.location.assign('/app/invoicing')}>
                       Open Invoicing
                     </Button>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {activeSection === 'billing' && (
+              <div className="space-y-4">
+                <div>
+                  <h3 className="text-lg font-bold text-slate-900 dark:text-white">Billing</h3>
+                  <p className="text-sm text-slate-500">Invoices from tengaPOS for your plan and add-ons</p>
+                </div>
+
+                {confirmingRef && (
+                  <div className="flex items-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800 dark:border-blue-800/50 dark:bg-blue-900/20 dark:text-blue-300">
+                    <Loader2 className="h-4 w-4 flex-shrink-0 animate-spin" />
+                    Confirming your payment…
+                  </div>
+                )}
+
+                {loadingInvoices ? (
+                  <div className="flex items-center justify-center py-12 text-sm text-slate-400">
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Loading…
+                  </div>
+                ) : platformInvoices.length === 0 ? (
+                  <div className="rounded-2xl border-2 border-dashed border-slate-200 py-12 text-center text-sm text-slate-400 dark:border-slate-700">
+                    No invoices yet.
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {platformInvoices.map((inv) => {
+                      const payable = ['sent', 'overdue'].includes(inv.status)
+                      const busy = payingInvoiceId === inv.id
+                      return (
+                        <div key={inv.id} className="rounded-2xl border border-slate-200 p-4 dark:border-slate-700">
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <div>
+                              <p className="font-semibold text-slate-900 dark:text-white">{inv.description}</p>
+                              <p className="text-xs text-slate-500">
+                                {formatCurrency(inv.amount, inv.currency)}
+                                {inv.due_date && ` · due ${formatDate(inv.due_date)}`}
+                              </p>
+                            </div>
+                            <span className={`rounded-full px-2.5 py-0.5 text-xs font-bold capitalize ${
+                              inv.status === 'paid' ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300'
+                                : inv.status === 'overdue' ? 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300'
+                                : inv.status === 'cancelled' ? 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-500'
+                                : 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300'
+                            }`}>{inv.status}</span>
+                          </div>
+
+                          {payable && (
+                            <div className="mt-3 flex flex-wrap items-center gap-2">
+                              <Button size="sm" onClick={() => payPlatformInvoice(inv, 'paynow')} disabled={busy}>
+                                {busy ? 'Redirecting…' : 'Pay with Paynow'}
+                              </Button>
+                              <Button size="sm" variant="secondary" onClick={() => payPlatformInvoice(inv, 'stripe')} disabled={busy}>
+                                Pay with Card
+                              </Button>
+                              {claimNoteFor === inv.id ? (
+                                <div className="flex flex-1 items-center gap-2">
+                                  <input
+                                    value={claimNote}
+                                    onChange={(e) => setClaimNote(e.target.value)}
+                                    placeholder="e.g. EcoCash ref, bank transfer date…"
+                                    className="min-w-0 flex-1 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                                  />
+                                  <Button size="sm" variant="secondary" onClick={() => submitCashClaim(inv)} disabled={busy}>Submit</Button>
+                                  <button onClick={() => { setClaimNoteFor(null); setClaimNote('') }} className="text-slate-400 hover:text-slate-600"><X className="h-4 w-4" /></button>
+                                </div>
+                              ) : (
+                                <button onClick={() => setClaimNoteFor(inv.id)} className="text-xs font-semibold text-slate-500 hover:underline">
+                                  I've paid via cash/transfer
+                                </button>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })}
                   </div>
                 )}
               </div>

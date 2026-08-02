@@ -4,7 +4,7 @@ import {
   LayoutDashboard, ShoppingCart, Package, ClipboardList, BarChart3,
   Settings, Users, ChefHat, ListTodo, LogOut, ChevronLeft, ChevronRight, ChevronDown,
   Store, Receipt, Cpu, X, Sparkles, CreditCard, BriefcaseBusiness, FileText, Inbox, Calculator,
-  Wrench, Car, HardHat, FileSignature, Factory, Pill, ShieldCheck,
+  Wrench, Car, HardHat, FileSignature, Factory, Pill, ShieldCheck, FileBarChart, Landmark,
 } from 'lucide-react'
 import { useState } from 'react'
 import { useThemeStore } from '@/stores/themeStore'
@@ -39,6 +39,9 @@ const ALL_NAV_ITEMS = [
     children: [
       { key: 'hr', icon: BriefcaseBusiness, label: 'HR & Payroll', path: '/app/hr' },
       { key: 'invoicing', icon: FileText, label: 'Invoicing', path: '/app/invoicing' },
+      { key: 'customers', icon: Users, label: 'Customers', path: '/app/customers' },
+      { key: 'statements', icon: FileBarChart, label: 'Statements', path: '/app/statements' },
+      { key: 'accounting', icon: Landmark, label: 'Accounting', path: '/app/accounting' },
     ],
   },
   { key: 'settings', icon: Settings, label: 'Settings', path: '/app/settings' },

@@ -48,6 +48,45 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
     )
 
+    // Platform invoices never create a signup_checkouts row -- their
+    // reference carries a distinct PINV- prefix (see signup-checkout's
+    // platform_invoice branch) so they're handled entirely separately here.
+    if (reference.startsWith('PINV-')) {
+      const paidNow = status.toLowerCase() === 'paid' || status.toLowerCase() === 'awaiting delivery'
+      if (!paidNow) return new Response('OK', { status: 200 })
+
+      // Idempotency: same guard as stripe-webhook -- only proceed if this
+      // UPDATE actually flips a payable invoice, so a retried Paynow
+      // callback can't double-insert the ledger row.
+      const { data: updated } = await admin
+        .from('platform_invoices')
+        .update({ status: 'paid', paid_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+        .eq('reference', reference)
+        .in('status', ['sent', 'overdue'])
+        .select('id, tenant_id, amount, currency')
+        .maybeSingle()
+
+      if (updated) {
+        await admin.from('subscription_payments').insert({
+          tenant_id: updated.tenant_id,
+          platform_invoice_id: updated.id,
+          provider: 'paynow',
+          provider_ref: paynowRef,
+          plan_type: 'platform_invoice',
+          amount: Number(amount) || updated.amount,
+          currency: updated.currency,
+        })
+        await admin.from('audit_logs').insert({
+          action: 'platform_invoice_paid',
+          actor_email: 'paynow-callback',
+          target_type: 'platform_invoice',
+          target_id: updated.id,
+          details: { provider: 'paynow', reference },
+        })
+      }
+      return new Response('OK', { status: 200 })
+    }
+
     const { data: checkout } = await admin
       .from('signup_checkouts')
       .select('id, tenant_id, plan_type, amount, status')
@@ -90,11 +129,19 @@ serve(async (req) => {
           fiscal_expires_at: renewal.toISOString(),
         }).eq('id', checkout.tenant_id)
       } else if (isAccountingErp) {
-        // Unlock the Accounting & ERP bundle (HR & Payroll, Invoicing) for the paid period
+        // Unlock the Accounting & ERP bundle for the paid period. Monthly
+        // subscribers are pinned to the 1st of the next calendar month
+        // (rather than "now + 1 month" rolling) so the 5-day-after-expiry
+        // auto-lock (lock_expired_accounting_erp, hourly pg_cron) lines up
+        // with "locked 5 days into an unpaid calendar month." Quarterly/
+        // halfyear/yearly keep the rolling-N-months expiry.
+        const erpExpiry = checkout.plan_type === 'erp_monthly'
+          ? new Date(now.getFullYear(), now.getMonth() + 1, 1)
+          : renewal
         const { data: t } = await admin.from('tenants').select('features').eq('id', checkout.tenant_id).maybeSingle()
         await admin.from('tenants').update({
           features: { ...(t?.features || {}), accounting_erp: true },
-          accounting_erp_expires_at: renewal.toISOString(),
+          accounting_erp_expires_at: erpExpiry.toISOString(),
         }).eq('id', checkout.tenant_id)
       } else if (isAiInsights) {
         // Unlock AI Insights for the paid period

@@ -332,10 +332,12 @@ function printViaRawBT(bytes) {
  * { text, bold, center } objects (or plain strings) -- the caller builds
  * these from the same receipt data used for the regular print/preview.
  * `connectionHint` (from Receipts Config) picks the transport to try first:
- * 'bluetooth' goes straight to WebBluetooth (the Print Agent/WebUSB can't
- * reach a BLE device); everything else tries the Print Agent first, then
- * WebUSB -- both of those work the same regardless of USB/LPT1/network,
- * since Windows' print spooler already abstracts those differences away.
+ * 'bluetooth' goes straight to WebBluetooth (BLE only), 'rawbt' hands off to
+ * the RawBT Android app (classic-Bluetooth printers); everything else tries
+ * the Print Agent first, then WebUSB -- both of those work the same
+ * regardless of USB/LPT1/network, since Windows' print spooler already
+ * abstracts those differences away, but neither works on Android, where
+ * the agent error message steers the user to RawBT instead.
  */
 export async function printToPosPrinter(lines, connectionHint, comPort) {
   const bytes = buildEscPosBytes(lines)
@@ -355,7 +357,11 @@ export async function printToPosPrinter(lines, connectionHint, comPort) {
     return
   } catch (agentErr) {
     if (!isWebUsbSupported()) {
-      throw new Error(`Couldn't reach the TengaPOS Print Agent on this device. Install it from /print-agent and make sure it's running, or use "Print Receipt" instead. (${agentErr.message})`)
+      const isAndroid = /Android/i.test(navigator.userAgent)
+      const hint = isAndroid
+        ? 'This device can\'t run the Windows Print Agent. Ask your admin to switch Printer Connection to "RawBT" in Receipts Config (Settings), then install the free RawBT Print Service app and pair your printer.'
+        : 'Install the TengaPOS Print Agent on this computer and make sure it\'s running, or use "Print Receipt" instead.'
+      throw new Error(`Couldn't reach the TengaPOS Print Agent on this device. ${hint} (${agentErr.message})`)
     }
     // Fall through to WebUSB
   }

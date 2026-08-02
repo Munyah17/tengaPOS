@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { Plus, FileText, Receipt, Download, Printer, ArrowRightLeft, Trash2, X, RefreshCw, Wrench } from 'lucide-react'
+import { Plus, FileText, Receipt, Download, Printer, ArrowRightLeft, Trash2, X, RefreshCw, Wrench, DollarSign, Loader2 } from 'lucide-react'
 import Button from '@/components/common/Button'
 import Modal from '@/components/common/Modal'
 import DateInput from '@/components/common/DateInput'
@@ -10,11 +10,129 @@ import { useReceiptConfigStore } from '@/stores/receiptConfigStore'
 import {
   fetchDocuments, insertDocument, updateDocument, deleteDocument, convertQuotationToInvoice,
   fetchProducts, fetchCustomers, findOrCreateCustomer, uploadDocumentLogo, submitReceiptConfig,
+  recordInvoicePayment, voidInvoicePayment, fetchInvoicePayments,
 } from '@/lib/db'
 import { loadWithOfflineCache } from '@/lib/offlineCache'
-import { formatCurrency, formatDate, generateDocNumber } from '@/utils/formatters'
+import { formatCurrency, formatDate, formatDateTime, generateDocNumber } from '@/utils/formatters'
 import { generateDocumentPDF } from '@/utils/invoicePdf'
+import { PAYMENT_METHODS } from '@/utils/constants'
 import toast from 'react-hot-toast'
+
+function RecordPaymentModal({ doc, currency, onClose, onPaid }) {
+  const [payments, setPayments] = useState([])
+  const [loadingPayments, setLoadingPayments] = useState(true)
+  const [amount, setAmount] = useState('')
+  const [method, setMethod] = useState(PAYMENT_METHODS[0]?.id || 'cash')
+  const [note, setNote] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [voidingId, setVoidingId] = useState(null)
+  const fmt = (n) => formatCurrency(n, currency)
+
+  const load = () => {
+    setLoadingPayments(true)
+    fetchInvoicePayments(doc.id).then(setPayments).catch(() => toast.error('Failed to load payments')).finally(() => setLoadingPayments(false))
+  }
+  useEffect(load, [doc.id])
+
+  const paidSoFar = payments.filter((p) => !p.voided_at).reduce((s, p) => s + Number(p.amount), 0)
+  const balance = Number(doc.total) - paidSoFar
+
+  const submit = async (e) => {
+    e.preventDefault()
+    const amt = Number(amount)
+    if (!amt || amt <= 0) { toast.error('Enter an amount greater than zero'); return }
+    if (amt > balance) { toast.error(`That would exceed the balance due of ${fmt(balance)}`); return }
+    setSaving(true)
+    try {
+      await recordInvoicePayment(doc.id, { amount: amt, method, note: note.trim() || null })
+      toast.success('Payment recorded')
+      setAmount(''); setNote('')
+      load()
+      onPaid()
+    } catch (err) {
+      toast.error(err.message || 'Failed to record payment')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleVoid = async (paymentId) => {
+    if (!window.confirm('Void this payment? The invoice balance will be recalculated.')) return
+    setVoidingId(paymentId)
+    try {
+      await voidInvoicePayment(paymentId)
+      load()
+      onPaid()
+    } catch (err) {
+      toast.error(err.message || 'Failed to void payment')
+    } finally {
+      setVoidingId(null)
+    }
+  }
+
+  return (
+    <Modal isOpen={!!doc} onClose={onClose} title={`Payments — ${doc.doc_number}`}>
+      <div className="mb-4 grid grid-cols-3 gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3 text-center dark:border-slate-800 dark:bg-slate-800/50">
+        <div><p className="text-xs text-slate-400">Total</p><p className="font-bold text-slate-900 dark:text-white">{fmt(doc.total)}</p></div>
+        <div><p className="text-xs text-slate-400">Paid</p><p className="font-bold text-green-600 dark:text-green-400">{fmt(paidSoFar)}</p></div>
+        <div><p className="text-xs text-slate-400">Balance</p><p className="font-bold text-slate-900 dark:text-white">{fmt(balance)}</p></div>
+      </div>
+
+      {balance > 0 && (
+        <form onSubmit={submit} className="mb-4 space-y-3 border-b border-slate-200 pb-4 dark:border-slate-800">
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="mb-1 block text-xs font-semibold text-slate-500">Amount</label>
+              <input
+                type="number" min="0.01" step="0.01" value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+                placeholder={fmt(balance)}
+                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-semibold text-slate-500">Method</label>
+              <select value={method} onChange={(e) => setMethod(e.target.value)} className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white">
+                {PAYMENT_METHODS.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
+              </select>
+            </div>
+          </div>
+          <input
+            type="text" value={note} onChange={(e) => setNote(e.target.value)}
+            placeholder="Note (optional)"
+            className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+          />
+          <Button type="submit" variant="primary" disabled={saving} className="w-full justify-center">
+            {saving ? 'Recording…' : 'Record Payment'}
+          </Button>
+        </form>
+      )}
+
+      <p className="mb-2 text-xs font-bold uppercase tracking-widest text-slate-400">Payment History</p>
+      {loadingPayments ? (
+        <div className="py-6 text-center text-sm text-slate-400"><Loader2 className="mx-auto h-4 w-4 animate-spin" /></div>
+      ) : payments.length === 0 ? (
+        <p className="py-4 text-center text-sm text-slate-400">No payments recorded yet.</p>
+      ) : (
+        <div className="space-y-2">
+          {payments.map((p) => (
+            <div key={p.id} className={`flex items-center justify-between rounded-xl border border-slate-100 px-3 py-2 text-sm dark:border-slate-800 ${p.voided_at ? 'opacity-50' : ''}`}>
+              <div>
+                <p className="font-semibold text-slate-900 dark:text-white">{fmt(p.amount)} {p.voided_at && <span className="text-xs font-normal text-red-500">(voided)</span>}</p>
+                <p className="text-xs text-slate-400">{formatDateTime(p.paid_at)} · {p.method} · {p.users?.name || '—'}</p>
+              </div>
+              {!p.voided_at && (
+                <button onClick={() => handleVoid(p.id)} disabled={voidingId === p.id} className="rounded-lg p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-500 disabled:opacity-50 dark:hover:bg-red-950">
+                  {voidingId === p.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </Modal>
+  )
+}
 
 const STATUS_COLORS = {
   draft: 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400',
@@ -69,6 +187,7 @@ export default function Invoicing({ standalone = false } = {}) {
   const [products, setProducts] = useState([])
   const [customers, setCustomers] = useState([])
   const [selectedCustomerId, setSelectedCustomerId] = useState('')
+  const [payingDoc, setPayingDoc] = useState(null)
   // Which line-item row (by index) currently has its product-suggestion
   // dropdown open, so typing in one row's description doesn't pop up
   // suggestions under every other row.
@@ -187,7 +306,18 @@ export default function Invoicing({ standalone = false } = {}) {
     setSaving(true)
     try {
       const { subtotal, vatAmount, total } = computeTotals(validItems, form.vatEnabled)
+      // Resolve/create the customer record first so its id can be stored
+      // directly on the document -- this is what makes Statements a
+      // reliable join instead of matching on denormalized text later.
+      const customerId = tenant?.id
+        ? await findOrCreateCustomer(tenant.id, {
+            name: form.customerName.trim(), phone: form.customerPhone.trim(), email: form.customerEmail.trim(), address: form.customerAddress.trim(),
+          })
+        : null
+      if (customerId) setCustomers((prev) => (prev.some((c) => c.id === customerId) ? prev : [...prev, { id: customerId, name: form.customerName.trim(), phone: form.customerPhone.trim() }]))
+
       const payload = {
+        customerId: customerId || selectedCustomerId || editing?.customer_id || null,
         customerName: form.customerName.trim(),
         customerEmail: form.customerEmail.trim() || null,
         customerPhone: form.customerPhone.trim() || null,
@@ -211,14 +341,6 @@ export default function Invoicing({ standalone = false } = {}) {
         })
         setDocuments((prev) => [created, ...prev])
         toast.success(`${docType === 'invoice' ? 'Invoice' : 'Quotation'} created`)
-      }
-      // Best-effort, non-blocking: save/update the customer record so next
-      // time this same person is quoted, they're a pick from the list
-      // instead of retyping everything.
-      if (tenant?.id) {
-        findOrCreateCustomer(tenant.id, {
-          name: payload.customerName, phone: payload.customerPhone, email: payload.customerEmail, address: payload.customerAddress,
-        }).then((id) => { if (id) setCustomers((prev) => (prev.some((c) => c.id === id) ? prev : [...prev, { id, name: payload.customerName, phone: payload.customerPhone }])) })
       }
       setShowForm(false)
     } catch (err) {
@@ -252,7 +374,12 @@ export default function Invoicing({ standalone = false } = {}) {
 
   const handleStatusChange = async (doc, status) => {
     try {
-      const updated = await updateDocument(doc.id, { ...doc, status, customerName: doc.customer_name, subtotal: doc.subtotal, vatAmount: doc.vat_amount, vatEnabled: doc.vat_enabled, total: doc.total })
+      const updated = await updateDocument(doc.id, {
+        ...doc, status,
+        customerId: doc.customer_id, customerName: doc.customer_name,
+        customerEmail: doc.customer_email, customerPhone: doc.customer_phone, customerAddress: doc.customer_address,
+        subtotal: doc.subtotal, vatAmount: doc.vat_amount, vatEnabled: doc.vat_enabled, total: doc.total,
+      })
       setDocuments((prev) => prev.map((d) => d.id === doc.id ? updated : d))
     } catch (err) {
       toast.error(err.message || 'Failed to update status')
@@ -375,18 +502,27 @@ export default function Invoicing({ standalone = false } = {}) {
                     <td className="px-4 py-3 text-sm text-slate-600 dark:text-slate-400">{formatDate(doc.created_at)}</td>
                     <td className="px-4 py-3 text-sm font-semibold text-slate-900 dark:text-white">{fmt(doc.total)}</td>
                     <td className="px-4 py-3">
-                      <select
-                        value={doc.status}
-                        onChange={(e) => handleStatusChange(doc, e.target.value)}
-                        className={`rounded-full border-0 px-2.5 py-0.5 text-xs font-bold ${STATUS_COLORS[doc.status] || STATUS_COLORS.draft}`}
-                      >
-                        {['draft', 'sent', doc.doc_type === 'invoice' ? 'paid' : 'accepted', 'cancelled'].map((s) => (
-                          <option key={s} value={s}>{s}</option>
-                        ))}
-                      </select>
+                      {doc.doc_type === 'invoice' && doc.status === 'paid' ? (
+                        <span className={`rounded-full px-2.5 py-0.5 text-xs font-bold ${STATUS_COLORS.paid}`}>paid</span>
+                      ) : (
+                        <select
+                          value={doc.status}
+                          onChange={(e) => handleStatusChange(doc, e.target.value)}
+                          className={`rounded-full border-0 px-2.5 py-0.5 text-xs font-bold ${STATUS_COLORS[doc.status] || STATUS_COLORS.draft}`}
+                        >
+                          {(doc.doc_type === 'invoice' ? ['draft', 'sent', 'cancelled'] : ['draft', 'sent', 'accepted', 'cancelled']).map((s) => (
+                            <option key={s} value={s}>{s}</option>
+                          ))}
+                        </select>
+                      )}
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-1">
+                        {doc.doc_type === 'invoice' && doc.status !== 'cancelled' && (
+                          <button onClick={() => setPayingDoc(doc)} className="rounded-lg p-1.5 text-green-600 hover:bg-green-50 dark:text-green-400 dark:hover:bg-green-950/40" title="Record / view payments">
+                            <DollarSign className="h-4 w-4" />
+                          </button>
+                        )}
                         <button onClick={() => openEdit(doc)} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800" title="Edit">
                           <FileText className="h-4 w-4" />
                         </button>
@@ -567,6 +703,15 @@ export default function Invoicing({ standalone = false } = {}) {
           </div>
         </form>
       </Modal>
+
+      {payingDoc && (
+        <RecordPaymentModal
+          doc={payingDoc}
+          currency={tenant?.currency}
+          onClose={() => setPayingDoc(null)}
+          onPaid={loadDocuments}
+        />
+      )}
     </div>
   )
 }
