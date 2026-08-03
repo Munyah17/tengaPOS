@@ -50,6 +50,22 @@ html.dark {
   color-scheme: dark;
 }
 
+/* Some Android WebViews (cheap POS tablets, exactly this app's target
+   hardware) don't reliably cascade color-scheme from `html` down into
+   native form controls -- particularly with Android's own OS-level
+   "Force Dark" rendering, which operates on form widgets separately from
+   normal page content. Reported live as "typing into a quantity field
+   shows nothing" -- the value WAS being typed, just rendered in a text
+   color matching the control's (also OS-forced) background. Declaring it
+   directly on every control, not just inheriting it, is the fix already
+   proven for DateInput's time picker -- apply it everywhere. */
+input, select, textarea {
+  color-scheme: light;
+}
+html.dark input, html.dark select, html.dark textarea {
+  color-scheme: dark;
+}
+
 body {
   font-family: var(--font-sans);
   /* Never allow horizontal page pan/drag — wide content must scroll inside
