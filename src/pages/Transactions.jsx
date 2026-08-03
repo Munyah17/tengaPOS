@@ -5,8 +5,9 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { withOfflineCache, seedFromOfflineCache } from '@/lib/offlineCache'
 import { RefreshCw, X, Ban, CheckCircle, ShieldCheck, XCircle, Undo2, Wrench, Trash2, Loader2 } from 'lucide-react'
 import ExportMenu from '@/components/common/ExportMenu'
-import DateInput from '@/components/common/DateInput'
+import DateInput, { TimeField } from '@/components/common/DateInput'
 import { formatCurrency, formatDateTime } from '@/utils/formatters'
+import { combineDateAndTime } from '@/utils/dateRanges'
 import { useAuthStore } from '@/stores/authStore'
 import { useThemeStore } from '@/stores/themeStore'
 import {
@@ -138,6 +139,8 @@ export default function Transactions() {
   const queryClient = useQueryClient()
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
+  const [timeFrom, setTimeFrom] = useState('')
+  const [timeTo, setTimeTo] = useState('')
   const [voidTarget, setVoidTarget] = useState(null) // order_id currently requesting a void
   const [returnTarget, setReturnTarget] = useState(null) // { orderId, maxAmount } currently requesting a return
   const [deletingId, setDeletingId] = useState(null)
@@ -312,11 +315,11 @@ export default function Transactions() {
     if (!dateFrom && !dateTo) return allTransactions
     return allTransactions.filter(t => {
       const d = new Date(t.date)
-      if (dateFrom && d < new Date(dateFrom)) return false
-      if (dateTo && d > new Date(dateTo + 'T23:59:59')) return false
+      if (dateFrom && d < combineDateAndTime(dateFrom, timeFrom, '00:00', 0)) return false
+      if (dateTo && d > combineDateAndTime(dateTo, timeTo, '23:59', 59.999)) return false
       return true
     })
-  }, [allTransactions, dateFrom, dateTo])
+  }, [allTransactions, dateFrom, dateTo, timeFrom, timeTo])
 
   const dateFiltered = dateFrom || dateTo
 
@@ -338,12 +341,14 @@ export default function Transactions() {
           <p className="text-sm text-slate-500">Detailed transaction history</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <DateInput value={dateFrom} onChange={e => setDateFrom(e.target.value)} placeholder="From" className="w-36" />
+            <TimeField value={timeFrom} onChange={e => setTimeFrom(e.target.value)} />
             <span className="text-xs text-slate-400">—</span>
             <DateInput value={dateTo} onChange={e => setDateTo(e.target.value)} placeholder="To" className="w-36" />
+            <TimeField value={timeTo} onChange={e => setTimeTo(e.target.value)} />
             {dateFiltered && (
-              <button onClick={() => { setDateFrom(''); setDateTo('') }} className="text-slate-400 hover:text-red-500">
+              <button onClick={() => { setDateFrom(''); setDateTo(''); setTimeFrom(''); setTimeTo('') }} className="text-slate-400 hover:text-red-500">
                 <X className="h-3.5 w-3.5" />
               </button>
             )}

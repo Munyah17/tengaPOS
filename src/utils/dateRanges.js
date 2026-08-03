@@ -55,3 +55,12 @@ export function getPresetRange(key) {
       return { start: new Date(now.getFullYear(), now.getMonth(), 1), end: now }
   }
 }
+
+// Combines a yyyy-mm-dd date with an optional hh:mm time (falling back to
+// the given default, e.g. start-of-day/end-of-day) into a real Date.
+export function combineDateAndTime(dateStr, timeStr, fallbackTime, seconds) {
+  const [h, m] = (timeStr || fallbackTime).split(':').map(Number)
+  const d = new Date(dateStr)
+  d.setHours(h, m, Math.floor(seconds), (seconds % 1) * 1000)
+  return d
+}

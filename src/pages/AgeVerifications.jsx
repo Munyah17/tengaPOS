@@ -3,8 +3,9 @@ import { useQuery } from '@tanstack/react-query'
 import { withOfflineCache } from '@/lib/offlineCache'
 import { ShieldCheck, Search } from 'lucide-react'
 import ExportMenu from '@/components/common/ExportMenu'
-import DateInput from '@/components/common/DateInput'
+import DateInput, { TimeField } from '@/components/common/DateInput'
 import { formatDateTime } from '@/utils/formatters'
+import { combineDateAndTime } from '@/utils/dateRanges'
 import { useAuthStore } from '@/stores/authStore'
 import { fetchAgeVerifications } from '@/lib/db'
 
@@ -23,6 +24,8 @@ export default function AgeVerifications() {
   const [search, setSearch] = useState('')
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
+  const [timeFrom, setTimeFrom] = useState('')
+  const [timeTo, setTimeTo] = useState('')
 
   const verificationsQuery = useQuery({
     queryKey: ['ageVerifications', tenant?.id],
@@ -50,8 +53,8 @@ export default function AgeVerifications() {
     if (dateFrom || dateTo) {
       rows = rows.filter((r) => {
         const d = new Date(r.date)
-        if (dateFrom && d < new Date(dateFrom)) return false
-        if (dateTo && d > new Date(dateTo + 'T23:59:59')) return false
+        if (dateFrom && d < combineDateAndTime(dateFrom, timeFrom, '00:00', 0)) return false
+        if (dateTo && d > combineDateAndTime(dateTo, timeTo, '23:59', 59.999)) return false
         return true
       })
     }
@@ -60,7 +63,7 @@ export default function AgeVerifications() {
       rows = rows.filter((r) => r.product.toLowerCase().includes(q) || r.verifiedBy.toLowerCase().includes(q))
     }
     return rows
-  }, [allVerifications, search, dateFrom, dateTo])
+  }, [allVerifications, search, dateFrom, dateTo, timeFrom, timeTo])
 
   const dateFiltered = dateFrom || dateTo
 
@@ -75,9 +78,11 @@ export default function AgeVerifications() {
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <DateInput value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} placeholder="From" className="w-36" />
+          <TimeField value={timeFrom} onChange={(e) => setTimeFrom(e.target.value)} />
           <DateInput value={dateTo} onChange={(e) => setDateTo(e.target.value)} placeholder="To" className="w-36" />
+          <TimeField value={timeTo} onChange={(e) => setTimeTo(e.target.value)} />
           {dateFiltered && (
-            <button onClick={() => { setDateFrom(''); setDateTo('') }} className="text-slate-400 hover:text-red-500">
+            <button onClick={() => { setDateFrom(''); setDateTo(''); setTimeFrom(''); setTimeTo('') }} className="text-slate-400 hover:text-red-500">
               Clear
             </button>
           )}

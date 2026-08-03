@@ -2,9 +2,10 @@ import { useState, useEffect, useMemo } from 'react'
 import { motion } from 'framer-motion'
 import { Eye, Bell, CheckCircle, Clock, Flame, Timer, Car, Store, X, Trash2, Loader2 } from 'lucide-react'
 import ExportMenu from '@/components/common/ExportMenu'
-import DateInput from '@/components/common/DateInput'
+import DateInput, { TimeField } from '@/components/common/DateInput'
 import Modal from '@/components/common/Modal'
 import { formatCurrency, formatDateTime } from '@/utils/formatters'
+import { combineDateAndTime } from '@/utils/dateRanges'
 import { useThemeStore } from '@/stores/themeStore'
 import { useAuthStore } from '@/stores/authStore'
 import { fetchOrders, deleteOrder } from '@/lib/db'
@@ -152,6 +153,8 @@ export default function Orders() {
   const [rawOrders, setRawOrders] = useState([])
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
+  const [timeFrom, setTimeFrom] = useState('')
+  const [timeTo, setTimeTo] = useState('')
   const [viewOrder, setViewOrder] = useState(null)
   const [deletingId, setDeletingId] = useState(null)
   // Re-render periodically so "elapsed minutes" on restaurant order cards
@@ -238,11 +241,11 @@ export default function Orders() {
     if (!dateFrom && !dateTo) return allOrders
     return allOrders.filter(o => {
       const d = new Date(o.date)
-      if (dateFrom && d < new Date(dateFrom)) return false
-      if (dateTo && d > new Date(dateTo + 'T23:59:59')) return false
+      if (dateFrom && d < combineDateAndTime(dateFrom, timeFrom, '00:00', 0)) return false
+      if (dateTo && d > combineDateAndTime(dateTo, timeTo, '23:59', 59.999)) return false
       return true
     })
-  }, [allOrders, dateFrom, dateTo])
+  }, [allOrders, dateFrom, dateTo, timeFrom, timeTo])
 
   const dateFiltered = dateFrom || dateTo
 
@@ -257,12 +260,14 @@ export default function Orders() {
         </div>
         {!isRestaurant && (
           <div className="flex flex-wrap items-center gap-2">
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <DateInput value={dateFrom} onChange={e => setDateFrom(e.target.value)} placeholder="From" className="w-36" />
+              <TimeField value={timeFrom} onChange={e => setTimeFrom(e.target.value)} />
               <span className="text-xs text-slate-400">—</span>
               <DateInput value={dateTo} onChange={e => setDateTo(e.target.value)} placeholder="To" className="w-36" />
+              <TimeField value={timeTo} onChange={e => setTimeTo(e.target.value)} />
               {dateFiltered && (
-                <button onClick={() => { setDateFrom(''); setDateTo('') }} className="text-slate-400 hover:text-red-500">
+                <button onClick={() => { setDateFrom(''); setDateTo(''); setTimeFrom(''); setTimeTo('') }} className="text-slate-400 hover:text-red-500">
                   <X className="h-3.5 w-3.5" />
                 </button>
               )}

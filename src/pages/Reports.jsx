@@ -1,46 +1,20 @@
 import { useState, useEffect } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { motion } from 'framer-motion'
-import { BarChart3, TrendingUp, DollarSign, Package, RefreshCw, Calendar, Download, Clock } from 'lucide-react'
+import { BarChart3, TrendingUp, DollarSign, Package, RefreshCw, Calendar, Download } from 'lucide-react'
 import {
   BarChart, Bar, LineChart, Line, XAxis, YAxis, Tooltip,
   ResponsiveContainer, CartesianGrid,
 } from 'recharts'
 import { useThemeStore } from '@/stores/themeStore'
 import { useAuthStore } from '@/stores/authStore'
-import DateInput from '@/components/common/DateInput'
+import DateInput, { TimeField } from '@/components/common/DateInput'
 import { fetchReportMetrics, fetchTransactionsInRange } from '@/lib/db'
 import { withOfflineCache, seedFromOfflineCache } from '@/lib/offlineCache'
 import { formatCurrency } from '@/utils/formatters'
-import { DATE_PRESETS, getPresetRange } from '@/utils/dateRanges'
+import { DATE_PRESETS, getPresetRange, combineDateAndTime } from '@/utils/dateRanges'
 import { exportToCSV, exportToExcel, exportToPDF } from '@/utils/exportUtils'
 import toast from 'react-hot-toast'
-
-// Combines a yyyy-mm-dd date with an optional hh:mm time (falling back to
-// the given default, e.g. start-of-day/end-of-day) into a real Date.
-function combineDateAndTime(dateStr, timeStr, fallbackTime, seconds) {
-  const [h, m] = (timeStr || fallbackTime).split(':').map(Number)
-  const d = new Date(dateStr)
-  d.setHours(h, m, Math.floor(seconds), (seconds % 1) * 1000)
-  return d
-}
-
-function TimeField({ value, onChange, label }) {
-  return (
-    <div>
-      {label && <label className="mb-1 block text-[10px] font-semibold text-slate-500">{label}</label>}
-      <div className="flex h-10 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 dark:border-slate-700 dark:bg-slate-800">
-        <Clock className="h-4 w-4 flex-shrink-0 text-slate-400" />
-        <input
-          type="time"
-          value={value}
-          onChange={onChange}
-          className="w-full bg-transparent text-sm text-slate-900 focus:outline-none dark:text-white [color-scheme:light] dark:[color-scheme:dark]"
-        />
-      </div>
-    </div>
-  )
-}
 
 const TRANSACTION_COLUMNS = [
   { header: 'Reference', key: 'reference' },
