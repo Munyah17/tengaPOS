@@ -9,6 +9,7 @@ import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/stores/authStore'
 import { buildShadeScale, INDUSTRIES } from '@/lib/whitelabelTheme'
 import { invokeEdgeFunction } from '@/lib/edgeFunction'
+import { usePlanPricing, priceLabelFor } from '@/lib/platformSettings'
 import toast from 'react-hot-toast'
 
 // ─── Plan metadata ────────────────────────────────────────────────────────────
@@ -206,6 +207,7 @@ const TABS = ['Application', 'Plan', 'Features', 'Branding', 'Backups', 'Team']
 
 export function TenantModal({ tenant, technicians, onClose, onSaved }) {
   const { user, role } = useAuthStore()
+  const { pricing } = usePlanPricing()
   const isSuperAdminUser = role === 'super_admin'
   const isPending = tenant.status === 'pending'
   const isStalled = tenant.status === 'stalled'
@@ -433,6 +435,28 @@ export function TenantModal({ tenant, technicians, onClose, onSaved }) {
         target_id: tenant.id,
         details: { tenant_name: tenant.name, plan_type: planType, status: newStatus || tenant.status },
       })
+
+      // This is the moment money actually changed hands for a tenant
+      // approved/converted directly by the Super Admin (phone/WhatsApp deals,
+      // trial-to-paid conversions) rather than through Checkout.jsx's Stripe/
+      // Paynow/cash-request flow -- without this, Billing & Revenue showed
+      // zero collected revenue no matter how many tenants were actually
+      // paying, because this was the only activation path with no payment
+      // record at all. Skip if a formal pending cash request already exists
+      // for this tenant -- confirmCashPayment() records that one instead, so
+      // recording here too would double-count the same payment.
+      if (((newStatus === 'active' && isPending) || (onTrial && !isPending)) && !pendingCashCheckout) {
+        const price = pricing[planType]?.price ?? PLANS[planType]?.price
+        if (price) {
+          await supabase.from('subscription_payments').insert({
+            tenant_id: tenant.id,
+            provider: 'cash',
+            plan_type: planType,
+            amount: price,
+            currency: 'USD',
+          })
+        }
+      }
       toast.success(newStatus === 'active' && isPending
         ? `${tenant.name} approved on ${PLANS[planType]?.label}`
         : 'Tenant updated')
@@ -695,7 +719,9 @@ export function TenantModal({ tenant, technicians, onClose, onSaved }) {
 
               {/* Renewal period info */}
               <div className="mt-4 rounded-xl border border-slate-100 dark:border-white/5 bg-white/5 px-4 py-3 text-sm text-slate-400">
-                Billing: <span className="font-semibold text-slate-900 dark:text-white">{PLANS[planType]?.priceLabel}</span>
+                Billing: <span className="font-semibold text-slate-900 dark:text-white">
+                  {priceLabelFor(planType, { ...PLANS[planType], ...pricing[planType] })}
+                </span>
                 {PLANS[planType]?.renewalNote && (
                   <span className="ml-2 text-green-500 dark:text-green-400 font-medium">{PLANS[planType].renewalNote}</span>
                 )}

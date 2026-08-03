@@ -1,9 +1,36 @@
+import { readFileSync, writeFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
 import legacy from '@vitejs/plugin-legacy'
 
+// Auto-incrementing build counter -- distinct from the curated changelog
+// Super Admin publishes manually (src/pages/admin/SuperAdminVersions.jsx).
+// That page answers "what changed and why"; this answers "has a build
+// actually gone out since I made changes" at a glance, without anyone
+// having to remember to log it. Bumped by 0.01 in closeBundle (fires only
+// after `vite build` finishes writing output, i.e. a successful build) so
+// the number shipped in THIS build is whatever the last successful build
+// left behind, and the file is rewritten for the next one.
+const BUILD_VERSION_FILE = fileURLToPath(new URL('./build-version.json', import.meta.url))
+const currentBuildVersion = JSON.parse(readFileSync(BUILD_VERSION_FILE, 'utf-8')).version
+
+function buildVersionPlugin() {
+  return {
+    name: 'tengapos-build-version',
+    apply: 'build',
+    closeBundle() {
+      const next = (Math.round((parseFloat(currentBuildVersion) + 0.01) * 100) / 100).toFixed(2)
+      writeFileSync(BUILD_VERSION_FILE, JSON.stringify({ version: next }, null, 2) + '\n')
+    },
+  }
+}
+
 export default defineConfig({
+  define: {
+    __BUILD_VERSION__: JSON.stringify(currentBuildVersion),
+  },
   // Confirmed live (via the fatal-error safety net in index.html) on real
   // budget Android tablets: syntax the JS engine can't even parse (optional
   // chaining, nullish coalescing, optional catch binding, logical
@@ -26,6 +53,7 @@ export default defineConfig({
   // v4, for old-Android CSS compatibility).
   plugins: [
     react(),
+    buildVersionPlugin(),
     VitePWA({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.png', 'robots.txt'],

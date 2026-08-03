@@ -6,6 +6,7 @@ import {
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { TenantModal, PLANS } from '@/pages/admin/AdminTenants'
+import { getSetting, DEFAULT_PLAN_PRICING } from '@/lib/platformSettings'
 import toast from 'react-hot-toast'
 
 export default function SuperAdminDashboard() {
@@ -29,10 +30,11 @@ export default function SuperAdminDashboard() {
 
   const loadMetrics = async () => {
     try {
-      const [{ data: tenants, error: tenantsError }, { data: techs }, { count: openTickets }] = await Promise.all([
+      const [{ data: tenants, error: tenantsError }, { data: techs }, { count: openTickets }, pricing] = await Promise.all([
         supabase.from('tenants').select('*').order('created_at', { ascending: false }),
         supabase.from('app_users').select('id, name, email').eq('role', 'tech_support').eq('is_active', true),
         supabase.from('support_tickets').select('id', { count: 'exact', head: true }).in('status', ['open', 'in_progress']),
+        getSetting('plan_pricing', DEFAULT_PLAN_PRICING),
       ])
       if (tenantsError) throw tenantsError
 
@@ -43,7 +45,8 @@ export default function SuperAdminDashboard() {
       // Monthly recurring = recurring plans only (BYOD). Standard/Pro are once-off.
       const monthly = active.reduce((sum, t) => {
         const plan = PLANS[t.plan_type]
-        return plan?.recurring && plan.price ? sum + plan.price : sum
+        const price = pricing?.[t.plan_type]?.price ?? plan?.price
+        return plan?.recurring && price ? sum + price : sum
       }, 0)
 
       setMetrics({

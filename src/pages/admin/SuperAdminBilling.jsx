@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { DollarSign, TrendingUp, Briefcase, Info, Receipt, Plus, X, Loader2, RefreshCw, Bell, Check, RotateCw } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { PLANS } from '@/pages/admin/AdminTenants'
+import { usePlanPricing, priceLabelFor } from '@/lib/platformSettings'
 import { formatCurrency, formatDate } from '@/utils/formatters'
 import toast from 'react-hot-toast'
 
@@ -113,6 +114,7 @@ export default function SuperAdminBilling() {
   const [loading, setLoading] = useState(true)
   const [showCreate, setShowCreate] = useState(false)
   const [busyId, setBusyId] = useState(null)
+  const { pricing } = usePlanPricing()
 
   const load = () => {
     Promise.all([
@@ -192,22 +194,29 @@ export default function SuperAdminBilling() {
     setClaims((prev) => prev.filter((c) => c.id !== claimId))
   }
 
+  // Live price for a plan key -- platform_settings.plan_pricing overrides
+  // PLANS' hardcoded defaults, and Super Admin's Pricing Tiers page promises
+  // "revenue reports update instantly" when they change a price, so this
+  // must never read PLANS[key].price directly.
+  const priceOf = (key) => pricing[key]?.price ?? PLANS[key]?.price
+  const isRecurring = (key) => pricing[key]?.recurring ?? PLANS[key]?.recurring
+
   // Only BYOD recurs monthly. Standard/Pro are once-off with free renewal (Ts & Cs apply).
   const mrr = tenants.reduce((sum, t) => {
-    const plan = PLANS[t.plan_type]
-    return plan?.recurring && plan.price ? sum + plan.price : sum
+    const price = priceOf(t.plan_type)
+    return isRecurring(t.plan_type) && price ? sum + price : sum
   }, 0)
   const onceOffTotal = tenants.reduce((sum, t) => {
-    const plan = PLANS[t.plan_type]
-    return plan && !plan.recurring && plan.price ? sum + plan.price : sum
+    const price = priceOf(t.plan_type)
+    return PLANS[t.plan_type] && !isRecurring(t.plan_type) && price ? sum + price : sum
   }, 0)
   const collectedTotal = payments.reduce((sum, p) => sum + Number(p.amount || 0), 0)
-  const customQuote = tenants.filter((t) => t.plan_type && !PLANS[t.plan_type]?.price)
+  const customQuote = tenants.filter((t) => t.plan_type && !priceOf(t.plan_type))
 
   const byPlan = Object.entries(PLANS)
     .map(([key, plan]) => {
       const count = tenants.filter((t) => t.plan_type === key).length
-      return { key, plan, count }
+      return { key, plan, count, price: priceOf(key), recurring: isRecurring(key) }
     })
     .filter((row) => row.count > 0)
 
@@ -328,7 +337,7 @@ export default function SuperAdminBilling() {
           </p>
         ) : (
           <div className="space-y-3">
-            {byPlan.map(({ key, plan, count }) => {
+            {byPlan.map(({ key, plan, count, price, recurring }) => {
               const Icon = plan.icon
               return (
                 <div key={key} className="flex items-center gap-4 rounded-xl border border-slate-100 px-4 py-3 dark:border-white/5">
@@ -336,16 +345,16 @@ export default function SuperAdminBilling() {
                   <div className="min-w-0 flex-1">
                     <p className="text-sm font-semibold text-slate-900 dark:text-white">{plan.label}</p>
                     <p className="text-xs text-slate-500">
-                      {count} tenant{count !== 1 ? 's' : ''} · {plan.priceLabel}
+                      {count} tenant{count !== 1 ? 's' : ''} · {priceLabelFor(key, { price, recurring, renewalMonths: plan.renewalMonths })}
                       {plan.renewalNote && <span className="ml-1 text-green-500">· {plan.renewalNote}</span>}
                     </p>
                   </div>
                   <p className="flex-shrink-0 text-sm font-bold text-slate-900 dark:text-white">
-                    {plan.price === null
+                    {price == null
                       ? 'Custom'
-                      : plan.recurring
-                        ? `$${(plan.price * count).toFixed(2)}/mo`
-                        : `$${(plan.price * count).toFixed(2)} once-off`}
+                      : recurring
+                        ? `$${(price * count).toFixed(2)}/mo`
+                        : `$${(price * count).toFixed(2)} once-off`}
                   </p>
                 </div>
               )

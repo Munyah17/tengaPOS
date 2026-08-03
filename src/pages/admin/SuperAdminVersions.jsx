@@ -127,11 +127,18 @@ export default function SuperAdminVersions() {
 
   return (
     <div className="p-6">
-      <div className="mb-6">
-        <h1 className="text-2xl font-extrabold text-slate-900 dark:text-white">Version Tracker</h1>
-        <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-          Log every platform update and publish it straight to every tenant's dashboard.
-        </p>
+      <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-extrabold text-slate-900 dark:text-white">Version Tracker</h1>
+          <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+            Log every platform update and publish it straight to every tenant's dashboard.
+          </p>
+        </div>
+        <div className="rounded-2xl border border-slate-200 bg-white px-4 py-2 text-right dark:border-white/10 dark:bg-white/5">
+          <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Build</p>
+          <p className="font-mono text-lg font-extrabold text-slate-900 dark:text-white">{__BUILD_VERSION__}</p>
+          <p className="text-[10px] text-slate-400">Auto-increments +0.01 every successful build</p>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">

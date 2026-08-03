@@ -2,11 +2,13 @@ import { useEffect, useState } from 'react'
 import { DollarSign, Calendar, AlertTriangle } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { PLANS } from '@/pages/admin/AdminTenants'
+import { usePlanPricing, priceLabelFor } from '@/lib/platformSettings'
 
 export default function SuperAdminSubscriptions() {
   const [tenants, setTenants] = useState([])
   const [loading, setLoading] = useState(true)
   const [planFilter, setPlanFilter] = useState('all')
+  const { pricing } = usePlanPricing()
 
   useEffect(() => {
     supabase
@@ -58,7 +60,7 @@ export default function SuperAdminSubscriptions() {
               <Icon className={`h-5 w-5 ${plan.color}`} />
               <p className="mt-2 text-2xl font-extrabold text-slate-900 dark:text-white">{planCounts[key]}</p>
               <p className="text-xs font-medium text-slate-500">{plan.label}</p>
-              <p className="mt-0.5 text-[10px] text-slate-400">{plan.priceLabel}</p>
+              <p className="mt-0.5 text-[10px] text-slate-400">{priceLabelFor(key, { ...plan, ...pricing[key] })}</p>
             </button>
           )
         })}
@@ -97,7 +99,7 @@ export default function SuperAdminSubscriptions() {
                     {plan.label}
                   </span>
                 )}
-                <span className="text-xs text-slate-500">{plan?.priceLabel}</span>
+                <span className="text-xs text-slate-500">{plan && priceLabelFor(tenant.plan_type, { ...plan, ...pricing[tenant.plan_type] })}</span>
                 <span className={`flex items-center gap-1.5 text-xs ${urgent ? 'font-semibold text-amber-500' : 'text-slate-500'}`}>
                   {urgent ? <AlertTriangle className="h-3.5 w-3.5" /> : <Calendar className="h-3.5 w-3.5" />}
                   {renewal
