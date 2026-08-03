@@ -13,6 +13,7 @@ import { useThemeStore } from '@/stores/themeStore'
 import {
   fetchTransactions, fetchVoids, requestVoid, approveVoid, validateVoid, rejectVoid,
   fetchReturns, requestReturn, approveReturn, validateReturn, rejectReturn, deleteOrder,
+  clearVoidedTransactions,
 } from '@/lib/db'
 import toast from 'react-hot-toast'
 
@@ -141,6 +142,7 @@ export default function Transactions() {
   const [dateTo, setDateTo] = useState('')
   const [timeFrom, setTimeFrom] = useState('')
   const [timeTo, setTimeTo] = useState('')
+  const [clearingVoided, setClearingVoided] = useState(false)
   const [voidTarget, setVoidTarget] = useState(null) // order_id currently requesting a void
   const [returnTarget, setReturnTarget] = useState(null) // { orderId, maxAmount } currently requesting a return
   const [deletingId, setDeletingId] = useState(null)
@@ -333,6 +335,20 @@ export default function Transactions() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [transactions, voidByOrder])
 
+  const handleClearVoided = async () => {
+    if (!window.confirm(`Archive ${voidedStats.count} voided transaction(s)? They'll be removed from this list but not deleted -- the void record itself (who requested/approved/validated it) is kept permanently.`)) return
+    setClearingVoided(true)
+    try {
+      const count = await clearVoidedTransactions()
+      toast.success(`${count} voided transaction(s) cleared`)
+      load()
+    } catch (err) {
+      toast.error(err.message || 'Failed to clear voided transactions')
+    } finally {
+      setClearingVoided(false)
+    }
+  }
+
   return (
     <div className="p-6">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
@@ -370,12 +386,23 @@ export default function Transactions() {
           <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-red-100 text-red-600 dark:bg-red-900/40 dark:text-red-400">
             <Ban className="h-5 w-5" />
           </div>
-          <div>
+          <div className="flex-1">
             <p className="text-xs text-red-700 dark:text-red-400">Voided Transactions{dateFiltered ? ' (selected range)' : ''}</p>
             <p className="text-lg font-extrabold text-red-800 dark:text-red-300">
               {voidedStats.count} · {formatCurrency(voidedStats.total)}
             </p>
           </div>
+          {role === 'vendor' && (
+            <button
+              onClick={handleClearVoided}
+              disabled={clearingVoided}
+              className="flex flex-shrink-0 items-center gap-1.5 rounded-xl border border-red-300 bg-white px-3 py-2 text-xs font-semibold text-red-700 hover:bg-red-100 disabled:opacity-50 dark:border-red-800 dark:bg-slate-900 dark:text-red-400 dark:hover:bg-red-950/40"
+              title="Archive voided transactions out of this list (kept in the void record, not deleted)"
+            >
+              {clearingVoided ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+              Clear Voided
+            </button>
+          )}
         </div>
       )}
 

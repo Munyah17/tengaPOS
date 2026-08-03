@@ -341,8 +341,29 @@ export async function fetchTransactions(tenantId) {
     .from('transactions')
     .select('*, orders(order_no, subtotal, tax_amount, total, order_items(product_id, name, qty, unit_price)), users(name), branches(name)')
     .eq('tenant_id', tenantId)
+    .is('archived_at', null)
     .order('created_at', { ascending: false })
     .limit(500)
+  if (error) throw error
+  return data
+}
+
+// Vendor-only bulk cleanup: archives (never deletes) the transaction rows
+// for every already-validated void, so old voided clutter can be tidied out
+// of the main list. Logs the action to tenant_activity_log.
+export async function clearVoidedTransactions() {
+  const { data, error } = await supabase.rpc('clear_voided_transactions')
+  if (error) throw error
+  return data
+}
+
+export async function fetchTenantActivityLog(tenantId, limit = 50) {
+  const { data, error } = await supabase
+    .from('tenant_activity_log')
+    .select('*, users(name)')
+    .eq('tenant_id', tenantId)
+    .order('created_at', { ascending: false })
+    .limit(limit)
   if (error) throw error
   return data
 }
