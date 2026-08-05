@@ -1431,7 +1431,7 @@ export default function Settings() {
 
                 <div className="border-t border-slate-200 pt-4 dark:border-slate-700">
                   <h4 className="mb-4 text-sm font-bold uppercase text-slate-500 tracking-wide">Device Credentials</h4>
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                     <div>
                       <label className="mb-1.5 block text-xs font-medium text-slate-700 dark:text-slate-300">Device ID</label>
                       <input
@@ -1492,7 +1492,7 @@ export default function Settings() {
 
                 <div className="border-t border-slate-200 pt-4 dark:border-slate-700">
                   <h4 className="mb-4 text-sm font-bold uppercase text-slate-500 tracking-wide">Taxpayer Information</h4>
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                     <div>
                       <label className="mb-1.5 block text-xs font-medium text-slate-700 dark:text-slate-300">TIN (Tax ID Number)</label>
                       <input

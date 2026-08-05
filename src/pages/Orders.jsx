@@ -217,6 +217,7 @@ export default function Orders() {
     date: o.created_at,
     customer: 'Walk-in',
     items: o.order_items?.reduce((s, i) => s + i.qty, 0) ?? 0,
+    itemNames: (o.order_items || []).map(i => `${i.name}${i.qty > 1 ? ` x${i.qty}` : ''}`).join(', '),
     total: parseFloat(o.total),
     method: o.payment_method || '—',
     status: o.status,
@@ -289,7 +290,7 @@ export default function Orders() {
           <table className="w-full min-w-[640px]">
             <thead>
               <tr className="border-b border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-900">
-                {['Order ID', 'Date', 'Customer', 'Items', 'Total', 'Payment', 'Status', ''].map((h) => (
+                {['Receipt #', 'Date', 'Customer', 'Products', 'Items', 'Total', 'Payment', 'Status', ''].map((h) => (
                   <th key={h} className="px-4 py-3 text-left text-xs font-semibold uppercase text-slate-500">{h}</th>
                 ))}
               </tr>
@@ -297,7 +298,7 @@ export default function Orders() {
             <tbody>
               {orders.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="py-16 text-center text-sm text-slate-400">
+                  <td colSpan={9} className="py-16 text-center text-sm text-slate-400">
                     No orders yet — complete a sale on the POS to see it here.
                   </td>
                 </tr>
@@ -311,6 +312,7 @@ export default function Orders() {
                   <td className="px-4 py-3 text-sm font-mono font-medium text-slate-900 dark:text-white">{order.id}</td>
                   <td className="px-4 py-3 text-sm text-slate-600 dark:text-slate-400">{formatDateTime(order.date)}</td>
                   <td className="px-4 py-3 text-sm text-slate-600 dark:text-slate-400">{order.customer}</td>
+                  <td className="px-4 py-3 max-w-[220px] truncate text-sm text-slate-600 dark:text-slate-400" title={order.itemNames}>{order.itemNames || '—'}</td>
                   <td className="px-4 py-3 text-sm text-slate-600 dark:text-slate-400">{order.items}</td>
                   <td className="px-4 py-3 text-sm font-semibold text-slate-900 dark:text-white">{formatCurrency(order.total)}</td>
                   <td className="px-4 py-3">

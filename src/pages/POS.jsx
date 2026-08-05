@@ -320,7 +320,7 @@ export default function POS() {
     const tax = cart.getTax()
     const total = cart.getGrandTotal()
 
-    let receiptNumber = generateReceiptNumber()
+    let receiptNumber = generateReceiptNumber(tenant?.name)
     // The real dedup key (see saveCheckout/process_checkout) -- generated
     // once, up front, and reused on every retry (live retry via the
     // offline queue, or a background sync replay) so a retried sale is
@@ -580,7 +580,7 @@ export default function POS() {
                     >
                       <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center overflow-hidden rounded-lg bg-slate-100 dark:bg-slate-800">
                         {p.image
-                          ? <img src={p.image} alt="" className="h-full w-full object-cover" />
+                          ? <img src={p.image} alt="" loading="lazy" decoding="async" className="h-full w-full object-cover" />
                           : <PackageIcon className="h-4 w-4 text-slate-400" />}
                       </div>
                       <div className="min-w-0 flex-1">
@@ -622,7 +622,7 @@ export default function POS() {
         </div>
 
         {/* Product Grid */}
-        <div className="flex-1 overflow-auto p-4">
+        <div className="flex-1 overflow-auto p-4 pb-20">
           {products.length === 0 && (
             <div className="flex h-full flex-col items-center justify-center text-center">
               <PackageIcon className="mb-3 h-14 w-14 text-slate-300 dark:text-slate-700" />
@@ -646,6 +646,8 @@ export default function POS() {
                     <img
                       src={product.image}
                       alt={product.name}
+                      loading="lazy"
+                      decoding="async"
                       className="h-full w-full rounded-lg object-cover"
                     />
                   ) : (

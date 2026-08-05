@@ -115,20 +115,25 @@ export default function TopBar({ onMenuClick }) {
           Product search lives on the POS and Inventory pages where it's actually needed. */}
       <div className="flex-1" />
 
-      {/* Right */}
-      <div className="flex items-center gap-1.5">
+      {/* Right — its own scroll container so on a narrow/mid-size tablet
+          (enough width to clear the `lg:hidden` hamburger breakpoint, not
+          enough for every badge below to fit) items are swipeable rather
+          than silently clipped off-screen and unreachable (body has
+          overflow-x:hidden globally, so unconstrained overflow here would
+          otherwise just disappear — including the avatar/sign-out menu). */}
+      <div className="flex min-w-0 items-center gap-1.5 overflow-x-auto">
         {/* Read-only badge */}
         {isReadOnly && (
-          <div className="hidden items-center gap-1.5 rounded-lg bg-amber-50 px-2.5 py-1.5 text-xs font-semibold text-amber-700 dark:bg-amber-950 dark:text-amber-400 sm:flex">
+          <div className="hidden flex-shrink-0 items-center gap-1.5 rounded-lg bg-amber-50 px-2.5 py-1.5 text-xs font-semibold text-amber-700 dark:bg-amber-950 dark:text-amber-400 md:flex">
             <ShieldAlert className="h-3.5 w-3.5" />
             Read-only
           </div>
         )}
 
         {/* Online status */}
-        <div className={`hidden items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium sm:flex ${isOnline ? 'bg-green-50 text-green-700 dark:bg-green-950 dark:text-green-400' : 'bg-red-50 text-red-700 dark:bg-red-950 dark:text-red-400'}`}>
+        <div className={`hidden flex-shrink-0 items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium md:flex ${isOnline ? 'bg-green-50 text-green-700 dark:bg-green-950 dark:text-green-400' : 'bg-red-50 text-red-700 dark:bg-red-950 dark:text-red-400'}`}>
           {isOnline ? <Wifi className="h-3.5 w-3.5" /> : <WifiOff className="h-3.5 w-3.5" />}
-          <span className="hidden sm:inline">{isOnline ? 'Online' : 'Offline'}</span>
+          <span className="hidden md:inline">{isOnline ? 'Online' : 'Offline'}</span>
         </div>
 
         {/* Pending offline sync count — reassurance that queued work hasn't been lost.
@@ -137,7 +142,7 @@ export default function TopBar({ onMenuClick }) {
           <button
             onClick={() => setShowSyncManager(true)}
             title={`${pendingSync} item${pendingSync !== 1 ? 's' : ''} saved offline, waiting to sync — click to view`}
-            className="hidden items-center gap-1.5 rounded-lg bg-amber-50 px-2.5 py-1.5 text-xs font-medium text-amber-700 hover:bg-amber-100 dark:bg-amber-950 dark:text-amber-400 dark:hover:bg-amber-900 sm:flex"
+            className="hidden flex-shrink-0 items-center gap-1.5 rounded-lg bg-amber-50 px-2.5 py-1.5 text-xs font-medium text-amber-700 hover:bg-amber-100 dark:bg-amber-950 dark:text-amber-400 dark:hover:bg-amber-900 md:flex"
           >
             <CloudUpload className="h-3.5 w-3.5" />
             {pendingSync} pending
@@ -151,19 +156,20 @@ export default function TopBar({ onMenuClick }) {
           <button
             onClick={() => setShowSyncManager(true)}
             title={`${failedSync} item${failedSync !== 1 ? 's' : ''} couldn't sync — click to review`}
-            className="hidden items-center gap-1.5 rounded-lg bg-red-50 px-2.5 py-1.5 text-xs font-medium text-red-700 hover:bg-red-100 dark:bg-red-950 dark:text-red-400 dark:hover:bg-red-900 sm:flex"
+            className="hidden flex-shrink-0 items-center gap-1.5 rounded-lg bg-red-50 px-2.5 py-1.5 text-xs font-medium text-red-700 hover:bg-red-100 dark:bg-red-950 dark:text-red-400 dark:hover:bg-red-900 md:flex"
           >
             <AlertTriangle className="h-3.5 w-3.5" />
             {failedSync} failed
           </button>
         )}
 
-        <RefreshOnlineButton />
+        <div className="flex-shrink-0"><RefreshOnlineButton /></div>
 
-        {/* POS mode toggle — hidden on mobile, and only shown at all when
-            Super Admin has enabled more than one mode for this tenant */}
+        {/* POS mode toggle — hidden below md (also reachable via the avatar
+            dropdown's own mode switcher), and only shown at all when Super
+            Admin has enabled more than one mode for this tenant */}
         {enabledModes.length > 1 && (
-          <div className="hidden items-center overflow-hidden rounded-xl border border-slate-200 dark:border-slate-700 sm:flex">
+          <div className="hidden flex-shrink-0 items-center overflow-hidden rounded-xl border border-slate-200 dark:border-slate-700 md:flex">
             {enabledModes.map((m) => {
               const meta = MODE_META[m] || MODE_META.retail
               return (
@@ -179,10 +185,10 @@ export default function TopBar({ onMenuClick }) {
           </div>
         )}
 
-        <ThemeToggle />
+        <div className="flex-shrink-0"><ThemeToggle /></div>
 
         {/* Bell dropdown */}
-        <div ref={bellRef} className="relative">
+        <div ref={bellRef} className="relative flex-shrink-0">
           <button
             onClick={() => { setBellOpen((o) => !o); setAvatarOpen(false) }}
             className="relative rounded-xl p-2 text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
@@ -235,7 +241,7 @@ export default function TopBar({ onMenuClick }) {
         </div>
 
         {/* Avatar dropdown */}
-        <div ref={avatarRef} className="relative">
+        <div ref={avatarRef} className="relative flex-shrink-0">
           <button
             onClick={() => { setAvatarOpen((o) => !o); setBellOpen(false) }}
             className="flex items-center gap-2 rounded-xl p-1.5 transition-colors hover:bg-slate-100 dark:hover:bg-slate-800"

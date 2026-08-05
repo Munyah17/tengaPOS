@@ -18,6 +18,7 @@ import {
   fetchCategories, createCategory, fetchStockTransfers, transferStock,
 } from '@/lib/db'
 import { getOfflineProducts, queueOfflineInventoryWrite } from '@/lib/offlineSync'
+import { resizeImageFile } from '@/utils/imageResize'
 import toast from 'react-hot-toast'
 
 const BLANK = {
@@ -247,12 +248,16 @@ export default function Inventory() {
       : [...f.branchIds, branchId],
   }))
 
-  const handleImagePick = (e) => {
+  const handleImagePick = async (e) => {
     const file = e.target.files?.[0]
     if (!file) return
     if (file.size > 5 * 1024 * 1024) { toast.error('Image must be under 5MB'); return }
-    setImageFile(file)
-    setImagePreview(URL.createObjectURL(file))
+    // Shrink to a thumbnail-appropriate size before it ever reaches upload --
+    // this is what actually renders everywhere (POS grid, search, this list),
+    // so there's no reason to ship a multi-MB camera photo for a 36px tile.
+    const resized = await resizeImageFile(file)
+    setImageFile(resized)
+    setImagePreview(URL.createObjectURL(resized))
     setForm((f) => ({ ...f, imageUnavailable: false }))
   }
 
@@ -531,7 +536,7 @@ export default function Inventory() {
                         <div className="flex items-center gap-3">
                           <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center overflow-hidden rounded-lg bg-slate-100 dark:bg-slate-800">
                             {img
-                              ? <img src={img} alt="" className="h-full w-full object-cover" />
+                              ? <img src={img} alt="" loading="lazy" decoding="async" className="h-full w-full object-cover" />
                               : <ImageOff className="h-4 w-4 text-slate-400" />}
                           </div>
                           <div className="min-w-0">
