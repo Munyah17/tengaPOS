@@ -3,7 +3,7 @@ import { DollarSign, TrendingUp, Briefcase, Info, Receipt, Plus, X, Loader2, Ref
 import { supabase } from '@/lib/supabase'
 import { PLANS } from '@/pages/admin/AdminTenants'
 import { usePlanPricing, priceLabelFor } from '@/lib/platformSettings'
-import { formatCurrency, formatDate } from '@/utils/formatters'
+import { formatCurrency, formatDate, toLocalDateStr } from '@/utils/formatters'
 import toast from 'react-hot-toast'
 
 const INVOICE_STATUS_COLORS = {
@@ -39,7 +39,7 @@ function CreateInvoiceModal({ tenants, onClose, onCreated }) {
         due_date: form.due_date || null,
         is_recurring: form.is_recurring,
         recurrence_interval: form.is_recurring ? form.recurrence_interval : null,
-        next_invoice_date: form.is_recurring ? nextDate.toISOString().slice(0, 10) : null,
+        next_invoice_date: form.is_recurring ? toLocalDateStr(nextDate) : null,
       })
       if (error) throw error
       toast.success('Invoice sent')
@@ -176,7 +176,7 @@ export default function SuperAdminBilling() {
         sent_at: new Date().toISOString(),
         is_recurring: true,
         recurrence_interval: inv.recurrence_interval,
-        next_invoice_date: nextDate.toISOString().slice(0, 10),
+        next_invoice_date: toLocalDateStr(nextDate),
         parent_invoice_id: inv.parent_invoice_id || inv.id,
       })
       if (error) throw error

@@ -136,6 +136,18 @@ export default function ZimraReceipt({ receipt, onClose }) {
         <title>Receipt ${esc(receipt.receiptNumber)}</title>
         <style>
           * { margin: 0; padding: 0; box-sizing: border-box; }
+          /* Some thermal print drivers (esp. cheap thermal printers set up
+             through a generic Windows "print to page" driver rather than a
+             true continuous-roll ESC/POS driver) don't reliably honor
+             `@page { size: 80mm auto }` on its own and fall back to a fixed
+             page length, feeding a large blank gap after the actual content
+             before cutting. html/body defaulting to a full page height in
+             print mode is the other half of that -- forcing both to the
+             content's own height keeps the printed length tied to what's
+             actually on the receipt. (The "POS Printer" button sends raw
+             ESC/POS bytes with an explicit ~3-line feed instead and isn't
+             affected by this at all -- prefer it where the printer supports it.) */
+          html, body { height: auto; }
           body { font-family: 'Courier New', Courier, monospace; font-size: 11px; width: 72mm; padding: 4mm; background: #fff; color: #000; }
           .center { text-align: center; }
           .bold { font-weight: bold; }

@@ -747,8 +747,8 @@ export default function Inventory() {
             { label: 'Brand', field: 'brand', type: 'text', required: false },
             { label: 'SKU', field: 'sku', type: 'text', required: false },
             { label: 'Barcode', field: 'barcode', type: 'text', required: false },
-            { label: 'Selling Price (VAT-inclusive) *', field: 'price', type: 'number', required: true },
-            { label: 'Landing Price (what it cost you)', field: 'landingPrice', type: 'number', required: false },
+            { label: 'Selling Price (VAT-inclusive) *', field: 'price', type: 'number', required: true, money: true },
+            { label: 'Landing Price (what it cost you)', field: 'landingPrice', type: 'number', required: false, money: true },
             ...(form.isService ? [] : [
               { label: 'Stock Quantity *', field: 'stock', type: 'number', required: true },
               { label: 'Low Stock Alert At', field: 'lowStockThreshold', type: 'number', required: false },
@@ -760,9 +760,11 @@ export default function Inventory() {
                 type={f.type}
                 value={form[f.field]}
                 onChange={e => setForm({ ...form, [f.field]: e.target.value })}
+                onFocus={e => e.target.select()}
                 className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
                 required={f.required}
                 min={f.type === 'number' ? '0' : undefined}
+                step={f.money ? '0.01' : undefined}
               />
             </div>
           ))}
@@ -913,13 +915,15 @@ export default function Inventory() {
                       <input
                         type="number" min="1" step="1" value={tier.min_qty}
                         onChange={(e) => updatePriceTier(i, 'min_qty', e.target.value)}
+                        onFocus={e => e.target.select()}
                         placeholder="10"
                         className="w-20 rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
                       />
                       <span className="flex-shrink-0 text-xs text-slate-500">→ price</span>
                       <input
-                        type="number" min="0" value={tier.price}
+                        type="number" min="0" step="0.01" value={tier.price}
                         onChange={(e) => updatePriceTier(i, 'price', e.target.value)}
+                        onFocus={e => e.target.select()}
                         placeholder="4.50"
                         className="flex-1 rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
                       />

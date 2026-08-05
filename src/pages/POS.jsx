@@ -897,12 +897,14 @@ export default function POS() {
             <input
               type="number"
               min="0"
+              step="0.01"
               max={cart.discountType === 'percent' ? 100 : undefined}
               value={cart.discount || ''}
               onChange={(e) => {
                 const raw = Math.max(0, Number(e.target.value) || 0)
                 cart.setDiscount(cart.discountType === 'percent' ? Math.min(100, raw) : raw)
               }}
+              onFocus={e => e.target.select()}
               placeholder="0"
               className="w-20 rounded-lg border border-slate-200 bg-white px-2 py-1 text-right text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
             />

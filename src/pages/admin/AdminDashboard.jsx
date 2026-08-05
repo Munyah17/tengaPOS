@@ -3,6 +3,7 @@ import { LifeBuoy, AlertCircle, CheckCircle, Clock, Users, TrendingUp } from 'lu
 import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/stores/authStore'
 import { Link } from 'react-router-dom'
+import { toLocalDateStr } from '@/utils/formatters'
 
 export default function AdminDashboard() {
   const { role } = useAuthStore()
@@ -21,7 +22,7 @@ export default function AdminDashboard() {
 
   const loadData = async () => {
     try {
-      const today = new Date().toISOString().split('T')[0]
+      const today = toLocalDateStr()
       const [{ count: open }, { count: inProgress }, { count: total }, { count: resolved }, { data: tickets }] = await Promise.all([
         supabase.from('support_tickets').select('*', { count: 'exact', head: true }).eq('status', 'open'),
         supabase.from('support_tickets').select('*', { count: 'exact', head: true }).eq('status', 'in_progress'),

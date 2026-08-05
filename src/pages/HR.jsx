@@ -10,7 +10,7 @@ import {
   savePayrollRun, deletePayrollRun,
 } from '@/lib/db'
 import { exportToCSV } from '@/utils/exportUtils'
-import { formatCurrency } from '@/utils/formatters'
+import { formatCurrency, toLocalDateStr } from '@/utils/formatters'
 import toast from 'react-hot-toast'
 
 const EMPLOYMENT_TYPES = ['full_time', 'part_time', 'casual', 'contract']
@@ -24,8 +24,8 @@ const STATUS_CFG = {
   paid:      { label: 'Paid',      cls: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' },
 }
 
-const today          = new Date().toISOString().split('T')[0]
-const firstOfMonth   = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0]
+const today          = toLocalDateStr()
+const firstOfMonth   = toLocalDateStr(new Date(new Date().getFullYear(), new Date().getMonth(), 1))
 const currentMonthLabel = new Date().toLocaleString('default', { month: 'long', year: 'numeric' })
 
 // ── Pay Rate Row ───────────────────────────────────────────────────────────────

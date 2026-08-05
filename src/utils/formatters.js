@@ -21,6 +21,18 @@ export function formatDate(date) {
   }).format(new Date(date))
 }
 
+// yyyy-mm-dd for a Date, using its LOCAL calendar date -- never
+// `date.toISOString().slice(0, 10)`, which converts to UTC first and
+// silently rolls back to the previous day for any timezone east of UTC
+// (confirmed live: exactly this bug meant a "today" default/filter fell on
+// yesterday for Zimbabwe's UTC+2 for a couple of hours after each
+// midnight). Use this anywhere a plain calendar-date string is needed —
+// default form values, DATE-column (not TIMESTAMPTZ) query boundaries.
+export function toLocalDateStr(date = new Date()) {
+  const d = date instanceof Date ? date : new Date(date)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
 export function formatDateTime(date) {
   return new Intl.DateTimeFormat('en-GB', {
     year: 'numeric',

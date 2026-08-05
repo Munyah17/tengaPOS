@@ -1903,10 +1903,26 @@ export async function deleteFixedAsset(id) {
 
 // ─── Accounting & ERP: Expenses ────────────────────────────────────────────
 
+// expense_date is a plain DATE column (no time/timezone) -- callers pass
+// fromDate/toDate as full UTC ISO timestamps (e.g. range.start.toISOString()
+// for a "Today" preset). Handing that straight to a `date` column's
+// .gte()/.lte() makes Postgres cast the string to date by truncating the
+// literal UTC text, NOT by converting to local time first -- confirmed live:
+// '2026-08-03T22:00:00.000Z'::date = '2026-08-03', even though that instant
+// is already Aug 4th in Harare (UTC+2). For a tenant east of UTC, "Today"'s
+// start-of-day boundary silently lands on the wrong (previous) calendar
+// date, pulling all of yesterday's expenses into today's report. Recover
+// the correct local calendar date instead, in the same browser session/
+// timezone the ISO string was created in.
+function toLocalDateStr(isoOrDate) {
+  const d = isoOrDate instanceof Date ? isoOrDate : new Date(isoOrDate)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
 export async function fetchExpenses(tenantId, { fromDate, toDate } = {}) {
   let q = supabase.from('expenses').select('*, suppliers(name)').eq('tenant_id', tenantId).order('expense_date', { ascending: false })
-  if (fromDate) q = q.gte('expense_date', fromDate)
-  if (toDate) q = q.lte('expense_date', toDate)
+  if (fromDate) q = q.gte('expense_date', toLocalDateStr(fromDate))
+  if (toDate) q = q.lte('expense_date', toLocalDateStr(toDate))
   const { data, error } = await q
   if (error) throw error
   return data

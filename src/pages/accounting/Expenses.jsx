@@ -5,12 +5,12 @@ import Modal from '@/components/common/Modal'
 import ExportMenu from '@/components/common/ExportMenu'
 import { useAuthStore } from '@/stores/authStore'
 import { fetchExpenses, createExpense, deleteExpense, fetchSuppliers, fetchBranches } from '@/lib/db'
-import { formatCurrency, formatDate } from '@/utils/formatters'
+import { formatCurrency, formatDate, toLocalDateStr } from '@/utils/formatters'
 import { PAYMENT_METHODS } from '@/utils/constants'
 import toast from 'react-hot-toast'
 
 const CATEGORIES = ['Rent', 'Utilities', 'Salaries', 'Transport', 'Repairs & Maintenance', 'Stationery', 'Marketing', 'Insurance', 'Other']
-const BLANK = { date: new Date().toISOString().slice(0, 10), category: CATEGORIES[0], description: '', amount: '', paymentMethod: PAYMENT_METHODS[0]?.id || 'cash', supplierId: '', branchId: '' }
+const BLANK = { date: toLocalDateStr(), category: CATEGORIES[0], description: '', amount: '', paymentMethod: PAYMENT_METHODS[0]?.id || 'cash', supplierId: '', branchId: '' }
 
 export default function Expenses() {
   const { tenant } = useAuthStore()

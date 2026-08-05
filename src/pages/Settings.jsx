@@ -2079,14 +2079,33 @@ export default function Settings() {
                     />
                   </div>
                   <div>
-                    <label className="mb-1.5 block text-sm font-medium text-slate-700 dark:text-slate-300">Store Contacts</label>
-                    <input
-                      type="text"
-                      value={receiptForm.storeContacts}
-                      onChange={(e) => setReceiptForm((f) => ({ ...f, storeContacts: e.target.value }))}
-                      placeholder="+263 77 123 4567"
-                      className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
-                    />
+                    <label className="mb-1.5 block text-sm font-medium text-slate-700 dark:text-slate-300">Store Contacts (up to 3 numbers)</label>
+                    {/* Still stored as one "store_contacts" string (no schema
+                        change) -- these 3 fields just split/join it with
+                        " | " so a client doesn't have to guess that typing
+                        multiple numbers into one field even works. */}
+                    {(() => {
+                      const parts = receiptForm.storeContacts ? receiptForm.storeContacts.split(' | ') : []
+                      const setPart = (i, val) => {
+                        const next = [parts[0] || '', parts[1] || '', parts[2] || '']
+                        next[i] = val
+                        setReceiptForm((f) => ({ ...f, storeContacts: next.filter(Boolean).join(' | ') }))
+                      }
+                      return (
+                        <div className="space-y-1.5">
+                          {[0, 1, 2].map((i) => (
+                            <input
+                              key={i}
+                              type="text"
+                              value={parts[i] || ''}
+                              onChange={(e) => setPart(i, e.target.value)}
+                              placeholder={i === 0 ? '+263 77 123 4567' : `Phone ${i + 1} (optional)`}
+                              className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                            />
+                          ))}
+                        </div>
+                      )
+                    })()}
                   </div>
                 </div>
                 <div>

@@ -4,10 +4,10 @@ import Button from '@/components/common/Button'
 import Modal from '@/components/common/Modal'
 import { useAuthStore } from '@/stores/authStore'
 import { fetchFixedAssets, createFixedAsset, deleteFixedAsset } from '@/lib/db'
-import { formatCurrency, formatDate } from '@/utils/formatters'
+import { formatCurrency, formatDate, toLocalDateStr } from '@/utils/formatters'
 import toast from 'react-hot-toast'
 
-const BLANK = { name: '', category: '', assetType: 'fixed', purchaseDate: new Date().toISOString().slice(0, 10), cost: '', salvageValue: '0', usefulLifeYears: '5', custodian: '', location: '' }
+const BLANK = { name: '', category: '', assetType: 'fixed', purchaseDate: toLocalDateStr(), cost: '', salvageValue: '0', usefulLifeYears: '5', custodian: '', location: '' }
 
 // Straight-line depreciation: accumulated = min(annual * yearsElapsed, cost - salvage)
 function bookValue(asset) {

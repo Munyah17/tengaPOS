@@ -7,11 +7,11 @@ import {
   fetchBankReconciliations, createBankReconciliation, fetchBankStatementLines,
   addBankStatementLine, matchBankStatementLine, unmatchBankStatementLine, fetchCashTransactions,
 } from '@/lib/db'
-import { formatCurrency, formatDate } from '@/utils/formatters'
+import { formatCurrency, formatDate, toLocalDateStr } from '@/utils/formatters'
 import toast from 'react-hot-toast'
 
 const BLANK_RECON = { statementStartDate: '', statementEndDate: '', statementClosingBalance: '' }
-const BLANK_LINE = { lineDate: new Date().toISOString().slice(0, 10), description: '', amount: '' }
+const BLANK_LINE = { lineDate: toLocalDateStr(), description: '', amount: '' }
 
 function ReconciliationDetail({ recon, onBack }) {
   const { tenant } = useAuthStore()

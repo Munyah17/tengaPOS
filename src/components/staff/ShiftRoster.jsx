@@ -6,6 +6,7 @@ import Modal from '@/components/common/Modal'
 import DateInput from '@/components/common/DateInput'
 import { fetchShifts, insertShift, deleteShift } from '@/lib/db'
 import { loadWithOfflineCache } from '@/lib/offlineCache'
+import { toLocalDateStr } from '@/utils/formatters'
 import toast from 'react-hot-toast'
 
 function startOfWeek(d) {
@@ -14,8 +15,11 @@ function startOfWeek(d) {
   const diff = date.getDate() - day + (day === 0 ? -6 : 1) // Monday start
   return new Date(date.setDate(diff))
 }
+// shift_date is a plain DATE column -- d.toISOString().slice(0, 10) would
+// convert to UTC first and roll the week boundary back a day for any
+// timezone east of UTC (same bug class fixed in fetchExpenses/db.js).
 function toISODate(d) {
-  return d.toISOString().slice(0, 10)
+  return toLocalDateStr(d)
 }
 function formatShiftDate(iso) {
   return new Date(`${iso}T00:00:00`).toLocaleDateString('en-GB', { weekday: 'short', day: '2-digit', month: 'short' })
