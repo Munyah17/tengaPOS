@@ -4,7 +4,7 @@ import Button from '@/components/common/Button'
 import Modal from '@/components/common/Modal'
 import { useAuthStore } from '@/stores/authStore'
 import { fetchBoqDocuments, createBoqDocument, deleteBoqDocument } from '@/lib/db'
-import { formatCurrency, formatDate } from '@/utils/formatters'
+import { formatCurrency, formatDate, stripLeadingZero } from '@/utils/formatters'
 import toast from 'react-hot-toast'
 
 const BLANK_ITEM = { description: '', unit: '', qty: 1, rate: 0 }
@@ -126,8 +126,8 @@ export default function Boq() {
                 <div key={i} className="grid grid-cols-12 items-center gap-1.5">
                   <input value={it.description} onChange={(e) => updateItem(i, 'description', e.target.value)} placeholder="Description" className="col-span-5 rounded-lg border border-slate-200 px-2 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white" />
                   <input value={it.unit} onChange={(e) => updateItem(i, 'unit', e.target.value)} placeholder="Unit" className="col-span-2 rounded-lg border border-slate-200 px-2 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white" />
-                  <input type="number" min="0" step="0.01" value={it.qty} onChange={(e) => updateItem(i, 'qty', e.target.value)} placeholder="Qty" className="col-span-2 rounded-lg border border-slate-200 px-2 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white" />
-                  <input type="number" min="0" step="0.01" value={it.rate} onChange={(e) => updateItem(i, 'rate', e.target.value)} placeholder="Rate" className="col-span-2 rounded-lg border border-slate-200 px-2 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white" />
+                  <input type="number" min="0" step="0.01" value={it.qty} onChange={(e) => updateItem(i, 'qty', stripLeadingZero(e.target.value))} placeholder="Qty" className="col-span-2 rounded-lg border border-slate-200 px-2 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white" />
+                  <input type="number" min="0" step="0.01" value={it.rate} onChange={(e) => updateItem(i, 'rate', stripLeadingZero(e.target.value))} placeholder="Rate" className="col-span-2 rounded-lg border border-slate-200 px-2 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white" />
                   <button type="button" onClick={() => removeItem(i)} className="col-span-1 flex justify-center rounded-lg p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-950"><X className="h-3.5 w-3.5" /></button>
                 </div>
               ))}

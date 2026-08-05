@@ -10,7 +10,7 @@ import {
   savePayrollRun, deletePayrollRun,
 } from '@/lib/db'
 import { exportToCSV } from '@/utils/exportUtils'
-import { formatCurrency, toLocalDateStr } from '@/utils/formatters'
+import { formatCurrency, toLocalDateStr, stripLeadingZero } from '@/utils/formatters'
 import toast from 'react-hot-toast'
 
 const EMPLOYMENT_TYPES = ['full_time', 'part_time', 'casual', 'contract']
@@ -89,7 +89,7 @@ function PayRateRow({ member, onSaved }) {
       <td className="px-4 py-3">
         {editing ? (
           <input type="number" value={form.base_pay} step="0.01" min="0"
-            onChange={e => setForm(f => ({ ...f, base_pay: e.target.value }))}
+            onChange={e => setForm(f => ({ ...f, base_pay: stripLeadingZero(e.target.value) }))}
             className={`${sel} w-28`} />
         ) : <span className="text-sm font-semibold text-slate-900 dark:text-white">{formatCurrency(member.base_pay || 0)}</span>}
       </td>
@@ -390,10 +390,10 @@ export default function HR() {
                     <tr key={e.user_id || i} className="border-b border-slate-100 dark:border-slate-800">
                       <td className="px-3 py-2 text-sm font-medium text-slate-900 dark:text-white">{e.employee_name}</td>
                       <td className="px-3 py-2 text-xs text-slate-500">{ET_LABELS[e.employment_type] || e.employment_type}</td>
-                      <td className="px-3 py-2"><input type="number" value={e.gross_pay} step="0.01" min="0" className={cell} onChange={ev => updateEntry(i, 'gross_pay', ev.target.value)} /></td>
-                      <td className="px-3 py-2"><input type="number" value={e.paye}      step="0.01" min="0" className={cell} onChange={ev => updateEntry(i, 'paye', ev.target.value)} /></td>
-                      <td className="px-3 py-2"><input type="number" value={e.nssa}      step="0.01" min="0" className={cell} onChange={ev => updateEntry(i, 'nssa', ev.target.value)} /></td>
-                      <td className="px-3 py-2"><input type="number" value={e.other_deductions} step="0.01" min="0" className={cell} onChange={ev => updateEntry(i, 'other_deductions', ev.target.value)} /></td>
+                      <td className="px-3 py-2"><input type="number" value={e.gross_pay} step="0.01" min="0" className={cell} onChange={ev => updateEntry(i, 'gross_pay', stripLeadingZero(ev.target.value))} /></td>
+                      <td className="px-3 py-2"><input type="number" value={e.paye}      step="0.01" min="0" className={cell} onChange={ev => updateEntry(i, 'paye', stripLeadingZero(ev.target.value))} /></td>
+                      <td className="px-3 py-2"><input type="number" value={e.nssa}      step="0.01" min="0" className={cell} onChange={ev => updateEntry(i, 'nssa', stripLeadingZero(ev.target.value))} /></td>
+                      <td className="px-3 py-2"><input type="number" value={e.other_deductions} step="0.01" min="0" className={cell} onChange={ev => updateEntry(i, 'other_deductions', stripLeadingZero(ev.target.value))} /></td>
                       <td className="px-3 py-2 text-right text-sm font-bold text-green-700 dark:text-green-400">{formatCurrency(parseFloat(e.net_pay) || 0)}</td>
                       <td className="px-3 py-2">
                         <input type="text" value={e.notes} placeholder="—"

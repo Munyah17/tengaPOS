@@ -13,7 +13,7 @@ import {
   recordInvoicePayment, voidInvoicePayment, fetchInvoicePayments,
 } from '@/lib/db'
 import { loadWithOfflineCache } from '@/lib/offlineCache'
-import { formatCurrency, formatDate, formatDateTime, generateDocNumber } from '@/utils/formatters'
+import { formatCurrency, formatDate, formatDateTime, generateDocNumber, stripLeadingZero } from '@/utils/formatters'
 import { generateDocumentPDF } from '@/utils/invoicePdf'
 import { PAYMENT_METHODS } from '@/utils/constants'
 import toast from 'react-hot-toast'
@@ -85,7 +85,7 @@ function RecordPaymentModal({ doc, currency, onClose, onPaid }) {
               <label className="mb-1 block text-xs font-semibold text-slate-500">Amount</label>
               <input
                 type="number" min="0.01" step="0.01" value={amount}
-                onChange={(e) => setAmount(e.target.value)}
+                onChange={(e) => setAmount(stripLeadingZero(e.target.value))}
                 placeholder={fmt(balance)}
                 className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
               />

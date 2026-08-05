@@ -13,7 +13,7 @@ import { useCartStore } from '@/stores/cartStore'
 import { useThemeStore } from '@/stores/themeStore'
 import { useAuthStore } from '@/stores/authStore'
 import { PAYMENT_METHODS } from '@/utils/constants'
-import { formatCurrency, generateReceiptNumber } from '@/utils/formatters'
+import { formatCurrency, generateReceiptNumber, stripLeadingZero } from '@/utils/formatters'
 import { FRACTIONAL_UNITS, unitStep } from '@/lib/units'
 import { initiatePaynowCheckout } from '@/lib/paynow'
 import { fetchProducts, saveCheckout, fetchStaff, completeJobCard, recordPrescriptionDispense, recordAgeVerification } from '@/lib/db'
@@ -67,8 +67,8 @@ function CartQtyField({ item, onCommit }) {
       min={unitStep(item.unit)}
       step={isFractional ? '0.01' : '1'}
       value={draft}
-      onFocus={(e) => { setFocused(true); e.target.select() }}
-      onChange={(e) => setDraft(e.target.value)}
+      onFocus={() => setFocused(true)}
+      onChange={(e) => setDraft(stripLeadingZero(e.target.value))}
       onBlur={commit}
       onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur() }}
       className="w-14 rounded-lg border border-slate-300 bg-white px-1 py-0.5 text-center text-sm font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-brand-500 dark:border-slate-600 dark:bg-slate-800 dark:text-white"
@@ -906,7 +906,6 @@ export default function POS() {
                 const raw = Math.max(0, Number(e.target.value) || 0)
                 cart.setDiscount(cart.discountType === 'percent' ? Math.min(100, raw) : raw)
               }}
-              onFocus={e => e.target.select()}
               placeholder="0"
               className="w-20 rounded-lg border border-slate-200 bg-white px-2 py-1 text-right text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
             />

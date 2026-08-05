@@ -4,7 +4,7 @@ import { useNavigate, useLocation } from 'react-router-dom'
 import Modal from '@/components/common/Modal'
 import Button from '@/components/common/Button'
 import ExportMenu from '@/components/common/ExportMenu'
-import { formatCurrency } from '@/utils/formatters'
+import { formatCurrency, stripLeadingZero } from '@/utils/formatters'
 import { useAuthStore } from '@/stores/authStore'
 import { useCartStore } from '@/stores/cartStore'
 import {
@@ -282,7 +282,7 @@ function JobCardModal({ tenant, branch, customers, technicians, products, existi
             {partsRequested.map((p, i) => (
               <div key={i} className="flex flex-wrap items-center gap-2">
                 <input value={p.description} onChange={(e) => setPart(i, { description: e.target.value })} placeholder="Part needed" className="min-w-[140px] flex-1 rounded-lg border border-slate-200 px-2 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white" />
-                <input type="number" min="1" value={p.qty} onChange={(e) => setPart(i, { qty: e.target.value })} className="w-16 flex-shrink-0 rounded-lg border border-slate-200 px-2 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white" />
+                <input type="number" min="1" value={p.qty} onChange={(e) => setPart(i, { qty: stripLeadingZero(e.target.value) })} className="w-16 flex-shrink-0 rounded-lg border border-slate-200 px-2 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white" />
                 <button onClick={() => removePartRow(i)} className="flex-shrink-0 rounded-lg p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-950"><Trash2 className="h-3.5 w-3.5" /></button>
               </div>
             ))}
@@ -314,7 +314,7 @@ function JobCardModal({ tenant, branch, customers, technicians, products, existi
                 {it.product_id ? (
                   <input
                     type="number" min="1" value={it.qty}
-                    onChange={(e) => setItem(i, { qty: e.target.value })}
+                    onChange={(e) => setItem(i, { qty: stripLeadingZero(e.target.value) })}
                     className="w-14 flex-shrink-0 rounded-lg border border-slate-200 px-2 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
                   />
                 ) : (
@@ -322,7 +322,7 @@ function JobCardModal({ tenant, branch, customers, technicians, products, existi
                 )}
                 <input
                   type="number" min="0" step="0.01" value={it.unit_price}
-                  onChange={(e) => setItem(i, { unit_price: e.target.value })}
+                  onChange={(e) => setItem(i, { unit_price: stripLeadingZero(e.target.value) })}
                   className="w-20 flex-shrink-0 rounded-lg border border-slate-200 px-2 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
                 />
                 <button onClick={() => removeItemRow(i)} className="flex-shrink-0 rounded-lg p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-950">

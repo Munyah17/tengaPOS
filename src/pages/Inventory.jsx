@@ -8,7 +8,7 @@ import {
 import Button from '@/components/common/Button'
 import Modal from '@/components/common/Modal'
 import ExportMenu from '@/components/common/ExportMenu'
-import { formatCurrency, formatDateTime } from '@/utils/formatters'
+import { formatCurrency, formatDateTime, stripLeadingZero } from '@/utils/formatters'
 import { generateTemplate, parseCSV } from '@/utils/exportUtils'
 import { useThemeStore } from '@/stores/themeStore'
 import { useAuthStore } from '@/stores/authStore'
@@ -764,8 +764,7 @@ export default function Inventory() {
               <input
                 type={f.type}
                 value={form[f.field]}
-                onChange={e => setForm({ ...form, [f.field]: e.target.value })}
-                onFocus={e => e.target.select()}
+                onChange={e => setForm({ ...form, [f.field]: f.type === 'number' ? stripLeadingZero(e.target.value) : e.target.value })}
                 className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
                 required={f.required}
                 min={f.type === 'number' ? '0' : undefined}
@@ -919,16 +918,14 @@ export default function Inventory() {
                       <span className="flex-shrink-0 text-xs text-slate-500">Qty ≥</span>
                       <input
                         type="number" min="1" step="1" value={tier.min_qty}
-                        onChange={(e) => updatePriceTier(i, 'min_qty', e.target.value)}
-                        onFocus={e => e.target.select()}
+                        onChange={(e) => updatePriceTier(i, 'min_qty', stripLeadingZero(e.target.value))}
                         placeholder="10"
                         className="w-20 rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
                       />
                       <span className="flex-shrink-0 text-xs text-slate-500">→ price</span>
                       <input
                         type="number" min="0" step="0.01" value={tier.price}
-                        onChange={(e) => updatePriceTier(i, 'price', e.target.value)}
-                        onFocus={e => e.target.select()}
+                        onChange={(e) => updatePriceTier(i, 'price', stripLeadingZero(e.target.value))}
                         placeholder="4.50"
                         className="flex-1 rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
                       />

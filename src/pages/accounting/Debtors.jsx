@@ -4,7 +4,7 @@ import Button from '@/components/common/Button'
 import Modal from '@/components/common/Modal'
 import { useAuthStore } from '@/stores/authStore'
 import { fetchDocuments, fetchAllInvoicePaymentsForTenant, fetchCustomers, fetchManualDebtorEntries, createManualDebtorEntry, updateManualDebtorEntryStatus } from '@/lib/db'
-import { formatCurrency, formatDate } from '@/utils/formatters'
+import { formatCurrency, formatDate, stripLeadingZero } from '@/utils/formatters'
 import toast from 'react-hot-toast'
 
 const BLANK = { customerId: '', description: '', amount: '', dueDate: '' }
@@ -153,7 +153,7 @@ export default function Debtors() {
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">Amount</label>
-              <input type="number" min="0.01" step="0.01" value={form.amount} onChange={(e) => setForm((f) => ({ ...f, amount: e.target.value }))} required className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white" />
+              <input type="number" min="0.01" step="0.01" value={form.amount} onChange={(e) => setForm((f) => ({ ...f, amount: stripLeadingZero(e.target.value) }))} required className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white" />
             </div>
             <div>
               <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">Due Date</label>

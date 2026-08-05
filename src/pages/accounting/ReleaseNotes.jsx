@@ -4,7 +4,7 @@ import Button from '@/components/common/Button'
 import Modal from '@/components/common/Modal'
 import { useAuthStore } from '@/stores/authStore'
 import { fetchReleaseNotes, createReleaseNote, fetchCustomers } from '@/lib/db'
-import { formatDate } from '@/utils/formatters'
+import { formatDate, stripLeadingZero } from '@/utils/formatters'
 import toast from 'react-hot-toast'
 
 const BLANK_ITEM = { description: '', qty: 1, unit: '' }
@@ -108,7 +108,7 @@ export default function ReleaseNotes() {
               {form.items.map((it, i) => (
                 <div key={i} className="flex items-center gap-1.5">
                   <input value={it.description} onChange={(e) => updateItem(i, 'description', e.target.value)} placeholder="Description" className="min-w-0 flex-1 rounded-lg border border-slate-200 px-2 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white" />
-                  <input type="number" min="0" step="0.01" value={it.qty} onChange={(e) => updateItem(i, 'qty', e.target.value)} placeholder="Qty" className="w-20 flex-shrink-0 rounded-lg border border-slate-200 px-2 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white" />
+                  <input type="number" min="0" step="0.01" value={it.qty} onChange={(e) => updateItem(i, 'qty', stripLeadingZero(e.target.value))} placeholder="Qty" className="w-20 flex-shrink-0 rounded-lg border border-slate-200 px-2 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white" />
                   <input value={it.unit} onChange={(e) => updateItem(i, 'unit', e.target.value)} placeholder="Unit" className="w-20 flex-shrink-0 rounded-lg border border-slate-200 px-2 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white" />
                   <button type="button" onClick={() => removeItem(i)} className="flex-shrink-0 rounded-lg p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-950"><X className="h-3.5 w-3.5" /></button>
                 </div>

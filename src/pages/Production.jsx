@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { Factory, Trash2, RefreshCw } from 'lucide-react'
 import Button from '@/components/common/Button'
 import ExportMenu from '@/components/common/ExportMenu'
-import { formatDateTime } from '@/utils/formatters'
+import { formatDateTime, stripLeadingZero } from '@/utils/formatters'
 import { useAuthStore } from '@/stores/authStore'
 import { DATE_PRESETS, getPresetRange } from '@/utils/dateRanges'
 import {
@@ -300,7 +300,7 @@ export default function Production() {
                     </select>
                     <input
                       type="number" min="0" step="0.001" value={c.qty_per_unit}
-                      onChange={(e) => updateComponentRow(i, 'qty_per_unit', e.target.value)}
+                      onChange={(e) => updateComponentRow(i, 'qty_per_unit', stripLeadingZero(e.target.value))}
                       placeholder="Qty"
                       className="w-20 flex-shrink-0 rounded-lg border border-slate-200 px-2 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
                     />
@@ -343,7 +343,7 @@ export default function Production() {
               <label className="mb-1 block text-xs font-semibold text-slate-500">Quantity Produced</label>
               <input
                 type="number" min="1" step="1" value={runForm.qty}
-                onChange={(e) => setRunForm((f) => ({ ...f, qty: e.target.value }))}
+                onChange={(e) => setRunForm((f) => ({ ...f, qty: stripLeadingZero(e.target.value) }))}
                 required
                 className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
               />

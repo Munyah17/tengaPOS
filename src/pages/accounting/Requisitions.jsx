@@ -4,7 +4,7 @@ import Button from '@/components/common/Button'
 import Modal from '@/components/common/Modal'
 import { useAuthStore } from '@/stores/authStore'
 import { fetchRequisitions, createRequisition, updateRequisitionStatus, fetchBranches } from '@/lib/db'
-import { formatCurrency, formatDateTime } from '@/utils/formatters'
+import { formatCurrency, formatDateTime, stripLeadingZero } from '@/utils/formatters'
 import toast from 'react-hot-toast'
 
 const STATUS_COLORS = {
@@ -115,7 +115,7 @@ export default function Requisitions() {
           </div>
           <div>
             <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">Amount Requested</label>
-            <input type="number" min="0.01" step="0.01" value={form.amountRequested} onChange={(e) => setForm((f) => ({ ...f, amountRequested: e.target.value }))} required className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white" />
+            <input type="number" min="0.01" step="0.01" value={form.amountRequested} onChange={(e) => setForm((f) => ({ ...f, amountRequested: stripLeadingZero(e.target.value) }))} required className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white" />
           </div>
           <div>
             <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">Notes</label>

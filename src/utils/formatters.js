@@ -1,3 +1,15 @@
+// Strips a leading zero the moment a second digit follows it ("01" -> "1",
+// "05.50" -> "5.50"), leaving "0", "0." and "0.5" alone since those are
+// valid input still in progress. Apply this to every raw onChange string
+// BEFORE it reaches state, on every quantity/price input in the app --
+// deterministic and works identically on every browser/input type, unlike
+// onFocus selecting/clearing the field (HTMLInputElement.select() throws
+// on type="number" in some engines, confirmed to make the field stop
+// accepting input at all rather than just failing to select).
+export function stripLeadingZero(str) {
+  return String(str ?? '').replace(/^0+(?=\d)/, '')
+}
+
 export function formatCurrency(amount, currency = 'USD') {
   try {
     return new Intl.NumberFormat('en-US', {

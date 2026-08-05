@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Check, X, Save, Loader2, DollarSign, Megaphone, Image, Trash2 } from 'lucide-react'
 import { PLANS, DEFAULT_FEATURES } from '@/pages/admin/AdminTenants'
 import { getSetting, updateSetting, DEFAULT_PLAN_PRICING, DEFAULT_FISCAL_PRICING } from '@/lib/platformSettings'
+import { stripLeadingZero } from '@/utils/formatters'
 import { useAuthStore } from '@/stores/authStore'
 import { supabase } from '@/lib/supabase'
 import { uploadSiteAsset } from '@/lib/db'
@@ -230,8 +231,7 @@ export default function SuperAdminPricing() {
                   min="0"
                   step="0.01"
                   value={p.price}
-                  onChange={(e) => setFiscalPrice(key, e.target.value)}
-                  onFocus={e => e.target.select()}
+                  onChange={(e) => setFiscalPrice(key, stripLeadingZero(e.target.value))}
                   disabled={!isSuperAdmin}
                   className="w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm font-bold text-slate-900 focus:border-indigo-500 focus:outline-none dark:border-white/10 dark:bg-white/5 dark:text-white"
                 />
@@ -266,8 +266,7 @@ export default function SuperAdminPricing() {
                     min="0"
                     step="0.01"
                     value={priced.price}
-                    onChange={(e) => setPlanPrice(key, e.target.value)}
-                    onFocus={e => e.target.select()}
+                    onChange={(e) => setPlanPrice(key, stripLeadingZero(e.target.value))}
                     disabled={!isSuperAdmin}
                     className="w-28 rounded-xl border border-slate-300 bg-white px-3 py-1.5 text-2xl font-extrabold text-slate-900 focus:border-indigo-500 focus:outline-none dark:border-white/20 dark:bg-white/10 dark:text-white"
                   />

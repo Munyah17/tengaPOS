@@ -6,7 +6,7 @@ import { withOfflineCache, seedFromOfflineCache } from '@/lib/offlineCache'
 import { RefreshCw, X, Ban, CheckCircle, ShieldCheck, XCircle, Undo2, Wrench, Trash2, Loader2 } from 'lucide-react'
 import ExportMenu from '@/components/common/ExportMenu'
 import DateInput, { TimeField } from '@/components/common/DateInput'
-import { formatCurrency, formatDateTime } from '@/utils/formatters'
+import { formatCurrency, formatDateTime, stripLeadingZero } from '@/utils/formatters'
 import { combineDateAndTime } from '@/utils/dateRanges'
 import { useAuthStore } from '@/stores/authStore'
 import { useThemeStore } from '@/stores/themeStore'
@@ -85,7 +85,7 @@ function RequestReturnModal({ maxAmount, onClose, onSubmit }) {
         <input
           type="number" min="0" step="0.01" max={maxAmount}
           value={amount}
-          onChange={(e) => setAmount(e.target.value)}
+          onChange={(e) => setAmount(stripLeadingZero(e.target.value))}
           className="mb-3 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-brand-500 focus:outline-none dark:border-slate-700 dark:bg-slate-800 dark:text-white"
         />
         <label className="mb-1 block text-xs font-semibold text-slate-500">Reason</label>

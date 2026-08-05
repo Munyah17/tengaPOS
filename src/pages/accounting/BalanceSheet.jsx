@@ -6,7 +6,7 @@ import {
   fetchCreditorBills, fetchAllCreditorPaymentsForTenant, fetchOtherLiabilities, createOtherLiability, deleteOtherLiability,
   fetchEquityEntries, createEquityEntry, deleteEquityEntry,
 } from '@/lib/db'
-import { formatCurrency } from '@/utils/formatters'
+import { formatCurrency, stripLeadingZero } from '@/utils/formatters'
 import toast from 'react-hot-toast'
 
 function assetBookValue(asset) {
@@ -48,7 +48,7 @@ function EntryList({ title, entries, currency, onAdd, onDelete }) {
       </div>
       <form onSubmit={submit} className="flex gap-1.5">
         <input value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Description" className="min-w-0 flex-1 rounded-lg border border-slate-200 px-2 py-1.5 text-xs dark:border-slate-700 dark:bg-slate-800 dark:text-white" />
-        <input type="number" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="Amount" className="w-24 flex-shrink-0 rounded-lg border border-slate-200 px-2 py-1.5 text-xs dark:border-slate-700 dark:bg-slate-800 dark:text-white" />
+        <input type="number" step="0.01" value={amount} onChange={(e) => setAmount(stripLeadingZero(e.target.value))} placeholder="Amount" className="w-24 flex-shrink-0 rounded-lg border border-slate-200 px-2 py-1.5 text-xs dark:border-slate-700 dark:bg-slate-800 dark:text-white" />
         <button type="submit" className="flex-shrink-0 rounded-lg bg-brand-600 p-1.5 text-white hover:bg-brand-700"><Plus className="h-3.5 w-3.5" /></button>
       </form>
     </div>

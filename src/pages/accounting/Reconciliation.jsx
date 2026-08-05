@@ -7,7 +7,7 @@ import {
   fetchBankReconciliations, createBankReconciliation, fetchBankStatementLines,
   addBankStatementLine, matchBankStatementLine, unmatchBankStatementLine, fetchCashTransactions,
 } from '@/lib/db'
-import { formatCurrency, formatDate, toLocalDateStr } from '@/utils/formatters'
+import { formatCurrency, formatDate, toLocalDateStr, stripLeadingZero } from '@/utils/formatters'
 import toast from 'react-hot-toast'
 
 const BLANK_RECON = { statementStartDate: '', statementEndDate: '', statementClosingBalance: '' }
@@ -118,7 +118,7 @@ function ReconciliationDetail({ recon, onBack }) {
           </div>
           <div>
             <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">Amount (negative for outflows)</label>
-            <input type="number" step="0.01" value={lineForm.amount} onChange={(e) => setLineForm((f) => ({ ...f, amount: e.target.value }))} required className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white" />
+            <input type="number" step="0.01" value={lineForm.amount} onChange={(e) => setLineForm((f) => ({ ...f, amount: stripLeadingZero(e.target.value) }))} required className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white" />
           </div>
           <Button type="submit" variant="primary" disabled={saving} className="w-full justify-center">{saving ? 'Saving…' : 'Add Line'}</Button>
         </form>
@@ -225,7 +225,7 @@ export default function Reconciliation() {
           </div>
           <div>
             <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">Statement Closing Balance</label>
-            <input type="number" step="0.01" value={form.statementClosingBalance} onChange={(e) => setForm((f) => ({ ...f, statementClosingBalance: e.target.value }))} required className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white" />
+            <input type="number" step="0.01" value={form.statementClosingBalance} onChange={(e) => setForm((f) => ({ ...f, statementClosingBalance: stripLeadingZero(e.target.value) }))} required className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white" />
           </div>
           <Button type="submit" variant="primary" disabled={saving} className="w-full justify-center">{saving ? 'Creating…' : 'Create'}</Button>
         </form>

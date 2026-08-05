@@ -7,7 +7,7 @@ import {
   fetchCreditorBills, createCreditorBill, fetchSuppliers,
   fetchCreditorPayments, recordCreditorPayment, voidCreditorPayment,
 } from '@/lib/db'
-import { formatCurrency, formatDateTime } from '@/utils/formatters'
+import { formatCurrency, formatDateTime, stripLeadingZero } from '@/utils/formatters'
 import { PAYMENT_METHODS } from '@/utils/constants'
 import toast from 'react-hot-toast'
 
@@ -81,7 +81,7 @@ function CreditorPaymentModal({ bill, currency, onClose, onPaid }) {
       {balance > 0 && (
         <form onSubmit={submit} className="mb-4 space-y-3 border-b border-slate-200 pb-4 dark:border-slate-800">
           <div className="grid grid-cols-2 gap-3">
-            <input type="number" min="0.01" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder={fmt(balance)} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white" />
+            <input type="number" min="0.01" step="0.01" value={amount} onChange={(e) => setAmount(stripLeadingZero(e.target.value))} placeholder={fmt(balance)} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white" />
             <select value={method} onChange={(e) => setMethod(e.target.value)} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white">
               {PAYMENT_METHODS.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
             </select>
@@ -215,7 +215,7 @@ export default function Creditors() {
           </div>
           <div>
             <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">Amount</label>
-            <input type="number" min="0.01" step="0.01" value={form.amount} onChange={(e) => setForm((f) => ({ ...f, amount: e.target.value }))} required className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white" />
+            <input type="number" min="0.01" step="0.01" value={form.amount} onChange={(e) => setForm((f) => ({ ...f, amount: stripLeadingZero(e.target.value) }))} required className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white" />
           </div>
           <Button type="submit" variant="primary" disabled={saving} className="w-full justify-center">{saving ? 'Saving…' : 'Add Bill'}</Button>
         </form>
