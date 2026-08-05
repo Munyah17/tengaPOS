@@ -138,9 +138,9 @@ export default function ZimraReceipt({ receipt, onClose }) {
           * { margin: 0; padding: 0; box-sizing: border-box; }
           /* Some thermal print drivers (esp. cheap thermal printers set up
              through a generic Windows "print to page" driver rather than a
-             true continuous-roll ESC/POS driver) don't reliably honor
-             `@page { size: 80mm auto }` on its own and fall back to a fixed
-             page length, feeding a large blank gap after the actual content
+             true continuous-roll ESC/POS driver) don't reliably honor the
+             @page size:80mm-auto rule below on its own and fall back to a
+             fixed page length, feeding a large blank gap after the actual content
              before cutting. html/body defaulting to a full page height in
              print mode is the other half of that -- forcing both to the
              content's own height keeps the printed length tied to what's
