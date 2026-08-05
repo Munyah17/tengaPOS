@@ -59,11 +59,21 @@ html.dark {
    color matching the control's (also OS-forced) background. Declaring it
    directly on every control, not just inheriting it, is the fix already
    proven for DateInput's time picker -- apply it everywhere. */
+/* color-scheme alone only hints at how the BROWSER should paint native
+   widget chrome (spinner buttons, an unstyled default background) -- it
+   does not force the actual typed-text color. Some Android WebViews'
+   forced-dark rendering inverts form-control text independently of what
+   color-scheme says, which is how a light-mode page can still end up
+   with white-on-white text in a field. Setting `color` explicitly (not
+   just inheriting it) is the part that actually guarantees visible text,
+   for every input that doesn't already carry its own text-color class. */
 input, select, textarea {
   color-scheme: light;
+  color: #0f172a; /* slate-900, same as the site's default light-mode text color */
 }
 html.dark input, html.dark select, html.dark textarea {
   color-scheme: dark;
+  color: #f8fafc; /* slate-50, same as the site's default dark-mode text color */
 }
 
 body {
