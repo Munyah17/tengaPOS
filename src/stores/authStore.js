@@ -38,17 +38,17 @@ export const ROLE_LABELS = {
 }
 
 export const NAV_PERMISSIONS = {
-  super_admin: ['dashboard', 'pos', 'inventory', 'orders', 'kitchen', 'job_cards', 'vehicle_registry', 'mechanics', 'quotations', 'production', 'prescriptions', 'age_verifications', 'transactions', 'reports', 'insights', 'staff', 'tasks', 'branches', 'fiscalisation', 'payments', 'settings'],
-  admin: ['dashboard', 'pos', 'inventory', 'orders', 'job_cards', 'vehicle_registry', 'mechanics', 'quotations', 'production', 'prescriptions', 'age_verifications', 'transactions', 'reports', 'insights', 'staff', 'tasks', 'branches', 'fiscalisation', 'payments', 'settings'],
+  super_admin: ['dashboard', 'pos', 'inventory', 'orders', 'kitchen', 'job_cards', 'vehicle_registry', 'mechanics', 'quotations', 'production', 'equipment_rental', 'prescriptions', 'age_verifications', 'transactions', 'reports', 'insights', 'staff', 'tasks', 'branches', 'fiscalisation', 'payments', 'settings'],
+  admin: ['dashboard', 'pos', 'inventory', 'orders', 'job_cards', 'vehicle_registry', 'mechanics', 'quotations', 'production', 'equipment_rental', 'prescriptions', 'age_verifications', 'transactions', 'reports', 'insights', 'staff', 'tasks', 'branches', 'fiscalisation', 'payments', 'settings'],
   associate: ['dashboard', 'reports', 'branches'],
-  vendor: ['dashboard', 'requests', 'pos', 'inventory', 'orders', 'kitchen', 'job_cards', 'vehicle_registry', 'mechanics', 'quotations', 'production', 'prescriptions', 'age_verifications', 'transactions', 'reports', 'insights', 'staff', 'tasks', 'branches', 'fiscalisation', 'payments', 'hr', 'invoicing', 'customers', 'statements', 'accounting', 'settings'],
+  vendor: ['dashboard', 'requests', 'pos', 'inventory', 'orders', 'kitchen', 'job_cards', 'vehicle_registry', 'mechanics', 'quotations', 'production', 'equipment_rental', 'prescriptions', 'age_verifications', 'transactions', 'reports', 'insights', 'staff', 'tasks', 'branches', 'fiscalisation', 'payments', 'hr', 'invoicing', 'customers', 'statements', 'accounting', 'settings'],
   // Shop managers run day-to-day operations for their own branch — payment
   // gateway management and ZIMRA fiscal device registration stay Vendor-only.
-  shop_manager: ['dashboard', 'pos', 'inventory', 'orders', 'kitchen', 'job_cards', 'vehicle_registry', 'mechanics', 'quotations', 'production', 'prescriptions', 'age_verifications', 'transactions', 'reports', 'insights', 'staff', 'tasks', 'branches', 'hr', 'invoicing', 'customers', 'statements', 'accounting', 'settings'],
-  supervisor: ['dashboard', 'pos', 'inventory', 'orders', 'job_cards', 'vehicle_registry', 'mechanics', 'quotations', 'production', 'prescriptions', 'age_verifications', 'transactions', 'reports', 'tasks', 'invoicing', 'customers', 'statements', 'accounting'],
+  shop_manager: ['dashboard', 'pos', 'inventory', 'orders', 'kitchen', 'job_cards', 'vehicle_registry', 'mechanics', 'quotations', 'production', 'equipment_rental', 'prescriptions', 'age_verifications', 'transactions', 'reports', 'insights', 'staff', 'tasks', 'branches', 'hr', 'invoicing', 'customers', 'statements', 'accounting', 'settings'],
+  supervisor: ['dashboard', 'pos', 'inventory', 'orders', 'job_cards', 'vehicle_registry', 'mechanics', 'quotations', 'production', 'equipment_rental', 'prescriptions', 'age_verifications', 'transactions', 'reports', 'tasks', 'invoicing', 'customers', 'statements', 'accounting'],
   // Dispensing happens at the till, so cashier/shop_assistant need the log
   // too — same reasoning as prescription_dispenses' RLS policy.
-  cashier: ['pos', 'orders', 'job_cards', 'prescriptions', 'age_verifications', 'tasks'],
+  cashier: ['pos', 'orders', 'job_cards', 'equipment_rental', 'prescriptions', 'age_verifications', 'tasks'],
   shop_assistant: ['pos', 'prescriptions', 'age_verifications', 'tasks'],
   tech_support: ['dashboard', 'reports', 'insights', 'orders', 'transactions'],
 }

@@ -133,6 +133,7 @@ export async function updateProduct(id, updates) {
       stock_qty: updates.isService ? 0 : (parseInt(updates.stock) || 0),
       low_stock_threshold: parseInt(updates.lowStockThreshold) || 10,
       is_service: updates.isService === true,
+      unit: updates.unit || null,
       image_url: updates.imageUrl || null,
       image_unavailable: updates.imageUnavailable === true,
       vat_treatment: updates.vatTreatment || 'standard',
@@ -224,7 +225,7 @@ export async function saveCheckout({ tenantId, branchId, userId, cartItems, paym
   // slots/tenant/day — busy tenants hit real collisions between totally
   // unrelated sales, which silently short-circuited the second sale as
   // "already processed" (no new order, no stock decrement, no error).
-  const receiptNo = receiptNoIn || generateReceiptNumber()
+  const receiptNo = receiptNoIn || generateReceiptNumber(null, cartItems?.[0]?.name)
   const clientRef = clientRefIn || generateUUID()
 
   const grossTotal = cartItems.reduce((sum, item) => sum + item.price * item.quantity, 0)
@@ -410,6 +411,57 @@ export async function fetchTenantActivityLog(tenantId, limit = 50) {
     .limit(limit)
   if (error) throw error
   return data
+}
+
+// ─── Hardware Mode: Equipment Rentals ──────────────────────────────────────
+
+export async function fetchEquipmentRentals(tenantId) {
+  const { data, error } = await supabase
+    .from('equipment_rentals')
+    .select('*, branches(name)')
+    .eq('tenant_id', tenantId)
+    .order('checked_out_at', { ascending: false })
+  if (error) throw error
+  return data
+}
+
+export async function checkOutEquipment(tenantId, userId, rental) {
+  const { data, error } = await supabase.from('equipment_rentals').insert({
+    tenant_id: tenantId,
+    branch_id: rental.branchId || null,
+    item_name: rental.itemName,
+    product_id: rental.productId || null,
+    customer_name: rental.customerName,
+    customer_phone: rental.customerPhone || null,
+    daily_rate: Number(rental.dailyRate) || 0,
+    deposit_amount: Number(rental.depositAmount) || 0,
+    due_back_at: rental.dueBackAt,
+    notes: rental.notes || null,
+    created_by: userId || null,
+  }).select().single()
+  if (error) throw error
+  return data
+}
+
+export async function returnEquipment(id, { lateFee, depositReturned, notes }) {
+  const { data, error } = await supabase
+    .from('equipment_rentals')
+    .update({
+      returned_at: new Date().toISOString(),
+      late_fee: lateFee != null ? Number(lateFee) : null,
+      deposit_returned: depositReturned === true,
+      notes: notes || null,
+    })
+    .eq('id', id)
+    .select()
+    .single()
+  if (error) throw error
+  return data
+}
+
+export async function deleteEquipmentRental(id) {
+  const { error } = await supabase.from('equipment_rentals').delete().eq('id', id)
+  if (error) throw error
 }
 
 // ─── Void transactions ───────────────────────────────────────────────────────

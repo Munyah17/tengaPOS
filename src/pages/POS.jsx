@@ -320,7 +320,7 @@ export default function POS() {
     const tax = cart.getTax()
     const total = cart.getGrandTotal()
 
-    let receiptNumber = generateReceiptNumber(tenant?.name)
+    let receiptNumber = generateReceiptNumber(tenant?.name, cart.items[0]?.name)
     // The real dedup key (see saveCheckout/process_checkout) -- generated
     // once, up front, and reused on every retry (live retry via the
     // offline queue, or a background sync replay) so a retried sale is

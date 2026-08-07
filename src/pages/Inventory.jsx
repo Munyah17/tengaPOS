@@ -10,6 +10,7 @@ import Modal from '@/components/common/Modal'
 import ExportMenu from '@/components/common/ExportMenu'
 import { formatCurrency, formatDateTime, stripLeadingZero } from '@/utils/formatters'
 import { generateTemplate, parseCSV } from '@/utils/exportUtils'
+import { UNITS } from '@/lib/units'
 import { useThemeStore } from '@/stores/themeStore'
 import { useAuthStore } from '@/stores/authStore'
 import {
@@ -26,7 +27,7 @@ const BLANK = {
   stock: '', lowStockThreshold: '10', imageUrl: '', imageUnavailable: false,
   vatTreatment: 'standard', attributePairs: [], branchIds: [], categoryId: '',
   priceTiers: [], dispensingClass: 'otc', controlledSchedule: '', isService: false,
-  ageRestricted: false,
+  ageRestricted: false, unit: 'each',
 }
 
 const BLANK_PRICE_TIER = { min_qty: '', price: '' }
@@ -236,6 +237,7 @@ export default function Inventory() {
       controlledSchedule: p.controlled_schedule || '',
       isService: p.is_service === true,
       ageRestricted: p.age_restricted === true,
+      unit: p.unit || 'each',
     })
     setOriginalBranchIds(branchIds)
     setEditTarget(p)
@@ -909,6 +911,19 @@ export default function Inventory() {
               </div>
             )}
           </div>
+          {isHardware && (
+            <div>
+              <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">Sold By</label>
+              <select
+                value={form.unit}
+                onChange={(e) => setForm({ ...form, unit: e.target.value })}
+                className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+              >
+                {UNITS.map((u) => <option key={u.key} value={u.key}>{u.label}</option>)}
+              </select>
+              <p className="mt-1 text-xs text-slate-500">Weight/length/volume units let the POS take a decimal quantity (e.g. 2.5kg) instead of whole units only.</p>
+            </div>
+          )}
           {isHardware && (
             <div>
               <div className="mb-1.5 flex items-center justify-between">

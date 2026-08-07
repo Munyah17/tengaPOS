@@ -4,7 +4,7 @@ import {
   LayoutDashboard, ShoppingCart, Package, ClipboardList, BarChart3,
   Settings, Users, ChefHat, ListTodo, LogOut, ChevronLeft, ChevronRight, ChevronDown,
   Store, Receipt, Cpu, X, Sparkles, CreditCard, BriefcaseBusiness, FileText, Inbox, Calculator,
-  Wrench, Car, HardHat, FileSignature, Factory, Pill, ShieldCheck, FileBarChart, Landmark,
+  Wrench, Car, HardHat, FileSignature, Factory, Pill, ShieldCheck, FileBarChart, Landmark, Hammer,
 } from 'lucide-react'
 import { useState } from 'react'
 import { useThemeStore } from '@/stores/themeStore'
@@ -27,6 +27,7 @@ const ALL_NAV_ITEMS = [
   // add-on-gated (see accountingErpActive in Invoicing.jsx).
   { key: 'invoicing', icon: FileText, label: 'Invoicing', path: '/app/invoicing' },
   { key: 'production', icon: Factory, label: 'Production', path: '/app/production', manufacturingOnly: true },
+  { key: 'equipment_rental', icon: Hammer, label: 'Equipment Rental', path: '/app/equipment-rental', hardwareOnly: true },
   { key: 'prescriptions', icon: Pill, label: 'Prescriptions', path: '/app/prescriptions', pharmacyOnly: true },
   { key: 'age_verifications', icon: ShieldCheck, label: 'Age Verifications', path: '/app/age-verifications', barOnly: true },
   { key: 'transactions', icon: Receipt, label: 'Transactions', path: '/app/transactions' },
@@ -62,6 +63,7 @@ export default function Sidebar({ open = false, onClose }) {
   const isManufacturing = posMode === 'manufacturing'
   const isPharmacy = posMode === 'pharmacy'
   const isBar = posMode === 'bar'
+  const isHardware = posMode === 'hardware'
 
   const allowedKeys = NAV_PERMISSIONS[role] || NAV_PERMISSIONS.vendor
   const visibleItems = ALL_NAV_ITEMS.map((item) => {
@@ -77,6 +79,7 @@ export default function Sidebar({ open = false, onClose }) {
     if (item.manufacturingOnly && !isManufacturing) return false
     if (item.pharmacyOnly && !isPharmacy) return false
     if (item.barOnly && !isBar) return false
+    if (item.hardwareOnly && !isHardware) return false
     return true
   })
 

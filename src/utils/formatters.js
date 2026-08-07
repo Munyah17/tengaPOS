@@ -62,7 +62,7 @@ export function formatNumber(num) {
 // First letter of the first two significant words ("Munyah's Store" -> "MS");
 // one-word names take its first two letters ("Bunya" -> "BU"). Always 2
 // letters, padded with 'X' if the name can't supply that many.
-function businessInitials(name) {
+function twoLetterInitials(name) {
   const words = String(name || '').replace(/[^a-zA-Z\s]/g, ' ').trim().split(/\s+/).filter(Boolean)
   let initials = words.length >= 2
     ? words[0][0] + words[1][0]
@@ -71,17 +71,20 @@ function businessInitials(name) {
   return initials
 }
 
-// TP + 2-letter business initials + 6 random digits, e.g. "TPMS482913" for
-// TengaPOS + "Munyah's Store". No date component -- receipts are already
-// sorted/filtered by their real created_at timestamp everywhere in the app,
-// this string is purely the printed/human-facing number.
-export function generateReceiptNumber(businessName) {
-  const biz = businessInitials(businessName)
+// Business initials (2) + product initials (2) + 6 random digits, e.g.
+// "MIHS354876" for "Metros Investments" selling "Hullets Sugar 2kg". No
+// date component -- receipts are already sorted/filtered by their real
+// created_at timestamp everywhere in the app, this string is purely the
+// printed/human-facing number. productName is whatever the receipt should
+// represent for its 2 letters -- the sale's first/primary line item.
+export function generateReceiptNumber(businessName, productName) {
+  const biz = twoLetterInitials(businessName)
+  const prod = twoLetterInitials(productName)
   // 6 digits (1,000,000 slots/tenant) -- this is only the printed number
   // now, not the checkout dedup key (see process_checkout's client_ref), so
   // it just needs to be collision-rare, not collision-proof.
   const rand = Math.floor(Math.random() * 1000000).toString().padStart(6, '0')
-  return `TP${biz}${rand}`
+  return `${biz}${prod}${rand}`
 }
 
 // prefix is 'QUO' for quotations, 'INV' for invoices
