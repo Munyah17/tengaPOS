@@ -53,21 +53,43 @@ export function exportToAccess(data, filename) {
   XLSX.writeFile(wb, `${filename}.xlsx`)
 }
 
+// Excel's "CSV UTF-8" export (the option most people actually pick) writes
+// a UTF-8 byte-order-mark (U+FEFF) at the start of the file. Read as a
+// binary string, that BOM lands inside the FIRST header cell's text --
+// "name" silently becomes a different, invisible-look-alike string that
+// never matches a plain row.name lookup, so every row fails the name/
+// price check and the whole file reports "No valid rows found" with no
+// indication why. readAsArrayBuffer + XLSX's own codepage-aware parsing
+// handles this correctly instead of the legacy readAsBinaryString path.
+// Header keys are also trimmed/lowercased and string values trimmed on
+// the way out, so " Name " or "PRICE" in the spreadsheet still matches
+// the lowercase column names (name, price, ...) the rest of the import
+// expects.
+const BOM = '\uFEFF'
 export function parseCSV(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader()
     reader.onload = (e) => {
       try {
-        const wb = XLSX.read(e.target.result, { type: 'binary' })
+        const wb = XLSX.read(e.target.result, { type: 'array', codepage: 65001 })
         const ws = wb.Sheets[wb.SheetNames[0]]
-        const data = XLSX.utils.sheet_to_json(ws)
-        resolve(data)
+        const rows = XLSX.utils.sheet_to_json(ws, { raw: false, defval: '' })
+        const normalized = rows.map((row) => {
+          const clean = {}
+          for (const key of Object.keys(row)) {
+            const cleanKey = key.replace(BOM, '').trim().toLowerCase()
+            const value = row[key]
+            clean[cleanKey] = typeof value === 'string' ? value.trim() : value
+          }
+          return clean
+        })
+        resolve(normalized)
       } catch (err) {
         reject(err)
       }
     }
     reader.onerror = reject
-    reader.readAsBinaryString(file)
+    reader.readAsArrayBuffer(file)
   })
 }
 
