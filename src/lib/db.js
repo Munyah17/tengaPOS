@@ -1,16 +1,7 @@
 import { supabase } from '@/lib/supabase'
-import { generateReceiptNumber, generateDocNumber } from '@/utils/formatters'
+import { generateReceiptNumber, generateDocNumber, parseOptionalNumber, parseOptionalMoney } from '@/utils/formatters'
 import { isStaleJwtError, refreshSessionOnce } from '@/lib/authRetry'
 import { generateUUID } from '@/lib/uuid'
-
-// Parses a price input into an exact 2-decimal number. Guards against any
-// upstream float artifact (browser input quirks, a CSV/Excel export like
-// 9.999999999999998) ever reaching the database as anything other than
-// exactly what the user typed — money is never left to raw parseFloat.
-function parseMoney(value) {
-  const n = parseFloat(value)
-  return Number.isFinite(n) ? Math.round(n * 100) / 100 : 0
-}
 
 // ─── Products ────────────────────────────────────────────────────────────────
 
@@ -41,14 +32,13 @@ export async function insertProduct(tenantId, product) {
       brand: product.brand || null,
       sku: product.sku || null,
       barcode: product.barcode || null,
-      price: parseMoney(product.price),
+      price: parseOptionalMoney(product.price),
       // landing price (what it cost you) — powers margins & AI insights
-      cost_price: product.landingPrice ? parseMoney(product.landingPrice)
-        : product.costPrice ? parseMoney(product.costPrice) : null,
+      cost_price: parseOptionalMoney(product.landingPrice !== undefined && product.landingPrice !== '' ? product.landingPrice : product.costPrice),
       // A service has no stock to run out of — always 0, never gated on
       // the qty field the form hides for it (see process_checkout, which
       // also skips the stock check entirely when is_service is true).
-      stock_qty: product.isService ? 0 : (parseInt(product.stock) || 0),
+      stock_qty: product.isService ? 0 : parseOptionalNumber(product.stock),
       low_stock_threshold: parseInt(product.lowStockThreshold) || 10,
       is_service: product.isService === true,
       unit: product.unit || null,
@@ -95,9 +85,9 @@ export async function bulkInsertProducts(tenantId, rows, onProgress) {
       brand: product.brand || null,
       sku: product.sku || null,
       barcode: product.barcode || null,
-      price: parseMoney(product.price),
-      cost_price: product.landingPrice ? parseMoney(product.landingPrice) : null,
-      stock_qty: product.isService ? 0 : (parseInt(product.stock) || 0),
+      price: parseOptionalMoney(product.price),
+      cost_price: parseOptionalMoney(product.landingPrice),
+      stock_qty: product.isService ? 0 : parseOptionalNumber(product.stock),
       low_stock_threshold: parseInt(product.lowStockThreshold) || 10,
       is_service: product.isService === true,
       image_url: product.imageUrl || null,
@@ -128,9 +118,9 @@ export async function updateProduct(id, updates) {
       brand: updates.brand || null,
       sku: updates.sku || null,
       barcode: updates.barcode || null,
-      price: parseMoney(updates.price),
-      cost_price: updates.landingPrice ? parseMoney(updates.landingPrice) : null,
-      stock_qty: updates.isService ? 0 : (parseInt(updates.stock) || 0),
+      price: parseOptionalMoney(updates.price),
+      cost_price: parseOptionalMoney(updates.landingPrice),
+      stock_qty: updates.isService ? 0 : parseOptionalNumber(updates.stock),
       low_stock_threshold: parseInt(updates.lowStockThreshold) || 10,
       is_service: updates.isService === true,
       unit: updates.unit || null,

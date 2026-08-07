@@ -10,6 +10,25 @@ export function stripLeadingZero(str) {
   return String(str ?? '').replace(/^0+(?=\d)/, '')
 }
 
+// "" / null / undefined stays null ("not entered yet"); 0 stays exactly 0
+// ("explicitly zero") -- collapsing both into 0 (the old `|| 0` pattern
+// products/inventory used to save with) silently destroys that
+// distinction, which matters for both price (not-yet-priced vs
+// genuinely free) and stock (not-yet-counted vs genuinely out of
+// stock). Deliberately parseFloat, not parseInt -- Hardware Mode sells
+// by weight/length/volume (2.5kg, 71.5 units), and stock_qty is a
+// NUMERIC database column, not an integer one; parseInt silently
+// truncated any decimal stock quantity passed through it.
+export function parseOptionalNumber(value) {
+  if (value === '' || value === null || value === undefined) return null
+  const n = parseFloat(value)
+  return Number.isFinite(n) ? n : null
+}
+export function parseOptionalMoney(value) {
+  const n = parseOptionalNumber(value)
+  return n === null ? null : Math.round(n * 100) / 100
+}
+
 export function formatCurrency(amount, currency = 'USD') {
   try {
     return new Intl.NumberFormat('en-US', {

@@ -9,7 +9,7 @@ import Button from '@/components/common/Button'
 import Modal from '@/components/common/Modal'
 import ExportMenu from '@/components/common/ExportMenu'
 import { formatCurrency, formatDateTime, stripLeadingZero } from '@/utils/formatters'
-import { generateTemplate, parseCSV } from '@/utils/exportUtils'
+import { generateTemplate, parseCSV, filterValidImportRows } from '@/utils/exportUtils'
 import { UNITS } from '@/lib/units'
 import { useThemeStore } from '@/stores/themeStore'
 import { useAuthStore } from '@/stores/authStore'
@@ -222,9 +222,14 @@ export default function Inventory() {
       brand: p.brand || '',
       sku: p.sku || '',
       barcode: p.barcode || '',
-      price: p.price,
+      price: p.price ?? '',
       landingPrice: p.cost_price ?? '',
-      stock: p.stock_qty ?? p.stock ?? 0,
+      // stock_qty (the raw column, preserved through fetchProducts' spread)
+      // is checked before the derived `stock` display field, which itself
+      // already defaults to 0 -- re-opening a product with genuinely unset
+      // stock must show blank here, not silently re-save it as 0 the
+      // moment any other field on the form gets edited.
+      stock: p.stock_qty ?? '',
       lowStockThreshold: p.low_stock_threshold ?? 10,
       imageUrl: p.image_url || p.image || '',
       imageUnavailable: p.image_unavailable === true,
@@ -269,7 +274,10 @@ export default function Inventory() {
   // count/enter actual stock later; left blank, it saves as 0 (out of
   // stock until updated), same as the Mass Import template already does.
   const hasImage = !!(imagePreview || form.imageUrl)
-  const canSave = form.name && form.price && (hasImage || form.imageUnavailable)
+  // price, like stock, is optional -- some vendors record a product before
+  // it's been priced. Blank saves as NULL (see parseOptionalMoney in
+  // db.js), distinct from an explicit $0.00.
+  const canSave = form.name && (hasImage || form.imageUnavailable)
 
   const addAttributePreset = (preset) => {
     setForm((f) => {
@@ -393,7 +401,7 @@ export default function Inventory() {
     if (!file) return
     try {
       const data = await parseCSV(file)
-      const rows = data.filter((row) => row.name && row.price)
+      const rows = filterValidImportRows(data)
       if (rows.length === 0) {
         toast.error('No valid rows found — check the template format')
         return
@@ -764,7 +772,7 @@ export default function Inventory() {
             { label: 'Brand', field: 'brand', type: 'text', required: false },
             { label: 'SKU', field: 'sku', type: 'text', required: false },
             { label: 'Barcode', field: 'barcode', type: 'text', required: false },
-            { label: 'Selling Price (VAT-inclusive) *', field: 'price', type: 'number', required: true, money: true },
+            { label: 'Selling Price (VAT-inclusive, leave blank to price later)', field: 'price', type: 'number', required: false, money: true },
             { label: 'Landing Price (what it cost you)', field: 'landingPrice', type: 'number', required: false, money: true },
             ...(form.isService ? [] : [
               { label: 'Stock Quantity (leave blank to enter later)', field: 'stock', type: 'number', required: false },
