@@ -19,7 +19,20 @@ import { RefreshCw, AlertTriangle } from 'lucide-react'
 const CHUNK_RELOAD_KEY = 'tengapos_chunk_reload_attempted'
 function isChunkLoadError(error) {
   const msg = error?.message || ''
-  return /fetch dynamically imported module|error loading dynamically imported module|Importing a module script failed/i.test(msg)
+  // "Unexpected token '<'" is the same underlying stale-chunk problem in
+  // disguise: a host that rewrites unmatched paths to index.html (SPA
+  // routing) can do that for a deleted JS chunk file too, instead of a
+  // real 404 -- the browser then tries to parse the returned HTML
+  // document as JavaScript and fails on its first '<'. Fixed at the host
+  // config level (vercel.json now excludes /assets/* from that rewrite),
+  // but this stays as a second line of defense for any host/proxy that
+  // does the same thing, and for anyone still on a build from before that
+  // fix during the rollout itself.
+  // Deliberately matches only the literal '<' token, not "Unexpected
+  // token" generally -- that broader phrase covers plenty of genuine,
+  // unrelated JS syntax errors too, and this should never mask one of
+  // those behind a reload-and-hide.
+  return /fetch dynamically imported module|error loading dynamically imported module|Importing a module script failed|Unexpected token '<'/i.test(msg)
 }
 
 export default class ErrorBoundary extends Component {

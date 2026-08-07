@@ -167,7 +167,22 @@ export default function AppLayout() {
   }, [tenant?.id])
 
   return (
-    <div className="flex h-screen max-h-screen overflow-hidden bg-slate-50 dark:bg-slate-950" style={{ height: '100dvh' }}>
+    // Some mobile browsers (esp. ones with a persistent, non-retracting
+    // top search/address bar) draw that bar as an overlay on top of page
+    // content instead of shrinking the reported viewport for it -- 100dvh/
+    // 100vh then measure taller than what's actually visible, and the
+    // header ends up rendered partly behind the browser's own chrome with
+    // no way to reach it (reported: only fixable by zooming/rotating/
+    // reopening until the browser recalculates). overflow-y-auto here
+    // (was overflow-hidden) means that failure mode is now just "scroll up
+    // a little" instead of "stuck" -- on a device where the height is
+    // already correct, there's nothing to scroll and nothing changes.
+    // safe-area-inset-top is a second, standards-based line of defense for
+    // browsers that report their own chrome overlap properly.
+    <div
+      className="flex h-screen max-h-screen overflow-y-auto bg-slate-50 dark:bg-slate-950"
+      style={{ height: '100dvh', paddingTop: 'env(safe-area-inset-top, 0px)' }}
+    >
       <Sidebar open={mobileSidebarOpen} onClose={() => setMobileSidebarOpen(false)} />
       <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
         {impersonatingTenant && (
