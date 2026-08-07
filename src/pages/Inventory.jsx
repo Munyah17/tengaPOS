@@ -13,7 +13,7 @@ import { generateTemplate, parseCSV } from '@/utils/exportUtils'
 import { useThemeStore } from '@/stores/themeStore'
 import { useAuthStore } from '@/stores/authStore'
 import {
-  fetchProducts, insertProduct, updateProduct, deleteProduct, uploadProductImage,
+  fetchProducts, insertProduct, bulkInsertProducts, updateProduct, deleteProduct, uploadProductImage,
   fetchBranches, fetchProductBranches, assignProductBranch, unassignProductBranch,
   fetchCategories, createCategory, fetchStockTransfers, transferStock,
 } from '@/lib/db'
@@ -55,6 +55,7 @@ export default function Inventory() {
   const [search, setSearch] = useState('')
   const [showAdd, setShowAdd] = useState(false)
   const [showImport, setShowImport] = useState(false)
+  const [importProgress, setImportProgress] = useState(null) // { done, total } while a mass import is running
   const [editTarget, setEditTarget] = useState(null)
   const [saving, setSaving] = useState(false)
   const [form, setForm] = useState(BLANK)
@@ -393,37 +394,43 @@ export default function Inventory() {
         return
       }
       setSaving(true)
-      const results = await Promise.allSettled(
-        rows.map(row => {
-          const attributes = {}
-          if (row.weight) attributes.Weight = String(row.weight)
-          if (row.volume) attributes.Volume = String(row.volume)
-          if (row.color) attributes.Color = String(row.color)
-          if (row.size) attributes.Size = String(row.size)
-          return insertProduct(tenant.id, {
-            name: row.name,
-            brand: row.brand,
-            sku: row.sku,
-            barcode: row.barcode,
-            price: row.price,
-            landingPrice: row.landing_price,
-            stock: row.stock,
-            lowStockThreshold: row.low_stock_threshold,
-            vatTreatment: ['standard', 'zero_rated', 'exempt'].includes(row.vat_treatment) ? row.vat_treatment : 'standard',
-            attributes,
-            // Bulk-imported rows are assumed to have no photo yet — flagged for follow-up
-            imageUnavailable: true,
-          })
-        })
+      setImportProgress({ done: 0, total: rows.length })
+      const productRows = rows.map((row) => {
+        const attributes = {}
+        if (row.weight) attributes.Weight = String(row.weight)
+        if (row.volume) attributes.Volume = String(row.volume)
+        if (row.color) attributes.Color = String(row.color)
+        if (row.size) attributes.Size = String(row.size)
+        return {
+          name: row.name,
+          brand: row.brand,
+          sku: row.sku,
+          barcode: row.barcode,
+          price: row.price,
+          landingPrice: row.landing_price,
+          stock: row.stock,
+          lowStockThreshold: row.low_stock_threshold,
+          vatTreatment: ['standard', 'zero_rated', 'exempt'].includes(row.vat_treatment) ? row.vat_treatment : 'standard',
+          attributes,
+          // Bulk-imported rows are assumed to have no photo yet — flagged for follow-up
+          imageUnavailable: true,
+        }
+      })
+      const { inserted, total, failedChunks } = await bulkInsertProducts(
+        tenant.id, productRows, (done, totalRows) => setImportProgress({ done, total: totalRows })
       )
-      const succeeded = results.filter(r => r.status === 'fulfilled').length
       queryClient.invalidateQueries({ queryKey: ['products', tenant.id] })
       setShowImport(false)
-      toast.success(`${succeeded} of ${rows.length} products imported — add photos from the product list when ready`)
+      if (failedChunks.length > 0) {
+        toast.error(`${inserted} of ${total} imported — ${failedChunks.length} batch(es) failed: ${failedChunks[0].message}`)
+      } else {
+        toast.success(`${inserted} of ${total} products imported — add photos from the product list when ready`)
+      }
     } catch {
       toast.error('Failed to parse file — use the downloaded template format')
     } finally {
       setSaving(false)
+      setImportProgress(null)
     }
   }
 
@@ -982,11 +989,27 @@ export default function Inventory() {
             Prices are VAT-inclusive — enter the shelf price customers actually pay.
           </p>
           <Button variant="secondary" onClick={generateTemplate}><Download className="h-4 w-4" /> Download CSV Template</Button>
-          <div className="rounded-xl border-2 border-dashed border-slate-300 p-8 text-center dark:border-slate-700">
-            <Upload className="mx-auto mb-2 h-8 w-8 text-slate-400" />
-            <p className="text-sm text-slate-600 dark:text-slate-400">Drop your CSV file here or click to browse</p>
-            <input type="file" accept=".csv,.xlsx,.xls" onChange={handleImport} className="mt-3 text-sm" />
-          </div>
+          {importProgress ? (
+            <div className="rounded-xl border-2 border-dashed border-brand-300 p-8 text-center dark:border-brand-700">
+              <RefreshCw className="mx-auto mb-2 h-8 w-8 animate-spin text-brand-500" />
+              <p className="text-sm font-semibold text-slate-700 dark:text-slate-300">
+                Importing {importProgress.done} of {importProgress.total}…
+              </p>
+              <div className="mx-auto mt-3 h-2 w-full max-w-xs overflow-hidden rounded-full bg-slate-200 dark:bg-slate-700">
+                <div
+                  className="h-full rounded-full bg-brand-600 transition-all"
+                  style={{ width: `${Math.round((importProgress.done / importProgress.total) * 100)}%` }}
+                />
+              </div>
+            </div>
+          ) : (
+            <div className="rounded-xl border-2 border-dashed border-slate-300 p-8 text-center dark:border-slate-700">
+              <Upload className="mx-auto mb-2 h-8 w-8 text-slate-400" />
+              <p className="text-sm text-slate-600 dark:text-slate-400">Drop your CSV file here or click to browse</p>
+              <p className="mt-1 text-xs text-slate-400">Handles huge catalogs — thousands of products import in batches with live progress.</p>
+              <input type="file" accept=".csv,.xlsx,.xls" onChange={handleImport} disabled={saving} className="mt-3 text-sm" />
+            </div>
+          )}
           <p className="text-xs text-slate-500">
             Imported products are flagged "Image Not Available" — add photos individually afterwards from the product list.
           </p>

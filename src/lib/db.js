@@ -76,6 +76,50 @@ export async function insertProduct(tenantId, product) {
   return { ...data, stock: data.stock_qty ?? 0, category: '', barcode: data.barcode ?? '', image: data.image_url ?? null }
 }
 
+// Mass Import for large catalogs: one array .insert() per chunk instead of
+// N individual round trips (the previous Promise.allSettled-per-row
+// approach fired thousands of simultaneous requests for a large stock
+// file, hit the browser's per-origin connection limit, and gave zero
+// feedback for what could be a multi-minute operation -- looked hung).
+// 500 rows/chunk keeps each request body small and each one fast enough
+// that onProgress can update between chunks.
+const BULK_INSERT_CHUNK_SIZE = 500
+
+export async function bulkInsertProducts(tenantId, rows, onProgress) {
+  let inserted = 0
+  const failedChunks = []
+  for (let i = 0; i < rows.length; i += BULK_INSERT_CHUNK_SIZE) {
+    const chunk = rows.slice(i, i + BULK_INSERT_CHUNK_SIZE).map((product) => ({
+      tenant_id: tenantId,
+      name: product.name,
+      brand: product.brand || null,
+      sku: product.sku || null,
+      barcode: product.barcode || null,
+      price: parseMoney(product.price),
+      cost_price: product.landingPrice ? parseMoney(product.landingPrice) : null,
+      stock_qty: product.isService ? 0 : (parseInt(product.stock) || 0),
+      low_stock_threshold: parseInt(product.lowStockThreshold) || 10,
+      is_service: product.isService === true,
+      image_url: product.imageUrl || null,
+      image_unavailable: product.imageUnavailable === true,
+      vat_treatment: product.vatTreatment || 'standard',
+      attributes: product.attributes || {},
+      branch_id: product.branchId || null,
+      category_id: product.categoryId || null,
+      is_active: true,
+      pos_visible: true,
+    }))
+    const { error, count } = await supabase.from('products').insert(chunk, { count: 'exact' })
+    if (error) {
+      failedChunks.push({ from: i, to: i + chunk.length, message: error.message })
+    } else {
+      inserted += count ?? chunk.length
+    }
+    onProgress?.(Math.min(i + BULK_INSERT_CHUNK_SIZE, rows.length), rows.length)
+  }
+  return { inserted, total: rows.length, failedChunks }
+}
+
 export async function updateProduct(id, updates) {
   const { data, error } = await supabase
     .from('products')
@@ -305,7 +349,7 @@ export async function declinePaymentSession(sessionId, userId, note = '') {
 export async function fetchOrders(tenantId, filters = {}) {
   let q = supabase
     .from('orders')
-    .select('*, order_items(*), users(name)')
+    .select('*, order_items(*, products(category_id, attributes, categories(name))), users(name)')
     .eq('tenant_id', tenantId)
     .order('created_at', { ascending: false })
 

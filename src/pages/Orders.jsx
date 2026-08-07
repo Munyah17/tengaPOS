@@ -23,10 +23,12 @@ const ORDER_STATUS = {
 const exportColumns = [
   { header: 'Order ID', key: 'id' },
   { header: 'Date', key: 'date' },
+  { header: 'Products', key: 'itemNames' },
+  { header: 'Type', key: 'categoryList' },
   { header: 'Items', key: 'items' },
+  { header: 'Status', key: 'status' },
   { header: 'Total', key: 'total' },
   { header: 'Method', key: 'method' },
-  { header: 'Status', key: 'status' },
 ]
 
 function playBeep() {
@@ -212,17 +214,26 @@ export default function Orders() {
     }
   }
 
-  const dbOrders = useMemo(() => rawOrders.map(o => ({
-    id: o.order_no || o.id,
-    date: o.created_at,
-    customer: 'Walk-in',
-    items: o.order_items?.reduce((s, i) => s + i.qty, 0) ?? 0,
-    itemNames: (o.order_items || []).map(i => `${i.name}${i.qty > 1 ? ` x${i.qty}` : ''}`).join(', '),
-    total: parseFloat(o.total),
-    method: o.payment_method || '—',
-    status: o.status,
-    _raw: o,
-  })), [rawOrders])
+  const dbOrders = useMemo(() => rawOrders.map(o => {
+    const items = o.order_items || []
+    // Distinct category names across the order's line items -- a quick
+    // "what kind of sale was this" signal (Groceries, Hardware, ...)
+    // without having to open every order to see the products in it.
+    const categories = [...new Set(items.map(i => i.products?.categories?.name).filter(Boolean))]
+    return {
+      id: o.order_no || o.id,
+      date: o.created_at,
+      customer: 'Walk-in',
+      items: items.reduce((s, i) => s + i.qty, 0),
+      itemNames: items.map(i => `${i.name}${i.qty > 1 ? ` x${i.qty}` : ''}`).join(', '),
+      categories,
+      categoryList: categories.join(', '),
+      total: parseFloat(o.total),
+      method: o.payment_method || '—',
+      status: o.status,
+      _raw: o,
+    }
+  }), [rawOrders])
 
   const restaurantOrders = useMemo(() => rawOrders
     .filter(o => o.pos_mode === 'restaurant' && !['completed', 'cancelled'].includes(o.status))
@@ -290,7 +301,7 @@ export default function Orders() {
           <table className="w-full min-w-[640px]">
             <thead>
               <tr className="border-b border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-900">
-                {['Receipt #', 'Date', 'Customer', 'Products', 'Items', 'Total', 'Payment', 'Status', ''].map((h) => (
+                {['Receipt #', 'Date', 'Customer', 'Products', 'Type', 'Items', 'Status', 'Total', 'Payment', ''].map((h) => (
                   <th key={h} className="px-4 py-3 text-left text-xs font-semibold uppercase text-slate-500">{h}</th>
                 ))}
               </tr>
@@ -298,7 +309,7 @@ export default function Orders() {
             <tbody>
               {orders.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="py-16 text-center text-sm text-slate-400">
+                  <td colSpan={10} className="py-16 text-center text-sm text-slate-400">
                     No orders yet — complete a sale on the POS to see it here.
                   </td>
                 </tr>
@@ -312,16 +323,30 @@ export default function Orders() {
                   <td className="px-4 py-3 text-sm font-mono font-medium text-slate-900 dark:text-white">{order.id}</td>
                   <td className="px-4 py-3 text-sm text-slate-600 dark:text-slate-400">{formatDateTime(order.date)}</td>
                   <td className="px-4 py-3 text-sm text-slate-600 dark:text-slate-400">{order.customer}</td>
-                  <td className="px-4 py-3 max-w-[220px] truncate text-sm text-slate-600 dark:text-slate-400" title={order.itemNames}>{order.itemNames || '—'}</td>
-                  <td className="px-4 py-3 text-sm text-slate-600 dark:text-slate-400">{order.items}</td>
-                  <td className="px-4 py-3 text-sm font-semibold text-slate-900 dark:text-white">{formatCurrency(order.total)}</td>
+                  <td className="px-4 py-3 max-w-[260px] truncate text-sm font-medium text-slate-800 dark:text-slate-200" title={order.itemNames}>{order.itemNames || '—'}</td>
                   <td className="px-4 py-3">
-                    <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-700 dark:bg-slate-800 dark:text-slate-300">{order.method}</span>
+                    {order.categories.length === 0 ? (
+                      <span className="text-sm text-slate-400">—</span>
+                    ) : (
+                      <div className="flex flex-wrap gap-1 max-w-[160px]">
+                        {order.categories.slice(0, 2).map((c) => (
+                          <span key={c} className="rounded-full bg-brand-50 px-2 py-0.5 text-[11px] font-semibold text-brand-700 dark:bg-brand-950/40 dark:text-brand-400">{c}</span>
+                        ))}
+                        {order.categories.length > 2 && (
+                          <span className="text-[11px] text-slate-400" title={order.categories.join(', ')}>+{order.categories.length - 2}</span>
+                        )}
+                      </div>
+                    )}
                   </td>
+                  <td className="px-4 py-3 text-sm text-slate-600 dark:text-slate-400">{order.items}</td>
                   <td className="px-4 py-3">
                     <span className={`rounded-full px-2.5 py-0.5 text-xs font-bold ${order.status === 'completed' ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300' : 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300'}`}>
                       {order.status}
                     </span>
+                  </td>
+                  <td className="px-4 py-3 text-sm text-slate-500 dark:text-slate-500">{formatCurrency(order.total)}</td>
+                  <td className="px-4 py-3">
+                    <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-500 dark:bg-slate-800 dark:text-slate-400">{order.method}</span>
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-1">
@@ -375,12 +400,23 @@ export default function Orders() {
             <div>
               <p className="mb-2 text-xs font-semibold uppercase text-slate-400">Items</p>
               <div className="divide-y divide-slate-100 rounded-xl border border-slate-200 dark:divide-slate-800 dark:border-slate-800">
-                {(viewOrder._raw.order_items || []).map((item) => (
-                  <div key={item.id} className="flex items-center justify-between px-3 py-2 text-sm">
-                    <span className="text-slate-700 dark:text-slate-300">{item.name} <span className="text-slate-400">x{item.qty}</span></span>
-                    <span className="font-medium text-slate-900 dark:text-white">{formatCurrency(item.total ?? item.unit_price * item.qty)}</span>
-                  </div>
-                ))}
+                {(viewOrder._raw.order_items || []).map((item) => {
+                  const specs = Object.entries(item.products?.attributes || {}).filter(([, v]) => v).map(([k, v]) => `${k}: ${v}`).join(' · ')
+                  const category = item.products?.categories?.name
+                  return (
+                    <div key={item.id} className="flex items-center justify-between px-3 py-2 text-sm">
+                      <div>
+                        <p className="text-slate-700 dark:text-slate-300">{item.name} <span className="text-slate-400">x{item.qty}</span></p>
+                        {(category || specs || item.sku) && (
+                          <p className="mt-0.5 text-xs text-slate-400">
+                            {[category, specs, item.sku && `SKU: ${item.sku}`].filter(Boolean).join(' · ')}
+                          </p>
+                        )}
+                      </div>
+                      <span className="font-medium text-slate-900 dark:text-white">{formatCurrency(item.total ?? item.unit_price * item.qty)}</span>
+                    </div>
+                  )
+                })}
               </div>
             </div>
             <div className="flex items-center justify-between border-t border-slate-200 pt-3 text-sm font-bold text-slate-900 dark:border-slate-800 dark:text-white">
