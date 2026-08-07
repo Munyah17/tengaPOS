@@ -264,9 +264,12 @@ export default function Inventory() {
     setForm((f) => ({ ...f, imageUnavailable: false }))
   }
 
-  // Product Image is mandatory unless the "not available" override is ticked
+  // Product Image is mandatory unless the "not available" override is ticked.
+  // Stock is optional -- some vendors add the product record first and
+  // count/enter actual stock later; left blank, it saves as 0 (out of
+  // stock until updated), same as the Mass Import template already does.
   const hasImage = !!(imagePreview || form.imageUrl)
-  const canSave = form.name && form.price && (form.isService || form.stock !== '') && (hasImage || form.imageUnavailable)
+  const canSave = form.name && form.price && (hasImage || form.imageUnavailable)
 
   const addAttributePreset = (preset) => {
     setForm((f) => {
@@ -764,7 +767,7 @@ export default function Inventory() {
             { label: 'Selling Price (VAT-inclusive) *', field: 'price', type: 'number', required: true, money: true },
             { label: 'Landing Price (what it cost you)', field: 'landingPrice', type: 'number', required: false, money: true },
             ...(form.isService ? [] : [
-              { label: 'Stock Quantity *', field: 'stock', type: 'number', required: true },
+              { label: 'Stock Quantity (leave blank to enter later)', field: 'stock', type: 'number', required: false },
               { label: 'Low Stock Alert At', field: 'lowStockThreshold', type: 'number', required: false },
             ]),
           ].map(f => (
