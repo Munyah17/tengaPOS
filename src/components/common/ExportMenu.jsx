@@ -10,10 +10,10 @@ export default function ExportMenu({ data, columns, title, filename }) {
   const brandColor = tenant?.whitelabel?.enabled ? tenant.whitelabel.primary_color : null
 
   const options = [
-    { label: 'CSV', icon: FileText, action: () => exportToCSV(data, filename) },
-    { label: 'Excel', icon: FileSpreadsheet, action: () => exportToExcel(data, filename) },
+    { label: 'CSV', icon: FileText, action: () => exportToCSV(data, filename, columns) },
+    { label: 'Excel', icon: FileSpreadsheet, action: () => exportToExcel(data, filename, columns) },
     { label: 'PDF', icon: FileText, action: () => exportToPDF(data, columns, title, filename, brandColor) },
-    { label: 'Access', icon: Database, action: () => exportToAccess(data, filename) },
+    { label: 'Access', icon: Database, action: () => exportToAccess(data, filename, columns) },
   ]
 
   return (

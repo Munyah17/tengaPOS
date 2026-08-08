@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { parseCSVBuffer, filterValidImportRows } from './exportUtils'
+import { parseCSVBuffer, filterValidImportRows, shapeRows } from './exportUtils'
 
 function toBuffer(text) {
   return new TextEncoder().encode(text).buffer
@@ -86,5 +86,30 @@ describe('filterValidImportRows', () => {
   it('rejects a row with no name', () => {
     const rows = filterValidImportRows([{ name: '', price: '4.50', stock: '190' }])
     expect(rows).toHaveLength(0)
+  })
+})
+
+// Regression: CSV/Excel/Access exports used to ignore the columns prop
+// entirely and dump the raw row object (id, tenant_id, created_at, and
+// other internal database fields), making an exported product list
+// useless as a re-import template for anyone else.
+describe('shapeRows', () => {
+  const columns = [
+    { header: 'name', key: 'name' },
+    { header: 'price', key: 'price' },
+  ]
+  const rawRow = { id: 'abc-123', tenant_id: 'tenant-xyz', name: 'Twine bag', price: 4.5, created_at: '2026-01-01' }
+
+  it('keeps only the specified columns, dropping internal fields', () => {
+    const [shaped] = shapeRows([rawRow], columns)
+    expect(shaped).toEqual({ name: 'Twine bag', price: 4.5 })
+    expect(shaped).not.toHaveProperty('id')
+    expect(shaped).not.toHaveProperty('tenant_id')
+    expect(shaped).not.toHaveProperty('created_at')
+  })
+
+  it('passes data through unchanged when no columns are given', () => {
+    const [shaped] = shapeRows([rawRow], undefined)
+    expect(shaped).toBe(rawRow)
   })
 })

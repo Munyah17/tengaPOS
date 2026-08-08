@@ -3,15 +3,33 @@ import { saveAs } from 'file-saver'
 import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
 
-export function exportToCSV(data, filename) {
-  const ws = XLSX.utils.json_to_sheet(data)
+// ExportMenu always has a `columns` prop describing exactly which fields
+// belong in an export and what to label them -- CSV/Excel/Access used to
+// ignore it entirely and dump the raw row objects instead (only the PDF
+// export actually used it), so a product-list CSV export came out full of
+// internal database columns (id, tenant_id, timestamps, raw JSON columns
+// like attributes/price_tiers) that shouldn't be there and, reported live,
+// made an exported CSV useless as a re-import template for anyone else.
+// columns stays optional so callers that already pre-shape clean plain
+// objects themselves (HR.jsx, Reports.jsx) keep working unchanged.
+export function shapeRows(data, columns) {
+  if (!columns) return data
+  return data.map((row) => {
+    const shaped = {}
+    for (const { header, key } of columns) shaped[header] = row[key] ?? ''
+    return shaped
+  })
+}
+
+export function exportToCSV(data, filename, columns) {
+  const ws = XLSX.utils.json_to_sheet(shapeRows(data, columns))
   const csv = XLSX.utils.sheet_to_csv(ws)
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
   saveAs(blob, `${filename}.csv`)
 }
 
-export function exportToExcel(data, filename) {
-  const ws = XLSX.utils.json_to_sheet(data)
+export function exportToExcel(data, filename, columns) {
+  const ws = XLSX.utils.json_to_sheet(shapeRows(data, columns))
   const wb = XLSX.utils.book_new()
   XLSX.utils.book_append_sheet(wb, ws, 'Sheet1')
   XLSX.writeFile(wb, `${filename}.xlsx`)
@@ -46,8 +64,8 @@ export function exportToPDF(data, columns, title, filename, brandColor) {
   doc.save(`${filename}.pdf`)
 }
 
-export function exportToAccess(data, filename) {
-  const ws = XLSX.utils.json_to_sheet(data)
+export function exportToAccess(data, filename, columns) {
+  const ws = XLSX.utils.json_to_sheet(shapeRows(data, columns))
   const wb = XLSX.utils.book_new()
   XLSX.utils.book_append_sheet(wb, ws, 'Data')
   XLSX.writeFile(wb, `${filename}.xlsx`)

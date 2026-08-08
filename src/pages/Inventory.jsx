@@ -447,13 +447,24 @@ export default function Inventory() {
     }
   }
 
+  // Headers match Mass Import's expected column names exactly (lowercase,
+  // snake_case) -- so exporting the current inventory and using that file
+  // as a re-import template (a real workflow, reported live) round-trips
+  // cleanly, the same as the dedicated "Download CSV Template" button.
+  // Deliberately excludes id/tenant_id/timestamps/other internal columns
+  // that used to leak straight into CSV/Excel/Access exports (see
+  // exportUtils.js's shapeRows) -- those broke re-import entirely and
+  // have no meaning outside this one tenant's database anyway.
   const exportColumns = [
-    { header: 'Name', key: 'name' },
-    { header: 'SKU', key: 'sku' },
-    { header: 'Barcode', key: 'barcode' },
-    { header: 'Category', key: 'category' },
-    { header: 'Price', key: 'price' },
-    { header: 'Stock', key: 'stock_qty' },
+    { header: 'name', key: 'name' },
+    { header: 'sku', key: 'sku' },
+    { header: 'barcode', key: 'barcode' },
+    { header: 'price', key: 'price' },
+    { header: 'landing_price', key: 'cost_price' },
+    { header: 'stock', key: 'stock_qty' },
+    { header: 'low_stock_threshold', key: 'low_stock_threshold' },
+    { header: 'brand', key: 'brand' },
+    { header: 'vat_treatment', key: 'vat_treatment' },
   ]
 
   return (
