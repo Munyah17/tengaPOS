@@ -54,13 +54,25 @@ function FieldInput({ label, ...props }) {
 }
 
 function CreateUserModal({ tenants, onClose, onDone }) {
-  const [form, setForm] = useState({ tenant_id: '', name: '', email: '', password: '', role: 'cashier' })
+  const [form, setForm] = useState({ tenant_id: '', name: '', email: '', password: '', role: 'cashier', branch_id: '' })
+  const [branches, setBranches] = useState([])
   const [showPw, setShowPw] = useState(false)
   const [saving, setSaving] = useState(false)
+
+  // A user with no branch fails RLS on every branch-scoped product --
+  // confirmed live as a cashier silently seeing only a fraction of the
+  // real catalog with no error at all. Required below for every role but
+  // vendor, same as the vendor's own "Add Staff" flow already enforces.
+  useEffect(() => {
+    if (!form.tenant_id) { setBranches([]); return }
+    supabase.from('branches').select('id, name').eq('tenant_id', form.tenant_id).order('name')
+      .then(({ data }) => setBranches(data || []))
+  }, [form.tenant_id])
 
   const submit = async (e) => {
     e.preventDefault()
     if (!form.tenant_id) { toast.error('Choose the business this user belongs to'); return }
+    if (form.role !== 'vendor' && !form.branch_id) { toast.error('Select a branch for this user'); return }
     setSaving(true)
     try {
       await invokeManageUser({ action: 'create', ...form })
@@ -87,7 +99,7 @@ function CreateUserModal({ tenants, onClose, onDone }) {
             <label className="mb-1 block text-xs font-semibold text-slate-500">Business (Tenant)</label>
             <select
               value={form.tenant_id}
-              onChange={(e) => setForm((f) => ({ ...f, tenant_id: e.target.value }))}
+              onChange={(e) => setForm((f) => ({ ...f, tenant_id: e.target.value, branch_id: '' }))}
               required
               className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-indigo-500 focus:outline-none dark:border-white/10 dark:bg-slate-800 dark:text-white"
             >
@@ -128,6 +140,26 @@ function CreateUserModal({ tenants, onClose, onDone }) {
               ))}
             </select>
           </div>
+          {form.role !== 'vendor' && (
+            <div>
+              <label className="mb-1 block text-xs font-semibold text-slate-500">Branch</label>
+              <select
+                value={form.branch_id}
+                onChange={(e) => setForm((f) => ({ ...f, branch_id: e.target.value }))}
+                required
+                disabled={!form.tenant_id}
+                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-indigo-500 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/10 dark:bg-slate-800 dark:text-white"
+              >
+                <option value="">{form.tenant_id ? '— Select branch —' : 'Select a business first'}</option>
+                {branches.map((b) => (
+                  <option key={b.id} value={b.id}>{b.name}</option>
+                ))}
+              </select>
+              {form.tenant_id && branches.length === 0 && (
+                <p className="mt-1 text-xs text-amber-500">This business has no branches yet.</p>
+              )}
+            </div>
+          )}
         </div>
 
         <button

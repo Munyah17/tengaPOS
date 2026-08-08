@@ -49,7 +49,7 @@ serve(async (req) => {
     const action = body.action
 
     if (action === 'create') {
-      const { tenant_id, name, email, password, role } = body
+      const { tenant_id, name, email, password, role, branch_id } = body
       if (!tenant_id || !name || !email || !password || !role) {
         return json({ error: 'Missing fields: tenant_id, name, email, password, role' }, 400)
       }
@@ -58,6 +58,18 @@ serve(async (req) => {
 
       const { data: tenant } = await admin.from('tenants').select('id, name').eq('id', tenant_id).maybeSingle()
       if (!tenant) return json({ error: 'Tenant not found' }, 404)
+
+      // A user with no branch fails RLS on every branch-scoped product in
+      // any multi-branch (or even single-branch-but-scoped) tenant --
+      // confirmed live: a cashier created here saw only ~1/3 of a real
+      // tenant's catalog with no error, just fewer products than expected.
+      // tenant-add-staff (the vendor's own "Add Staff" flow) already
+      // requires this for every non-vendor role; this path never did.
+      if (role !== 'vendor') {
+        if (!branch_id) return json({ error: 'Select a branch for this user' }, 400)
+        const { data: b } = await admin.from('branches').select('id').eq('id', branch_id).eq('tenant_id', tenant_id).maybeSingle()
+        if (!b) return json({ error: 'Branch not found in that business' }, 400)
+      }
 
       let { data: created, error: createErr } = await admin.auth.admin.createUser({
         email,
@@ -98,6 +110,7 @@ serve(async (req) => {
         name,
         email,
         role,
+        branch_id: role === 'vendor' ? null : branch_id,
         is_active: true,
       })
       if (insertErr) {
