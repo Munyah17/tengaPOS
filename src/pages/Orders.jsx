@@ -1,9 +1,10 @@
 import { useState, useEffect, useMemo } from 'react'
 import { motion } from 'framer-motion'
-import { Eye, Bell, CheckCircle, Clock, Flame, Timer, Car, Store, X, Trash2, Loader2 } from 'lucide-react'
+import { Eye, Bell, CheckCircle, Clock, Flame, Timer, Car, Store, X, Trash2, Loader2, Printer } from 'lucide-react'
 import ExportMenu from '@/components/common/ExportMenu'
 import DateInput, { TimeField } from '@/components/common/DateInput'
 import Modal from '@/components/common/Modal'
+import ZimraReceipt from '@/components/common/ZimraReceipt'
 import { formatCurrency, formatDateTime } from '@/utils/formatters'
 import { combineDateAndTime } from '@/utils/dateRanges'
 import { useThemeStore } from '@/stores/themeStore'
@@ -159,6 +160,7 @@ export default function Orders() {
   const [timeTo, setTimeTo] = useState('')
   const [viewOrder, setViewOrder] = useState(null)
   const [deletingId, setDeletingId] = useState(null)
+  const [reprintReceipt, setReprintReceipt] = useState(null)
   // Re-render periodically so "elapsed minutes" on restaurant order cards
   // keeps ticking even with no new realtime events
   const [, setClockTick] = useState(0)
@@ -199,6 +201,35 @@ export default function Orders() {
       window.removeEventListener('tengapos:force-refresh', loadOrders)
     }
   }, [tenant?.id])
+
+  // Re-print builds a fresh ZimraReceipt straight from the stored order —
+  // no re-running the sale, no touching stock/totals. Fiscal fields (QR,
+  // device/global receipt no) aren't persisted per-order today, so a
+  // reprint of a fiscalised sale shows the current fiscal state rather
+  // than the exact one at time of sale; isReprint marks the copy clearly
+  // so it's never mistaken for the original.
+  const handleReprint = (order) => {
+    const raw = order._raw
+    const items = raw.order_items || []
+    setReprintReceipt({
+      receiptNumber: order.id,
+      items: items.map((item) => ({ name: item.name, quantity: item.qty, price: parseFloat(item.unit_price) })),
+      subtotal: parseFloat(raw.subtotal ?? order.total),
+      tax: parseFloat(raw.tax_amount ?? 0),
+      total: parseFloat(raw.total ?? order.total),
+      discountAmount: parseFloat(raw.discount_amount ?? 0),
+      paymentMethod: raw.payment_method || order.method,
+      date: raw.created_at,
+      cashier: raw.users?.name || 'Cashier',
+      vatEnabled: Number(raw.tax_amount) > 0,
+      vatRate: tenant?.vat_rate ?? 15.5,
+      currency: tenant?.currency,
+      salespersonName: raw.salesperson_name || null,
+      salespersonEmployeeNo: raw.salesperson_employee_no || null,
+      fdmsQrUrl: null,
+      isReprint: true,
+    })
+  }
 
   const handleDeleteOrder = async (order) => {
     if (!window.confirm(`Delete order ${order.id}? This can't be undone.`)) return
@@ -354,6 +385,15 @@ export default function Orders() {
                       >
                         <Eye className="h-4 w-4" />
                       </button>
+                      {order.status === 'completed' && (
+                        <button
+                          onClick={() => handleReprint(order)}
+                          className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
+                          title="Re-print receipt"
+                        >
+                          <Printer className="h-4 w-4" />
+                        </button>
+                      )}
                       {role === 'vendor' && (
                         <button
                           onClick={() => handleDeleteOrder(order)}
@@ -420,9 +460,22 @@ export default function Orders() {
               <span>Total</span>
               <span>{formatCurrency(viewOrder.total)}</span>
             </div>
+            {viewOrder.status === 'completed' && (
+              <button
+                onClick={() => handleReprint(viewOrder)}
+                className="flex w-full items-center justify-center gap-1.5 rounded-xl border border-slate-200 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+              >
+                <Printer className="h-4 w-4" />
+                Re-print Receipt
+              </button>
+            )}
           </div>
         )}
       </Modal>
+
+      {reprintReceipt && (
+        <ZimraReceipt receipt={reprintReceipt} onClose={() => setReprintReceipt(null)} />
+      )}
     </div>
   )
 }

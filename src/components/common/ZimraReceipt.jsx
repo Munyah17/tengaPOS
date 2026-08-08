@@ -182,6 +182,7 @@ export default function ZimraReceipt({ receipt, onClose }) {
         </div>
         <div class="sep"></div>
         <div class="center bold">${showFiscalSection ? 'FISCAL TAX INVOICE' : 'RECEIPT'}</div>
+        ${receipt.isReprint ? '<div class="center tiny bold">*** REPRINT / COPY ***</div>' : ''}
         ${row('Receipt No:', receipt.receiptNumber)}
         ${row('Date:', dateStr)}
         ${row('Time:', timeStr)}
@@ -258,6 +259,7 @@ export default function ZimraReceipt({ receipt, onClose }) {
       if (vatNo) lines.push({ text: `VAT Reg: ${vatNo}`, center: true })
       dash()
       lines.push({ text: showFiscalSection ? 'FISCAL TAX INVOICE' : 'RECEIPT', bold: true, center: true })
+      if (receipt.isReprint) lines.push({ text: '*** REPRINT / COPY ***', bold: true, center: true })
       rowLine('Receipt No:', receipt.receiptNumber)
       rowLine('Date:', dateStr)
       rowLine('Time:', timeStr)
@@ -336,7 +338,7 @@ export default function ZimraReceipt({ receipt, onClose }) {
               <Printer className="h-5 w-5 text-slate-400" />
             )}
             <span className="font-bold text-slate-900 dark:text-white">
-              {showFiscalSection ? 'Fiscal Receipt' : 'Receipt'}
+              {showFiscalSection ? 'Fiscal Receipt' : 'Receipt'}{receipt.isReprint ? ' (Reprint)' : ''}
             </span>
           </div>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
@@ -377,6 +379,7 @@ export default function ZimraReceipt({ receipt, onClose }) {
 
             {/* Receipt info */}
             <div className="text-center font-bold">{showFiscalSection ? 'FISCAL TAX INVOICE' : 'RECEIPT'}</div>
+            {receipt.isReprint && <div className="text-center text-[10px] font-bold">*** REPRINT / COPY ***</div>}
             <div className="mt-1 flex justify-between">
               <span>Receipt No:</span>
               <span>{receipt.receiptNumber}</span>
