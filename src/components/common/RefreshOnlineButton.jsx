@@ -4,6 +4,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
 import { useAuthStore } from '@/stores/authStore'
 import { cacheProductsForOffline, processSyncQueue } from '@/lib/offlineSync'
+import { hardReload } from '@/lib/hardReload'
 
 // A pressure-release valve for offline caching: with so many pages now
 // serving cached data first, this forces every page to go back to the
@@ -40,30 +41,10 @@ export default function RefreshOnlineButton() {
     } catch {
       // Non-fatal — the reload below still pulls a fully fresh copy of the page
     } finally {
-      // A plain reload still goes through the service worker, which can
-      // just re-serve its own cached shell instead of hitting the network
-      // — whether that happens to coincide with a truly fresh fetch is
-      // timing-dependent, which is why this button could take several
-      // clicks before it visibly did anything. Unregistering it and
-      // wiping its caches first removes anything that could intercept
-      // this one reload, so it's guaranteed to go to the network. Safe to
-      // do here specifically because registerSW() in main.jsx re-registers
-      // a fresh service worker on the very next load — this doesn't
-      // disable offline support generally, only forces this one reload
-      // to bypass it.
-      try {
-        if ('serviceWorker' in navigator) {
-          const regs = await navigator.serviceWorker.getRegistrations()
-          await Promise.all(regs.map((r) => r.unregister()))
-        }
-        if ('caches' in window) {
-          const keys = await caches.keys()
-          await Promise.all(keys.map((k) => caches.delete(k)))
-        }
-      } catch {
-        // Best-effort — still reload below even if this couldn't complete
-      }
-      window.location.reload()
+      // hardReload unregisters the service worker and clears its caches
+      // first, so this reload can't be served from a stuck old worker
+      // instead of the network — see src/lib/hardReload.js.
+      await hardReload()
     }
   }
 

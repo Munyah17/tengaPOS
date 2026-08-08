@@ -1,5 +1,6 @@
 import { Component } from 'react'
 import { RefreshCw, AlertTriangle } from 'lucide-react'
+import { hardReload } from '@/lib/hardReload'
 
 // Without this, any uncaught render error anywhere in the app unmounts the
 // entire React tree to a blank white page — which a cashier mid-sale reads
@@ -17,27 +18,6 @@ import { RefreshCw, AlertTriangle } from 'lucide-react'
 // the current index.html and its matching chunk manifest, so we do that
 // automatically instead of leaving the cashier stuck looking at an error.
 const CHUNK_RELOAD_KEY = 'tengapos_chunk_reload_attempted'
-
-// A plain reload() still goes through whatever service worker is currently
-// registered, which can just re-serve its own stale cache instead of
-// reaching the network -- the exact same reasoning RefreshOnlineButton.jsx
-// documents. This is a stale-chunk recovery path, so it needs the same
-// guarantee: unregister first so this reload can't be served from a stuck
-// old worker, then reload. registerSW() in main.jsx re-registers a fresh
-// one on the very next load either way.
-async function hardReload() {
-  try {
-    if ('serviceWorker' in navigator) {
-      const regs = await navigator.serviceWorker.getRegistrations()
-      await Promise.all(regs.map((r) => r.unregister()))
-    }
-    if ('caches' in window) {
-      const keys = await caches.keys()
-      await Promise.all(keys.map((k) => caches.delete(k)))
-    }
-  } catch { /* best-effort — still reload below even if this couldn't complete */ }
-  window.location.reload()
-}
 
 function isChunkLoadError(error) {
   const msg = error?.message || ''
