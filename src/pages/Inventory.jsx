@@ -8,7 +8,7 @@ import {
 import Button from '@/components/common/Button'
 import Modal from '@/components/common/Modal'
 import ExportMenu from '@/components/common/ExportMenu'
-import { formatCurrency, formatDateTime, stripLeadingZero } from '@/utils/formatters'
+import { formatCurrency, formatUnitPrice, formatDateTime, stripLeadingZero } from '@/utils/formatters'
 import { generateTemplate, parseCSV, filterValidImportRows } from '@/utils/exportUtils'
 import { UNITS } from '@/lib/units'
 import { useThemeStore } from '@/stores/themeStore'
@@ -582,7 +582,7 @@ export default function Inventory() {
                           ? <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300">{product.category}</span>
                           : '—'}
                       </td>
-                      <td className="px-4 py-3 text-sm font-semibold text-slate-900 dark:text-white">{formatCurrency(product.price)}</td>
+                      <td className="px-4 py-3 text-sm font-semibold text-slate-900 dark:text-white">{formatUnitPrice(product.price)}</td>
                       <td className="px-4 py-3">
                         {product.is_service ? (
                           <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-bold text-slate-500 dark:bg-slate-800 dark:text-slate-400">Service</span>
@@ -799,7 +799,7 @@ export default function Inventory() {
                 className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
                 required={f.required}
                 min={f.type === 'number' ? '0' : undefined}
-                step={f.money ? '0.01' : undefined}
+                step={f.money ? '0.0001' : undefined}
               />
             </div>
           ))}
@@ -968,7 +968,7 @@ export default function Inventory() {
                       />
                       <span className="flex-shrink-0 text-xs text-slate-500">→ price</span>
                       <input
-                        type="number" min="0" step="0.01" value={tier.price}
+                        type="number" min="0" step="0.0001" value={tier.price}
                         onChange={(e) => updatePriceTier(i, 'price', stripLeadingZero(e.target.value))}
                         placeholder="4.50"
                         className="flex-1 rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"

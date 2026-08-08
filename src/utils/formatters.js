@@ -24,23 +24,45 @@ export function parseOptionalNumber(value) {
   const n = parseFloat(value)
   return Number.isFinite(n) ? n : null
 }
+// Rounded to 4dp, not 2 -- reported live: products genuinely priced in
+// fractions of a cent per unit ("$1 for 8" = $0.1250 each) were getting
+// silently rounded to $0.13 on save, so 8 of them rang up as $1.04
+// instead of the $1.00 the price tag actually promised. Money actually
+// charged to a customer (order/transaction totals) still rounds to cents
+// as normal -- only the per-unit PRICE itself carries the extra
+// precision, so price * qty comes out exact.
 export function parseOptionalMoney(value) {
   const n = parseOptionalNumber(value)
-  return n === null ? null : Math.round(n * 100) / 100
+  return n === null ? null : Math.round(n * 10000) / 10000
 }
 
-export function formatCurrency(amount, currency = 'USD') {
+// maxDecimals defaults to 2 (ordinary currency amounts: totals, tax,
+// change due) so every existing call site is unchanged. Pass 4 for a
+// per-unit PRICE display, so a genuinely sub-cent price (e.g. $0.1250)
+// is shown as what it actually is instead of silently rounding it to
+// $0.13 on screen -- trailing zeros beyond 2dp are trimmed automatically
+// (minimumFractionDigits stays 2), so a normal $1.00 price still just
+// reads "$1.00", not "$1.0000".
+export function formatCurrency(amount, currency = 'USD', maxDecimals = 2) {
   try {
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
       currency,
       minimumFractionDigits: 2,
+      maximumFractionDigits: maxDecimals,
     }).format(amount)
   } catch {
     // Currency code not recognized by this browser's ICU data — fall back
     // to a plain prefix rather than crashing the page.
     return `${currency} ${Number(amount || 0).toFixed(2)}`
   }
+}
+
+// Unit-price-specific alias so call sites read as what they mean (a
+// per-item price, which may need up to 4dp) rather than a bare "4" that
+// needs a comment to explain itself every time.
+export function formatUnitPrice(amount, currency = 'USD') {
+  return formatCurrency(amount, currency, 4)
 }
 
 // dd/mm/yyyy is the platform-wide date format

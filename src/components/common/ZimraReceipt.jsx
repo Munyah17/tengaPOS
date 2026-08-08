@@ -3,7 +3,7 @@ import { Printer, X, CheckCircle, Usb } from 'lucide-react'
 import { useFiscalStore } from '@/stores/fiscalStore'
 import { useReceiptConfigStore } from '@/stores/receiptConfigStore'
 import { useAuthStore } from '@/stores/authStore'
-import { formatCurrency } from '@/utils/formatters'
+import { formatCurrency, formatUnitPrice } from '@/utils/formatters'
 import { printToPosPrinter, paperWidthToChars } from '@/lib/posPrinter'
 import toast from 'react-hot-toast'
 
@@ -42,6 +42,10 @@ export default function ZimraReceipt({ receipt, onClose }) {
   const vatEnabled = receipt.vatEnabled !== false
   const vatRate = receipt.vatRate ?? 15.5
   const fmt = (n) => formatCurrency(n, receipt.currency)
+  // A per-unit price genuinely priced in fractions of a cent ("$1 for 8"
+  // = $0.1250 each) should print as what it is -- fmt() alone would round
+  // it to $0.13 on the receipt, which no longer matches price * qty.
+  const fmtUnit = (n) => formatUnitPrice(n, receipt.currency)
 
   const isFiscalised = fiscal.isEnabled && fiscal.isRegistered
   // Fully Customized hides the ZIMRA fiscal section even if fiscalisation is
@@ -108,7 +112,7 @@ export default function ZimraReceipt({ receipt, onClose }) {
     const itemsHtml = receipt.items.map((item) => `
       <div class="item">
         <div class="item-name">${esc(item.name)}</div>
-        <div class="row indent"><span>${item.quantity} x ${esc(fmt(item.price))}</span><span>${esc(fmt(item.price * item.quantity))}</span></div>
+        <div class="row indent"><span>${item.quantity} x ${esc(fmtUnit(item.price))}</span><span>${esc(fmt(item.price * item.quantity))}</span></div>
         ${vatEnabled ? `<div class="tiny indent">HS: 000000 | Tax: D (${vatRate}%)</div>` : ''}
       </div>
     `).join('')
@@ -271,7 +275,7 @@ export default function ZimraReceipt({ receipt, onClose }) {
       lines.push({ text: 'ITEMS', bold: true })
       for (const item of receipt.items) {
         lines.push({ text: item.name, bold: true })
-        rowLine(`  ${item.quantity} x ${fmt(item.price)}`, fmt(item.price * item.quantity))
+        rowLine(`  ${item.quantity} x ${fmtUnit(item.price)}`, fmt(item.price * item.quantity))
       }
       dash()
       if (receipt.discountAmount > 0) rowLine('Discount', `-${fmt(receipt.discountAmount)}`)
@@ -411,7 +415,7 @@ export default function ZimraReceipt({ receipt, onClose }) {
               <div key={i} className="mt-1">
                 <div className="font-semibold">{item.name}</div>
                 <div className="flex justify-between pl-2">
-                  <span>{item.quantity} x {fmt(item.price)}</span>
+                  <span>{item.quantity} x {fmtUnit(item.price)}</span>
                   <span>{fmt(item.price * item.quantity)}</span>
                 </div>
                 {vatEnabled && (

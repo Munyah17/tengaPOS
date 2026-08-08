@@ -13,7 +13,7 @@ import { useCartStore } from '@/stores/cartStore'
 import { useThemeStore } from '@/stores/themeStore'
 import { useAuthStore } from '@/stores/authStore'
 import { PAYMENT_METHODS } from '@/utils/constants'
-import { formatCurrency, generateReceiptNumber, stripLeadingZero } from '@/utils/formatters'
+import { formatCurrency, formatUnitPrice, generateReceiptNumber, stripLeadingZero } from '@/utils/formatters'
 import { FRACTIONAL_UNITS, unitStep } from '@/lib/units'
 import { initiatePaynowCheckout } from '@/lib/paynow'
 import { fetchProducts, saveCheckout, fetchStaff, completeJobCard, recordPrescriptionDispense, recordAgeVerification } from '@/lib/db'
@@ -118,6 +118,10 @@ export default function POS() {
   const videoRef = useRef(null)
   const scanStreamRef = useRef(null)
   const fmt = (n) => formatCurrency(n, tenant?.currency)
+  // Per-unit price display only -- a product genuinely priced in
+  // fractions of a cent ("$1 for 8" = $0.1250 each) should show as what
+  // it is, not silently round to $0.13. Line/order totals stay on fmt().
+  const fmtUnit = (n) => formatUnitPrice(n, tenant?.currency)
 
   const queryClient = useQueryClient()
   // Cached (staleTime) instead of a hard fetch-on-every-mount — a cashier
@@ -587,7 +591,7 @@ export default function POS() {
                         <p className="truncate text-sm font-semibold text-slate-900 dark:text-white">{p.name}</p>
                         <p className="text-xs text-slate-500">{p.sku} · {p.stock} in stock</p>
                       </div>
-                      <span className="flex-shrink-0 text-sm font-bold text-slate-900 dark:text-white">{fmt(p.price)}</span>
+                      <span className="flex-shrink-0 text-sm font-bold text-slate-900 dark:text-white">{fmtUnit(p.price)}</span>
                     </button>
                   ))}
                 </div>
@@ -666,7 +670,7 @@ export default function POS() {
                   <span className={`text-lg font-extrabold ${
                     isRestaurant ? 'text-restaurant-600 dark:text-restaurant-400' : 'text-brand-600 dark:text-brand-400'
                   }`}>
-                    {fmt(product.price)}
+                    {fmtUnit(product.price)}
                   </span>
                   <span className="text-xs text-slate-500">{product.stock} in stock</span>
                 </div>
@@ -785,7 +789,7 @@ export default function POS() {
                         <h4 className="text-sm font-semibold text-slate-900 dark:text-white">
                           {item.name}
                         </h4>
-                        <p className="text-xs text-slate-500">{fmt(item.price)} each</p>
+                        <p className="text-xs text-slate-500">{fmtUnit(item.price)} each</p>
                       </div>
                       <button
                         onClick={() => cart.removeItem(item.id)}

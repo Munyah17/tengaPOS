@@ -40,11 +40,16 @@ describe('parseOptionalMoney', () => {
     expect(parseOptionalMoney('0.00')).toBe(0)
     expect(parseOptionalMoney(0)).toBe(0)
   })
-  it('rounds to 2 decimal places', () => {
-    expect(parseOptionalMoney('4.999')).toBe(5)
+  it('rounds to 4 decimal places', () => {
+    expect(parseOptionalMoney('4.99991')).toBe(4.9999)
     expect(parseOptionalMoney('9.999999999999998')).toBe(10)
   })
   it('parses a normal price', () => {
     expect(parseOptionalMoney('2.20')).toBe(2.2)
+  })
+  it('preserves sub-cent precision for fractional per-unit pricing', () => {
+    // "$1 for 8" -- the exact scenario reported: 2dp rounding turned
+    // $0.125/unit into $0.13, so 8 of them rang up as $1.04 not $1.00.
+    expect(parseOptionalMoney('0.125')).toBe(0.125)
   })
 })
