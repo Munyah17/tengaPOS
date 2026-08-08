@@ -230,6 +230,33 @@ export function TenantModal({ tenant, technicians, onClose, onSaved }) {
   const [backupConfig, setBackupConfig] = useState(tenant.backup_config || {})
   const [technicianId, setTechnicianId] = useState(tenant.dedicated_technician_id || '')
 
+  // The business (tenants.name, edited in the Application tab below) and
+  // the actual person who owns/runs it are two different things -- Super
+  // Admin needs to be able to fix a typo'd or changed owner name too.
+  const [vendorUser, setVendorUser] = useState(null)
+  const [vendorNameDraft, setVendorNameDraft] = useState('')
+  const [savingVendorName, setSavingVendorName] = useState(false)
+  useEffect(() => {
+    supabase.from('users').select('id, name, email').eq('tenant_id', tenant.id).eq('role', 'vendor').eq('is_active', true).maybeSingle()
+      .then(({ data }) => { setVendorUser(data); setVendorNameDraft(data?.name || '') })
+  }, [tenant.id])
+
+  const saveVendorName = async () => {
+    const clean = vendorNameDraft.trim()
+    if (!clean || !vendorUser) return
+    setSavingVendorName(true)
+    try {
+      const { error } = await supabase.from('users').update({ name: clean, updated_at: new Date().toISOString() }).eq('id', vendorUser.id)
+      if (error) throw error
+      setVendorUser((v) => ({ ...v, name: clean }))
+      toast.success('Vendor name updated')
+    } catch (err) {
+      toast.error(err.message || 'Failed to update vendor name')
+    } finally {
+      setSavingVendorName(false)
+    }
+  }
+
   // Application tab was read-only display of what was typed at signup --
   // Super Admin couldn't fix a typo'd business name or update an address
   // without going around the app entirely. Now editable, same save() as
@@ -1023,6 +1050,29 @@ export function TenantModal({ tenant, technicians, onClose, onSaved }) {
           {/* ── Team tab ── */}
           {tab === 'Team' && (
             <div className="space-y-4">
+              <div>
+                <p className="mb-3 text-xs font-bold uppercase tracking-widest text-slate-500">Vendor / Owner Name</p>
+                {vendorUser ? (
+                  <div className="flex items-center gap-2">
+                    <input
+                      value={vendorNameDraft}
+                      onChange={(e) => setVendorNameDraft(e.target.value)}
+                      className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 dark:border-white/10 dark:bg-white/5 dark:text-white focus:border-indigo-500 focus:outline-none"
+                    />
+                    <button
+                      onClick={saveVendorName}
+                      disabled={savingVendorName || !vendorNameDraft.trim() || vendorNameDraft.trim() === vendorUser.name}
+                      className="flex-shrink-0 rounded-xl bg-indigo-600 px-4 py-2 text-sm font-bold text-white hover:bg-indigo-700 disabled:opacity-50"
+                    >
+                      {savingVendorName ? 'Saving…' : 'Save'}
+                    </button>
+                  </div>
+                ) : (
+                  <p className="text-sm text-slate-500">No active vendor account found for this business.</p>
+                )}
+                {vendorUser?.email && <p className="mt-1.5 text-xs text-slate-500">{vendorUser.email}</p>}
+              </div>
+
               <div className="flex items-center gap-2 rounded-xl border border-green-500/20 bg-green-500/5 px-4 py-3 text-sm text-green-300">
                 <Users className="h-4 w-4 flex-shrink-0" />
                 Assign a dedicated tengaPOS technician who owns this account's field support.

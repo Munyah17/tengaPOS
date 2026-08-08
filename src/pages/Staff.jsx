@@ -7,7 +7,7 @@ import ExportMenu from '@/components/common/ExportMenu'
 import { useThemeStore } from '@/stores/themeStore'
 import { useAuthStore } from '@/stores/authStore'
 import {
-  fetchStaff, updateStaffStatus, fetchBranches, updateStaffUsername, updateStaffEmployeeNo,
+  fetchStaff, updateStaffStatus, fetchBranches, updateStaffUsername, updateStaffEmployeeNo, updateStaffName,
   fetchUserBranches, assignUserBranch, unassignUserBranch,
 } from '@/lib/db'
 import { loadWithOfflineCache } from '@/lib/offlineCache'
@@ -125,15 +125,18 @@ export default function Staff() {
 
   const handleSaveUsername = async (e) => {
     e.preventDefault()
+    const cleanName = usernameEdit.name.trim()
+    if (!cleanName) { toast.error('Full name is required'); return }
     setSavingUsername(true)
     try {
       const clean = usernameEdit.username.trim().toLowerCase()
       const cleanEmployeeNo = usernameEdit.employee_no.trim()
       await Promise.all([
+        updateStaffName(usernameEdit.id, cleanName),
         updateStaffUsername(usernameEdit.id, clean || null),
         updateStaffEmployeeNo(usernameEdit.id, cleanEmployeeNo || null),
       ])
-      setStaff((prev) => prev.map((s) => s.id === usernameEdit.id ? { ...s, username: clean || null, employee_no: cleanEmployeeNo || null } : s))
+      setStaff((prev) => prev.map((s) => s.id === usernameEdit.id ? { ...s, name: cleanName, username: clean || null, employee_no: cleanEmployeeNo || null } : s))
       toast.success('Details saved')
       setUsernameEdit(null)
     } catch (err) {
@@ -254,7 +257,7 @@ export default function Staff() {
                         <button
                           onClick={() => setUsernameEdit({ id: member.id, name: member.name, username: member.username || '', employee_no: member.employee_no || '' })}
                           className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800"
-                          title="Set username / employee number"
+                          title="Edit name / username / employee number"
                         >
                           <Pencil className="h-4 w-4" />
                         </button>
@@ -394,10 +397,20 @@ export default function Staff() {
         </form>
       </Modal>
 
-      {/* Set/change username + employee number */}
+      {/* Set/change full name + username + employee number */}
       <Modal isOpen={!!usernameEdit} onClose={() => setUsernameEdit(null)} title={`Details for ${usernameEdit?.name || ''}`}>
         {usernameEdit && (
           <form onSubmit={handleSaveUsername} className="space-y-4">
+            <div>
+              <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">Full Name</label>
+              <input
+                type="text"
+                value={usernameEdit.name}
+                onChange={(e) => setUsernameEdit((u) => ({ ...u, name: e.target.value }))}
+                required
+                className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+              />
+            </div>
             <div>
               <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">Username</label>
               <p className="mb-1.5 text-xs text-slate-500">

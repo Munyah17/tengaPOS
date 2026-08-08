@@ -568,6 +568,22 @@ export async function completeKitchenOrder(orderId) {
   if (error) throw error
 }
 
+// Super Admin's "organisation manage" needs the actual vendor/owner
+// person's name, not just the business (tenants.name) -- these are two
+// different things (e.g. "Metros Investments" the business, "Rudo
+// Chikwanha" the person who owns it).
+export async function fetchTenantVendor(tenantId) {
+  const { data, error } = await supabase
+    .from('users')
+    .select('id, name, email')
+    .eq('tenant_id', tenantId)
+    .eq('role', 'vendor')
+    .eq('is_active', true)
+    .maybeSingle()
+  if (error) throw error
+  return data
+}
+
 // ─── Staff ────────────────────────────────────────────────────────────────────
 
 export async function fetchStaff(tenantId) {
@@ -602,6 +618,14 @@ export async function updateStaffEmployeeNo(userId, employeeNo) {
   const { error } = await supabase
     .from('users')
     .update({ employee_no: employeeNo || null, updated_at: new Date().toISOString() })
+    .eq('id', userId)
+  if (error) throw error
+}
+
+export async function updateStaffName(userId, name) {
+  const { error } = await supabase
+    .from('users')
+    .update({ name, updated_at: new Date().toISOString() })
     .eq('id', userId)
   if (error) throw error
 }
