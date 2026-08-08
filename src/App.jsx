@@ -15,6 +15,7 @@ const Login = lazy(() => import('@/pages/Login'))
 const StaffLogin = lazy(() => import('@/pages/StaffLogin'))
 const Register = lazy(() => import('@/pages/Register'))
 const Dashboard = lazy(() => import('@/pages/Dashboard'))
+const MyDashboard = lazy(() => import('@/pages/MyDashboard'))
 const POS = lazy(() => import('@/pages/POS'))
 const Inventory = lazy(() => import('@/pages/Inventory'))
 const Orders = lazy(() => import('@/pages/Orders'))
@@ -119,6 +120,18 @@ function AppIndexRedirect() {
   return <Navigate to={allowed[0] || 'dashboard'} replace />
 }
 
+// Cashiers/shop assistants get the account-scoped MyDashboard instead of
+// Dashboard's tenant-wide numbers (revenue across every till, everyone
+// else's low-stock alerts, staff counts) -- none of that is theirs to see.
+// Branching here (as a plain conditional render, not an early-return
+// inside Dashboard.jsx itself) keeps each page's own hooks unconditional --
+// only the one that's actually shown ever mounts.
+const PERSONAL_DASHBOARD_ROLES = ['cashier', 'shop_assistant']
+function DashboardGate() {
+  const { role } = useAuthStore()
+  return PERSONAL_DASHBOARD_ROLES.includes(role) ? <MyDashboard /> : <Dashboard />
+}
+
 // Sidebar links already hide pages a role can't use, but that's cosmetic —
 // this is the actual access control: a cashier typing /app/settings in the
 // URL bar must not reach it just because ProtectedRoute passed.
@@ -187,7 +200,7 @@ export default function App() {
             }
           >
             <Route index element={<AppIndexRedirect />} />
-            <Route path="dashboard" element={<RequireNav navKey="dashboard"><Dashboard /></RequireNav>} />
+            <Route path="dashboard" element={<RequireNav navKey="dashboard"><DashboardGate /></RequireNav>} />
             <Route path="pos" element={<RequireNav navKey="pos"><POS /></RequireNav>} />
             <Route path="inventory" element={<RequireNav navKey="inventory"><Inventory /></RequireNav>} />
             <Route path="orders" element={<RequireNav navKey="orders"><Orders /></RequireNav>} />

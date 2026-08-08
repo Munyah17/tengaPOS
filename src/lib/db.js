@@ -1270,6 +1270,84 @@ export async function fetchDashboardMetrics(tenantId) {
   }
 }
 
+// Cashiers/shop assistants don't get the tenant-wide Dashboard (revenue
+// across every till, everyone's low-stock alerts, etc. isn't theirs to
+// see) -- but a personal "what did I sell" summary was requested as a
+// helpful, account-scoped alternative. Same shape/queries as
+// fetchDashboardMetrics above, filtered to transactions.processed_by
+// instead of the whole tenant.
+export async function fetchMyDashboardMetrics(tenantId, userId) {
+  const todayStart = new Date()
+  todayStart.setHours(0, 0, 0, 0)
+  const weekStart = new Date(todayStart)
+  weekStart.setDate(weekStart.getDate() - 6)
+
+  const [txRes, weekTxRes, recentRes] = await Promise.all([
+    supabase
+      .from('transactions')
+      .select('amount, created_at')
+      .eq('tenant_id', tenantId)
+      .eq('processed_by', userId)
+      .eq('status', 'completed')
+      .gte('created_at', todayStart.toISOString()),
+    supabase
+      .from('transactions')
+      .select('amount, created_at, order_id')
+      .eq('tenant_id', tenantId)
+      .eq('processed_by', userId)
+      .eq('status', 'completed')
+      .gte('created_at', weekStart.toISOString()),
+    supabase
+      .from('transactions')
+      .select('reference, amount, method, created_at, orders(order_items(qty))')
+      .eq('tenant_id', tenantId)
+      .eq('processed_by', userId)
+      .eq('status', 'completed')
+      .order('created_at', { ascending: false })
+      .limit(5),
+  ])
+
+  const txs = txRes.data ?? []
+  const weekTxs = weekTxRes.data ?? []
+  const recent = recentRes.data ?? []
+
+  const todayRevenue = txs.reduce((s, t) => s + parseFloat(t.amount), 0)
+  const todayOrders = txs.length
+  const weekRevenue = weekTxs.reduce((s, t) => s + parseFloat(t.amount), 0)
+  const weekOrders = weekTxs.length
+
+  const weekData = []
+  const dayBuckets = {}
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date(todayStart)
+    d.setDate(d.getDate() - i)
+    dayBuckets[d.toDateString()] = { name: d.toLocaleDateString('en-US', { weekday: 'short' }), revenue: 0, orders: 0 }
+  }
+  for (const t of weekTxs) {
+    const key = new Date(t.created_at).toDateString()
+    if (dayBuckets[key]) {
+      dayBuckets[key].revenue += parseFloat(t.amount)
+      dayBuckets[key].orders += 1
+    }
+  }
+  weekData.push(...Object.values(dayBuckets))
+
+  const orderIds = [...new Set(weekTxs.map((t) => t.order_id).filter(Boolean))]
+  let topProducts = []
+  if (orderIds.length > 0) {
+    const { data: items } = await supabase.from('order_items').select('name, qty, total').in('order_id', orderIds)
+    const agg = {}
+    for (const it of items || []) {
+      if (!agg[it.name]) agg[it.name] = { name: it.name, sold: 0, revenue: 0 }
+      agg[it.name].sold += it.qty || 0
+      agg[it.name].revenue += Number(it.total) || 0
+    }
+    topProducts = Object.values(agg).sort((a, b) => b.revenue - a.revenue).slice(0, 5)
+  }
+
+  return { todayRevenue, todayOrders, weekRevenue, weekOrders, weekData, topProducts, recentTransactions: recent }
+}
+
 // ─── HR & Payroll ──────────────────────────────────────────────────────────────
 
 export async function fetchStaffPayroll(tenantId) {

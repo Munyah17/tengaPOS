@@ -48,8 +48,12 @@ export const NAV_PERMISSIONS = {
   supervisor: ['dashboard', 'pos', 'inventory', 'orders', 'job_cards', 'vehicle_registry', 'mechanics', 'quotations', 'production', 'equipment_rental', 'prescriptions', 'age_verifications', 'transactions', 'reports', 'tasks', 'invoicing', 'customers', 'statements', 'accounting'],
   // Dispensing happens at the till, so cashier/shop_assistant need the log
   // too — same reasoning as prescription_dispenses' RLS policy.
-  cashier: ['pos', 'orders', 'job_cards', 'equipment_rental', 'prescriptions', 'age_verifications', 'tasks'],
-  shop_assistant: ['pos', 'prescriptions', 'age_verifications', 'tasks'],
+  // 'dashboard' is appended (not first) so it doesn't change their default
+  // landing page on login, which stays POS -- it maps to MyDashboard (see
+  // App.jsx's DashboardGate), an account-scoped summary, not the full
+  // tenant Dashboard the rest of NAV_PERMISSIONS' 'dashboard' entries get.
+  cashier: ['pos', 'orders', 'job_cards', 'equipment_rental', 'prescriptions', 'age_verifications', 'tasks', 'dashboard'],
+  shop_assistant: ['pos', 'prescriptions', 'age_verifications', 'tasks', 'dashboard'],
   tech_support: ['dashboard', 'reports', 'insights', 'orders', 'transactions'],
 }
 
