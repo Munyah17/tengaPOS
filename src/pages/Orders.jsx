@@ -301,7 +301,7 @@ export default function Orders() {
           <table className="w-full min-w-[640px]">
             <thead>
               <tr className="border-b border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-900">
-                {['Receipt #', 'Date', 'Customer', 'Products', 'Type', 'Items', 'Status', 'Total', 'Payment', ''].map((h) => (
+                {['Receipt #', 'Date', 'Customer', 'Products', 'Type', 'Items', 'Status', 'Total', ''].map((h) => (
                   <th key={h} className="px-4 py-3 text-left text-xs font-semibold uppercase text-slate-500">{h}</th>
                 ))}
               </tr>
@@ -309,7 +309,7 @@ export default function Orders() {
             <tbody>
               {orders.length === 0 ? (
                 <tr>
-                  <td colSpan={10} className="py-16 text-center text-sm text-slate-400">
+                  <td colSpan={9} className="py-16 text-center text-sm text-slate-400">
                     No orders yet — complete a sale on the POS to see it here.
                   </td>
                 </tr>
@@ -345,9 +345,6 @@ export default function Orders() {
                     </span>
                   </td>
                   <td className="px-4 py-3 text-sm text-slate-500 dark:text-slate-500">{formatCurrency(order.total)}</td>
-                  <td className="px-4 py-3">
-                    <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-500 dark:bg-slate-800 dark:text-slate-400">{order.method}</span>
-                  </td>
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-1">
                       <button
