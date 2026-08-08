@@ -21,15 +21,28 @@ export function shapeRows(data, columns) {
   })
 }
 
-export function exportToCSV(data, filename, columns) {
+// Reports (Sales Report export) previously dumped only the raw transaction
+// rows -- reported live: clients wanted the total (and, for a day's cash-up,
+// opening/closing balance) baked into the file itself instead of having to
+// re-sum the Amount column by hand every time. summaryRows is an optional
+// [{ label, value }] list appended as a blank-separated block after the
+// data rows -- same file, no second sheet/tab to lose track of.
+function appendSummaryRows(ws, summaryRows) {
+  if (!summaryRows?.length) return
+  XLSX.utils.sheet_add_aoa(ws, [[], ...summaryRows.map((r) => [r.label, r.value])], { origin: -1 })
+}
+
+export function exportToCSV(data, filename, columns, summaryRows) {
   const ws = XLSX.utils.json_to_sheet(shapeRows(data, columns))
+  appendSummaryRows(ws, summaryRows)
   const csv = XLSX.utils.sheet_to_csv(ws)
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
   saveAs(blob, `${filename}.csv`)
 }
 
-export function exportToExcel(data, filename, columns) {
+export function exportToExcel(data, filename, columns, summaryRows) {
   const ws = XLSX.utils.json_to_sheet(shapeRows(data, columns))
+  appendSummaryRows(ws, summaryRows)
   const wb = XLSX.utils.book_new()
   XLSX.utils.book_append_sheet(wb, ws, 'Sheet1')
   XLSX.writeFile(wb, `${filename}.xlsx`)
@@ -46,7 +59,7 @@ export function hexToRgb(hex, fallback = [30, 64, 175]) {
   return [parseInt(match[1], 16), parseInt(match[2], 16), parseInt(match[3], 16)]
 }
 
-export function exportToPDF(data, columns, title, filename, brandColor) {
+export function exportToPDF(data, columns, title, filename, brandColor, summaryRows) {
   const doc = new jsPDF()
   doc.setFontSize(16)
   doc.text(title, 14, 22)
@@ -60,6 +73,18 @@ export function exportToPDF(data, columns, title, filename, brandColor) {
     styles: { fontSize: 8 },
     headStyles: { fillColor: hexToRgb(brandColor) },
   })
+
+  if (summaryRows?.length) {
+    let y = (doc.lastAutoTable?.finalY || 35) + 8
+    doc.setFontSize(10)
+    for (const r of summaryRows) {
+      doc.setFont(undefined, 'bold')
+      doc.text(`${r.label}:`, 14, y)
+      doc.setFont(undefined, 'normal')
+      doc.text(String(r.value), 60, y)
+      y += 7
+    }
+  }
 
   doc.save(`${filename}.pdf`)
 }

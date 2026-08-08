@@ -77,6 +77,24 @@ export default function Reports() {
   const [customEndTime, setCustomEndTime] = useState('')
   const [exporting, setExporting] = useState(false)
 
+  // Opening/closing balance for a daily cash-up export -- optional, since
+  // most exports (a month-end report, a custom range for accounting) have
+  // no till float to speak of. "Carry forward" pre-fills today's opening
+  // balance with the closing balance saved from the last export, so a
+  // cashier doing daily cash-ups doesn't have to re-type it every day --
+  // reported live as an explicit ask, not just totals-on-export.
+  const closingBalanceKey = tenant?.id ? `tengapos_closing_balance_${tenant.id}` : null
+  const [openingBalance, setOpeningBalance] = useState('')
+  const [carryForward, setCarryForward] = useState(false)
+
+  const handleCarryForwardToggle = (checked) => {
+    setCarryForward(checked)
+    if (checked && closingBalanceKey) {
+      const saved = localStorage.getItem(closingBalanceKey)
+      setOpeningBalance(saved || '')
+    }
+  }
+
   const resolveExportRange = () => {
     if (exportPreset === 'custom') {
       if (!customStart || !customEnd) throw new Error('Pick both a start and end date')
@@ -99,9 +117,20 @@ export default function Reports() {
       }
       const label = DATE_PRESETS.find((p) => p.key === exportPreset)?.label || 'custom'
       const filename = `tengapos_report_${label.toLowerCase().replace(/\s+/g, '_')}`
-      if (format === 'csv') exportToCSV(rows, filename)
-      else if (format === 'excel') exportToExcel(rows, filename)
-      else exportToPDF(rows, TRANSACTION_COLUMNS, `Sales Report — ${label}`, filename, tenant?.whitelabel?.enabled ? tenant.whitelabel.primary_color : null)
+
+      const total = rows.reduce((s, r) => s + (r.amount || 0), 0)
+      const opening = openingBalance !== '' ? parseFloat(openingBalance) : null
+      const summaryRows = [{ label: 'Total', value: formatCurrency(total) }]
+      if (opening !== null && Number.isFinite(opening)) {
+        const closing = opening + total
+        summaryRows.push({ label: 'Opening Balance', value: formatCurrency(opening) })
+        summaryRows.push({ label: 'Closing Balance', value: formatCurrency(closing) })
+        if (closingBalanceKey) localStorage.setItem(closingBalanceKey, String(closing))
+      }
+
+      if (format === 'csv') exportToCSV(rows, filename, undefined, summaryRows)
+      else if (format === 'excel') exportToExcel(rows, filename, undefined, summaryRows)
+      else exportToPDF(rows, TRANSACTION_COLUMNS, `Sales Report — ${label}`, filename, tenant?.whitelabel?.enabled ? tenant.whitelabel.primary_color : null, summaryRows)
       toast.success(`Exported ${rows.length} transaction${rows.length !== 1 ? 's' : ''}`)
       setExportOpen(false)
     } catch (err) {
@@ -179,7 +208,30 @@ export default function Reports() {
                 </div>
               )}
 
-              <div className="mt-4 grid grid-cols-3 gap-1.5">
+              <div className="mt-3 border-t border-slate-100 pt-3 dark:border-slate-800">
+                <label className="mb-1 flex items-center justify-between text-[10px] font-semibold text-slate-500">
+                  <span>Opening Balance (optional)</span>
+                  <span className="flex items-center gap-1 font-normal normal-case">
+                    <input
+                      type="checkbox"
+                      checked={carryForward}
+                      onChange={(e) => handleCarryForwardToggle(e.target.checked)}
+                      className="h-3 w-3"
+                    />
+                    Carry forward
+                  </span>
+                </label>
+                <input
+                  type="number"
+                  value={openingBalance}
+                  onChange={(e) => { setCarryForward(false); setOpeningBalance(e.target.value) }}
+                  placeholder="e.g. 50.00"
+                  className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300"
+                />
+                <p className="mt-1 text-[10px] text-slate-400">Leave blank to skip — the export will still include a Total row.</p>
+              </div>
+
+              <div className="mt-3 grid grid-cols-3 gap-1.5">
                 <button
                   onClick={() => runExport('csv')}
                   disabled={exporting}
