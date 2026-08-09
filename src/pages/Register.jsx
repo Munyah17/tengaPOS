@@ -261,6 +261,7 @@ export default function Register() {
               <label className="mb-1.5 block text-sm font-medium text-slate-300">Password</label>
               <input
                 type="password"
+                autoComplete="new-password"
                 value={form.password}
                 onChange={update('password')}
                 className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white placeholder-slate-500 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"

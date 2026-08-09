@@ -1447,6 +1447,7 @@ export default function Settings() {
                       <label className="mb-1.5 block text-xs font-medium text-slate-700 dark:text-slate-300">Activation Key</label>
                       <input
                         type="password"
+                        autoComplete="off"
                         value={fiscalForm.activationKey}
                         onChange={(e) => setFiscalForm(f => ({ ...f, activationKey: e.target.value }))}
                         placeholder="Device activation key"

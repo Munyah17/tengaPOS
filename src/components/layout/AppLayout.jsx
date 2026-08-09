@@ -24,11 +24,19 @@ export default function AppLayout() {
   // "View as Tenant" (AdminTenants.jsx) stashes the admin's own session here
   // before switching to the tenant's -- this banner is the only way back.
   const impersonatingTenant = sessionStorage.getItem('tengapos_impersonating_tenant')
-  const exitImpersonation = async () => {
-    const saved = JSON.parse(sessionStorage.getItem('tengapos_admin_return_session') || 'null')
+  const exitImpersonation = () => {
+    const saved = sessionStorage.getItem('tengapos_admin_return_session')
     sessionStorage.removeItem('tengapos_admin_return_session')
     sessionStorage.removeItem('tengapos_impersonating_tenant')
-    if (saved) await supabase.auth.setSession(saved)
+    // Clearing this is what actually matters -- supabase.js re-evaluates
+    // it on the fresh load below and switches this tab back to the main
+    // storage key, which was never touched while impersonating (see
+    // supabase.js), so the admin's session is simply still sitting there.
+    // The handoff below is a defensive top-up in case that session's
+    // access token needs a refresh this tab isn't around to trigger --
+    // NOT applied via setSession() here, same reasoning as viewAsTenant().
+    sessionStorage.removeItem('tengapos_impersonation_mode')
+    if (saved) sessionStorage.setItem('tengapos_session_handoff', saved)
     window.location.href = '/admin/super/tenants'
   }
 

@@ -337,10 +337,20 @@ export function TenantModal({ tenant, technicians, onClose, onSaved }) {
         access_token: session.access_token, refresh_token: session.refresh_token,
       }))
       sessionStorage.setItem('tengapos_impersonating_tenant', data.tenant_name)
-      await supabase.auth.setSession({ access_token: data.access_token, refresh_token: data.refresh_token })
+      // These two are read by supabase.js and authStore.initAuth() on the
+      // fresh load below -- NOT applied via setSession() here. Calling
+      // setSession() on THIS client (still using the main storage key
+      // every other tab shares) is exactly what used to silently swap the
+      // session in every other open tab on the same browser -- see
+      // supabase.js for the full explanation.
+      sessionStorage.setItem('tengapos_impersonation_mode', '1')
+      sessionStorage.setItem('tengapos_session_handoff', JSON.stringify({
+        access_token: data.access_token, refresh_token: data.refresh_token,
+      }))
       // Hard navigation, not client-side routing -- guarantees every bit of
       // in-memory state (React Query cache, cart/receipt/theme stores) is
-      // wiped clean for the new identity instead of carrying anything over.
+      // wiped clean for the new identity instead of carrying anything over,
+      // and forces supabase.js to re-evaluate which storage key to use.
       window.location.href = '/app/dashboard'
     } catch (err) {
       toast.error(err.message || 'Could not view as this tenant')

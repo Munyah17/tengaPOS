@@ -110,12 +110,13 @@ function CreateUserModal({ tenants, onClose, onDone }) {
             </select>
           </div>
           <FieldInput label="Full Name" value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} required placeholder="e.g. Rudo Chirwa" />
-          <FieldInput label="Email" type="email" value={form.email} onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} required placeholder="user@business.co.zw" />
+          <FieldInput label="Email" type="email" autoComplete="off" value={form.email} onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} required placeholder="user@business.co.zw" />
           <div>
             <label className="mb-1 block text-xs font-semibold text-slate-500">Password</label>
             <div className="relative">
               <input
                 type={showPw ? 'text' : 'password'}
+                autoComplete="new-password"
                 value={form.password}
                 onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
                 required
@@ -279,7 +280,7 @@ function EditUserModal({ user, tenants, onClose, onDone }) {
           <FieldInput label="Username" value={form.username} onChange={(e) => setF('username', e.target.value)} placeholder="Optional" />
           <div>
             <label className="mb-1 block text-xs font-semibold text-slate-500">Email {!isSuper && '(Super Admin only)'}</label>
-            <input type="email" value={form.email} onChange={(e) => setF('email', e.target.value)} disabled={!isSuper} className={inputClass} />
+            <input type="email" autoComplete="off" value={form.email} onChange={(e) => setF('email', e.target.value)} disabled={!isSuper} className={inputClass} />
           </div>
           <FieldInput label="Phone" value={form.phone} onChange={(e) => setF('phone', e.target.value)} placeholder="+263…" />
           <div>
@@ -316,6 +317,7 @@ function EditUserModal({ user, tenants, onClose, onDone }) {
           <div className="relative">
             <input
               type={showPw ? 'text' : 'password'}
+              autoComplete="new-password"
               value={newPassword}
               onChange={(e) => setNewPassword(e.target.value)}
               minLength={8}

@@ -317,6 +317,7 @@ export default function Fiscalisation() {
                 <label className={labelClass}>Activation Key</label>
                 <input
                   type="password"
+                  autoComplete="off"
                   value={fiscalForm.activationKey}
                   onChange={updateForm('activationKey')}
                   disabled={locked}

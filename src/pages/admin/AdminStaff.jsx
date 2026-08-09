@@ -165,6 +165,7 @@ export default function AdminStaff() {
                 <label className="mb-1.5 block text-xs font-medium text-slate-500">Email Address</label>
                 <input
                   type="email"
+                  autoComplete="off"
                   value={form.email}
                   onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
                   placeholder="staff@tengapos.co.zw"
@@ -177,6 +178,7 @@ export default function AdminStaff() {
                 <div className="relative">
                   <input
                     type={showPassword ? 'text' : 'password'}
+                    autoComplete="new-password"
                     value={form.password}
                     onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
                     placeholder="Min 8 characters"

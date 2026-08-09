@@ -85,6 +85,22 @@ export const useAuthStore = create(
       initAuth: async () => {
         set({ isLoading: true })
         try {
+          // One-time handoff from entering/exiting "View as Tenant"
+          // (AdminTenants.jsx / AppLayout.jsx) -- this tab's supabase
+          // client was just (re)created against a fresh storage key (see
+          // supabase.js) that has no session in it yet. Adopting it here,
+          // before getSession() below, guarantees this tab picks up the
+          // right identity on its very first read with no race against
+          // that call. Consumed once so a later refresh in this tab relies
+          // on the now-persisted session instead of replaying stale tokens.
+          const handoff = sessionStorage.getItem('tengapos_session_handoff')
+          if (handoff) {
+            sessionStorage.removeItem('tengapos_session_handoff')
+            try {
+              const tokens = JSON.parse(handoff)
+              await supabase.auth.setSession(tokens)
+            } catch { /* malformed/expired handoff -- fall through to a normal getSession() */ }
+          }
           // getSession() reads the persisted Supabase session locally — this
           // succeeds offline as long as a prior login stored one.
           const { data: { session } } = await supabase.auth.getSession()
@@ -303,7 +319,15 @@ export const useAuthStore = create(
       },
 
       clearAuth: async () => {
-        await supabase.auth.signOut()
+        // scope: 'local' only ever clears THIS tab/device's own copy of
+        // the session -- never revokes the underlying refresh token
+        // server-side. validateSession() below is the main caller of this
+        // on an identity mismatch, and in that exact situation there's no
+        // way to be sure the currently-loaded session even belongs to the
+        // account this tab thinks it's signed into -- the default 'global'
+        // scope would revoke whatever session actually IS loaded, which
+        // could be a completely different, legitimately active one.
+        await supabase.auth.signOut({ scope: 'local' })
         set({
           user: null,
           session: null,

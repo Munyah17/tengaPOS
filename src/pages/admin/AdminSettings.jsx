@@ -104,6 +104,7 @@ export default function AdminSettings() {
           <label className="mb-1 block text-xs font-semibold text-slate-500">Current Password</label>
           <input
             type="password"
+            autoComplete="current-password"
             value={currentPassword}
             onChange={(e) => setCurrentPassword(e.target.value)}
             required
@@ -112,6 +113,7 @@ export default function AdminSettings() {
           <label className="mb-1 block text-xs font-semibold text-slate-500">New Password</label>
           <input
             type="password"
+            autoComplete="new-password"
             value={newPassword}
             onChange={(e) => setNewPassword(e.target.value)}
             required
@@ -121,6 +123,7 @@ export default function AdminSettings() {
           <label className="mb-1 block text-xs font-semibold text-slate-500">Confirm New Password</label>
           <input
             type="password"
+            autoComplete="new-password"
             value={confirmPassword}
             onChange={(e) => setConfirmPassword(e.target.value)}
             required
