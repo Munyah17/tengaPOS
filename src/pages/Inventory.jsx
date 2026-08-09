@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { motion } from 'framer-motion'
 import {
   Search, Plus, Upload, Download, ExternalLink, Edit, Trash2,
-  AlertTriangle, Package, BarChart3, RefreshCw, ImageOff, ImagePlus, X, ArrowLeftRight,
+  AlertTriangle, Package, BarChart3, RefreshCw, ImageOff, ImagePlus, X, ArrowLeftRight, PackagePlus,
 } from 'lucide-react'
 import Button from '@/components/common/Button'
 import Modal from '@/components/common/Modal'
@@ -17,6 +17,7 @@ import {
   fetchProducts, insertProduct, bulkInsertProducts, updateProduct, deleteProduct, uploadProductImage,
   fetchBranches, fetchProductBranches, assignProductBranch, unassignProductBranch,
   fetchCategories, createCategory, fetchStockTransfers, transferStock,
+  fetchStockReceipts, receiveStock,
 } from '@/lib/db'
 import { getOfflineProducts, queueOfflineInventoryWrite } from '@/lib/offlineSync'
 import { resizeImageFile } from '@/utils/imageResize'
@@ -72,6 +73,10 @@ export default function Inventory() {
   const [transferForm, setTransferForm] = useState({ productId: '', toBranchId: '', qty: '', note: '' })
   const [transferring, setTransferring] = useState(false)
   const [transfers, setTransfers] = useState([])
+  const [showReceive, setShowReceive] = useState(false)
+  const [receiveForm, setReceiveForm] = useState({ productId: '', qty: '', note: '' })
+  const [receiving, setReceiving] = useState(false)
+  const [receipts, setReceipts] = useState([])
   const fileInputRef = useRef(null)
 
   useEffect(() => {
@@ -88,6 +93,17 @@ export default function Inventory() {
   const openTransfer = () => {
     setTransferForm({ productId: '', toBranchId: '', qty: '', note: '' })
     setShowTransfer(true)
+  }
+
+  const loadReceipts = () => {
+    if (!tenant?.id) return
+    fetchStockReceipts(tenant.id).then(setReceipts).catch(() => {})
+  }
+  useEffect(loadReceipts, [tenant?.id])
+
+  const openReceive = () => {
+    setReceiveForm({ productId: '', qty: '', note: '' })
+    setShowReceive(true)
   }
 
   const loadCategories = () => {
@@ -158,6 +174,27 @@ export default function Inventory() {
       toast.error(err.message || 'Failed to transfer stock')
     } finally {
       setTransferring(false)
+    }
+  }
+
+  const receiveProduct = products.find((p) => p.id === receiveForm.productId)
+
+  const handleReceive = async (e) => {
+    e.preventDefault()
+    const qty = Number(receiveForm.qty)
+    if (!receiveForm.productId) { toast.error('Choose a product'); return }
+    if (!qty || qty <= 0) { toast.error('Enter a quantity greater than zero'); return }
+    setReceiving(true)
+    try {
+      await receiveStock(tenant.id, receiveForm.productId, qty, receiveForm.note.trim() || null)
+      toast.success('Stock added')
+      queryClient.invalidateQueries({ queryKey: ['products', tenant.id] })
+      loadReceipts()
+      setShowReceive(false)
+    } catch (err) {
+      toast.error(err.message || 'Failed to add stock')
+    } finally {
+      setReceiving(false)
     }
   }
 
@@ -485,6 +522,9 @@ export default function Inventory() {
             <Upload className="h-4 w-4" /> Mass Import
           </Button>
           <ExportMenu data={products} columns={exportColumns} title="Inventory" filename="tengapos_inventory" />
+          <Button variant="secondary" onClick={openReceive}>
+            <PackagePlus className="h-4 w-4" /> Add Stock
+          </Button>
           {branches.length > 1 && (
             <Button variant="secondary" onClick={openTransfer}>
               <ArrowLeftRight className="h-4 w-4" /> Transfer Stock
@@ -610,6 +650,91 @@ export default function Inventory() {
           </div>
         )}
       </div>
+
+      {/* Recent stock additions -- the audit trail requested alongside
+          "Add Stock", separate from branch transfers so the two kinds of
+          movement are never confused with each other. */}
+      {receipts.length > 0 && (
+        <div className="mt-6 overflow-hidden rounded-2xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
+          <div className="border-b border-slate-200 px-4 py-3 dark:border-slate-800">
+            <h2 className="text-sm font-bold text-slate-900 dark:text-white">Recent Stock Additions</h2>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-900">
+                  {['Date', 'Product', 'Qty Added', 'By', 'Note'].map((h) => (
+                    <th key={h} className="px-4 py-2 text-left text-xs font-semibold uppercase text-slate-500">{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {receipts.map((r) => (
+                  <tr key={r.id} className="border-b border-slate-100 dark:border-slate-800">
+                    <td className="px-4 py-2 text-xs text-slate-500">{formatDateTime(r.created_at)}</td>
+                    <td className="px-4 py-2 text-sm text-slate-700 dark:text-slate-300">{r.products?.name || '—'}</td>
+                    <td className="px-4 py-2 text-sm font-semibold text-green-600 dark:text-green-400">+{r.qty}</td>
+                    <td className="px-4 py-2 text-xs text-slate-500">{r.users?.name || '—'}</td>
+                    <td className="px-4 py-2 text-xs text-slate-400">{r.note || '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Add Stock Modal */}
+      <Modal isOpen={showReceive} onClose={() => setShowReceive(false)} title="Add Stock">
+        <form onSubmit={handleReceive} className="space-y-4">
+          <div>
+            <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">Product</label>
+            <select
+              value={receiveForm.productId}
+              onChange={(e) => setReceiveForm((f) => ({ ...f, productId: e.target.value }))}
+              required
+              className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+            >
+              <option value="">Select existing product…</option>
+              {products.filter((p) => !p.is_service).map((p) => (
+                <option key={p.id} value={p.id}>{p.name} (current stock: {p.stock_qty ?? 0})</option>
+              ))}
+            </select>
+            <p className="mt-1 text-xs text-slate-400">Adding a brand-new product instead? Use "Add Product" — this is only for topping up something you already stock.</p>
+          </div>
+          <div>
+            <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">Quantity to Add</label>
+            <input
+              type="number" min="0.01" step="any" value={receiveForm.qty}
+              onChange={(e) => setReceiveForm((f) => ({ ...f, qty: e.target.value }))}
+              required
+              placeholder="e.g. 20"
+              className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+            />
+            {receiveProduct && Number(receiveForm.qty) > 0 && (
+              <p className="mt-1 text-xs text-slate-500">
+                {receiveProduct.stock_qty ?? 0} + {Number(receiveForm.qty)} = <b>{(receiveProduct.stock_qty ?? 0) + Number(receiveForm.qty)}</b> new stock
+              </p>
+            )}
+          </div>
+          <div>
+            <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">Note (optional)</label>
+            <input
+              type="text" value={receiveForm.note}
+              onChange={(e) => setReceiveForm((f) => ({ ...f, note: e.target.value }))}
+              placeholder="e.g. supplier delivery, invoice #1234"
+              className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+            />
+          </div>
+          <p className="text-xs text-slate-500">
+            This adds to the current stock — it never overwrites it, and every addition is logged above with who did it and when.
+          </p>
+          <div className="flex justify-end gap-2 pt-2">
+            <Button variant="secondary" type="button" onClick={() => setShowReceive(false)}>Cancel</Button>
+            <Button type="submit" disabled={receiving}>{receiving ? 'Adding…' : 'Add Stock'}</Button>
+          </div>
+        </form>
+      </Modal>
 
       {/* Recent branch-to-branch stock transfers */}
       {branches.length > 1 && transfers.length > 0 && (

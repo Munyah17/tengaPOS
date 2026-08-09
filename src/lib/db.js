@@ -746,6 +746,34 @@ export async function transferStock(tenantId, productId, toBranchId, qty, note) 
   return data
 }
 
+// ─── Stock Receipts (add to existing stock, with an audit trail) ──────────
+
+export async function fetchStockReceipts(tenantId) {
+  const { data, error } = await supabase
+    .from('stock_receipts')
+    .select('*, products(name, sku), users(name)')
+    .eq('tenant_id', tenantId)
+    .order('created_at', { ascending: false })
+    .limit(100)
+  if (error) throw error
+  return data
+}
+
+// Adds qty on top of whatever stock the product already has -- never
+// overwrites it -- so a delivery of 20 more of an item already at 5 always
+// lands on 25, with no risk of someone fat-fingering the edit-product
+// stock field and silently losing the difference. See stock_receipts.sql.
+export async function receiveStock(tenantId, productId, qty, note) {
+  const { data, error } = await supabase.rpc('receive_stock', {
+    p_tenant_id: tenantId,
+    p_product_id: productId,
+    p_qty: qty,
+    p_note: note || null,
+  })
+  if (error) throw error
+  return data
+}
+
 // ─── Manufacturing Mode: Bill of Materials + Production Runs ──────────────
 
 export async function fetchBillOfMaterials(tenantId, finishedProductId) {
