@@ -12,6 +12,7 @@ import { useAuthStore } from '@/stores/authStore'
 import { fetchOrders, deleteOrder } from '@/lib/db'
 import { supabase } from '@/lib/supabase'
 import { loadWithOfflineCache } from '@/lib/offlineCache'
+import { useDayFilter } from '@/hooks/useDayFilter'
 import toast from 'react-hot-toast'
 
 const ORDER_STATUS = {
@@ -154,10 +155,7 @@ export default function Orders() {
   const { tenant, role } = useAuthStore()
   const isRestaurant = posMode === 'restaurant'
   const [rawOrders, setRawOrders] = useState([])
-  const [dateFrom, setDateFrom] = useState('')
-  const [dateTo, setDateTo] = useState('')
-  const [timeFrom, setTimeFrom] = useState('')
-  const [timeTo, setTimeTo] = useState('')
+  const { dateFrom, dateTo, timeFrom, timeTo, setDateFrom, setDateTo, setTimeFrom, setTimeTo, resetToToday, isToday } = useDayFilter()
   const [viewOrder, setViewOrder] = useState(null)
   const [deletingId, setDeletingId] = useState(null)
   const [reprintReceipt, setReprintReceipt] = useState(null)
@@ -291,6 +289,7 @@ export default function Orders() {
   }, [allOrders, dateFrom, dateTo, timeFrom, timeTo])
 
   const dateFiltered = dateFrom || dateTo
+  const ordersTotal = useMemo(() => orders.reduce((s, o) => s + o.total, 0), [orders])
 
   return (
     <div className="p-4 sm:p-6">
@@ -309,8 +308,8 @@ export default function Orders() {
               <span className="text-xs text-slate-400">—</span>
               <DateInput value={dateTo} onChange={e => setDateTo(e.target.value)} placeholder="To" className="w-36" />
               <TimeField value={timeTo} onChange={e => setTimeTo(e.target.value)} />
-              {dateFiltered && (
-                <button onClick={() => { setDateFrom(''); setDateTo(''); setTimeFrom(''); setTimeTo('') }} className="text-slate-400 hover:text-red-500">
+              {!isToday && (
+                <button onClick={resetToToday} title="Back to today" className="text-slate-400 hover:text-red-500">
                   <X className="h-3.5 w-3.5" />
                 </button>
               )}
@@ -319,9 +318,10 @@ export default function Orders() {
           </div>
         )}
       </div>
-      {!isRestaurant && dateFiltered && (
+      {!isRestaurant && (
         <p className="mb-4 text-xs text-slate-500">
-          Showing {orders.length} of {allOrders.length} orders for selected date range
+          {isToday ? "Today's orders" : 'Showing orders for selected date range'}
+          {' — '}{orders.length} order{orders.length !== 1 ? 's' : ''} · Total {formatCurrency(ordersTotal)}
         </p>
       )}
 

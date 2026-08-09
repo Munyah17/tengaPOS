@@ -10,6 +10,7 @@ import { formatCurrency, formatDateTime, stripLeadingZero } from '@/utils/format
 import { combineDateAndTime } from '@/utils/dateRanges'
 import { useAuthStore } from '@/stores/authStore'
 import { useThemeStore } from '@/stores/themeStore'
+import { useDayFilter } from '@/hooks/useDayFilter'
 import {
   fetchTransactions, fetchVoids, requestVoid, approveVoid, validateVoid, rejectVoid,
   fetchReturns, requestReturn, approveReturn, validateReturn, rejectReturn, deleteOrder,
@@ -138,10 +139,7 @@ export default function Transactions() {
   const isWorkshop = posMode === 'workshop'
   const navigate = useNavigate()
   const queryClient = useQueryClient()
-  const [dateFrom, setDateFrom] = useState('')
-  const [dateTo, setDateTo] = useState('')
-  const [timeFrom, setTimeFrom] = useState('')
-  const [timeTo, setTimeTo] = useState('')
+  const { dateFrom, dateTo, timeFrom, timeTo, setDateFrom, setDateTo, setTimeFrom, setTimeTo, resetToToday, isToday } = useDayFilter()
   const [clearingVoided, setClearingVoided] = useState(false)
   const [voidTarget, setVoidTarget] = useState(null) // order_id currently requesting a void
   const [returnTarget, setReturnTarget] = useState(null) // { orderId, maxAmount } currently requesting a return
@@ -324,6 +322,7 @@ export default function Transactions() {
   }, [allTransactions, dateFrom, dateTo, timeFrom, timeTo])
 
   const dateFiltered = dateFrom || dateTo
+  const transactionsTotal = useMemo(() => transactions.reduce((s, t) => s + t.total, 0), [transactions])
 
   // A void only actually reverses the sale once the Vendor gives final
   // validation (see validate_void) -- 'requested'/'approved' are still
@@ -363,8 +362,8 @@ export default function Transactions() {
             <span className="text-xs text-slate-400">—</span>
             <DateInput value={dateTo} onChange={e => setDateTo(e.target.value)} placeholder="To" className="w-36" />
             <TimeField value={timeTo} onChange={e => setTimeTo(e.target.value)} />
-            {dateFiltered && (
-              <button onClick={() => { setDateFrom(''); setDateTo(''); setTimeFrom(''); setTimeTo('') }} className="text-slate-400 hover:text-red-500">
+            {!isToday && (
+              <button onClick={resetToToday} title="Back to today" className="text-slate-400 hover:text-red-500">
                 <X className="h-3.5 w-3.5" />
               </button>
             )}
@@ -375,11 +374,10 @@ export default function Transactions() {
           <ExportMenu data={transactions} columns={exportColumns} title={`Transactions${dateFiltered ? ` (${dateFrom || '…'} to ${dateTo || '…'})` : ''}`} filename="tengapos_transactions" />
         </div>
       </div>
-      {dateFiltered && (
-        <p className="mb-4 text-xs text-slate-500">
-          Showing {transactions.length} of {allTransactions.length} transactions for selected date range
-        </p>
-      )}
+      <p className="mb-4 text-xs text-slate-500">
+        {isToday ? "Today's transactions" : 'Showing transactions for selected date range'}
+        {' — '}{transactions.length} transaction{transactions.length !== 1 ? 's' : ''} · Total {formatCurrency(transactionsTotal)}
+      </p>
 
       {voidedStats.count > 0 && (
         <div className="mb-4 flex items-center gap-3 rounded-2xl border border-red-200 bg-red-50 p-4 dark:border-red-900/50 dark:bg-red-950/20">
