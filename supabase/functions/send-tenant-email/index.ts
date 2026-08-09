@@ -70,6 +70,18 @@ function template(name: string, tenantName: string, extra: Record<string, unknow
       subject: `Trial expired: ${tenantName}`,
       body: `${tenantName}'s 7-day free trial just ended with no plan selected, and their account has been suspended.\n\nOwner: ${extra.ownerName || '—'}\nEmail: ${extra.ownerEmail || '—'}\nPhone: ${extra.ownerPhone || '—'}\n\nFollow up if you want to try converting them.`,
     },
+    // Daily reminder sequence, days 1-2 -- see notify_trial_reminders().
+    trial_reminder: {
+      subject: `Reminder: your tengaPOS trial has ended — ${tenantName}`,
+      body: `Your 7-day free trial for ${tenantName} ended and access is paused. Your data is safe and waiting for you -- pick a plan any time to pick up right where you left off. Sign in to see your options.`,
+    },
+    // Days 3-5 -- same reminder, now with the automatic discount.
+    // trial_discount_expires_at is what actually gates the price at
+    // checkout; this copy just tells them it's there, no code needed.
+    trial_reminder_discount: {
+      subject: `10% off to come back — ${tenantName}'s trial has ended`,
+      body: `Your 7-day free trial for ${tenantName} ended and access is paused. Your data is safe and waiting for you.\n\nAs a thank you for trying tengaPOS, we've applied a 10% discount to your account automatically -- no code needed, it's already applied when you sign in and choose a plan. This offer won't stay up forever, so it's worth doing sooner rather than later.\n\n(Day ${extra.day} of this reminder.)`,
+    },
   }
   return templates[name] || null
 }

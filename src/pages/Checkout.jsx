@@ -53,6 +53,12 @@ export default function Checkout() {
   const { isAuthenticated, tenant, initAuth } = useAuthStore()
   const { pricing } = usePlanPricing()
   const planPrice = (plan) => pricing[plan.key]?.price ?? plan.price
+  // Set server-side by notify_trial_reminders() from day 3 of the trial-
+  // expired reminder sequence -- automatic, no promo code to type in. The
+  // 10% math here must match signup-checkout's exactly (same rounding),
+  // since what's shown here is a preview of what actually gets charged.
+  const trialDiscountActive = !!tenant?.trial_discount_expires_at && new Date(tenant.trial_discount_expires_at) > new Date()
+  const finalPrice = (plan) => trialDiscountActive ? Math.round(planPrice(plan) * 0.9 * 100) / 100 : planPrice(plan)
   const [selectedPlan, setSelectedPlan] = useState('standard_plan')
   const [provider, setProvider] = useState('paynow')
   const [redirecting, setRedirecting] = useState(false)
@@ -183,6 +189,7 @@ export default function Checkout() {
               <Clock className="h-5 w-5 flex-shrink-0 text-amber-400" />
               <p className="text-sm text-amber-300">
                 <b>Your free trial has ended.</b> Pick a plan below to keep using tengaPOS — your data is safe.
+                {trialDiscountActive && <> <b className="text-green-300">10% off is applied automatically</b> for a limited time.</>}
               </p>
             </div>
           ) : hasPaidPlan ? (
@@ -240,7 +247,14 @@ export default function Checkout() {
               )}
               <p className="font-bold text-white">{plan.name}</p>
               <p className="text-xs text-slate-400">{plan.desc}</p>
-              <p className="mt-3 text-3xl font-extrabold text-white">${planPrice(plan)}</p>
+              {trialDiscountActive ? (
+                <p className="mt-3 flex items-baseline gap-2">
+                  <span className="text-sm text-slate-500 line-through">${planPrice(plan)}</span>
+                  <span className="text-3xl font-extrabold text-green-400">${finalPrice(plan)}</span>
+                </p>
+              ) : (
+                <p className="mt-3 text-3xl font-extrabold text-white">${planPrice(plan)}</p>
+              )}
               <p className="text-xs text-slate-500">{plan.cycle}</p>
               {plan.renewal && (
                 <p className="mt-0.5 text-xs font-semibold text-green-400">{plan.renewal}</p>
@@ -317,8 +331,8 @@ export default function Checkout() {
             {redirecting
               ? 'Redirecting to secure checkout…'
               : provider === 'cash'
-                ? `Request Cash Payment — $${planPrice(PLANS.find((p) => p.key === selectedPlan))}`
-                : `Continue to secure checkout — $${planPrice(PLANS.find((p) => p.key === selectedPlan))}`}
+                ? `Request Cash Payment — $${finalPrice(PLANS.find((p) => p.key === selectedPlan))}`
+                : `Continue to secure checkout — $${finalPrice(PLANS.find((p) => p.key === selectedPlan))}`}
           </button>
 
           <p className="mt-3 text-center text-xs text-white">

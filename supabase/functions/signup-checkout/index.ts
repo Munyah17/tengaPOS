@@ -75,7 +75,7 @@ serve(async (req) => {
     // Resolve the caller's tenant server-side — never trust a client tenant_id
     const { data: userRow } = await admin
       .from('users')
-      .select('tenant_id, email, tenants(name)')
+      .select('tenant_id, email, tenants(name, trial_discount_expires_at)')
       .eq('id', caller.id)
       .single()
     if (!userRow?.tenant_id) return json({ error: 'No tenant found for this account' }, 400)
@@ -118,7 +118,16 @@ serve(async (req) => {
       const table = { ...FALLBACK_PLAN_PRICES, ...((pp?.value as Record<string, { price: number; renewalMonths: number }>) || {}) }
       const p = table[plan_type as string]
       if (!p?.price) return json({ error: 'Business and Enterprise plans are quoted — contact sales' }, 400)
-      plan = { amount: p.price, label: PLAN_LABELS[plan_type] || `tengaPOS ${plan_type}`, months: p.renewalMonths }
+      let amount = p.price
+      // Automatic post-trial win-back discount -- set by
+      // notify_trial_reminders() on day 3 of the reminder sequence, no
+      // promo code involved. Checkout.jsx shows the same discounted price
+      // before they pay; this is the actual amount charged.
+      const discountExpiresAt = (userRow.tenants as { trial_discount_expires_at?: string } | null)?.trial_discount_expires_at
+      if (discountExpiresAt && new Date(discountExpiresAt) > new Date()) {
+        amount = Math.round(amount * 0.9 * 100) / 100
+      }
+      plan = { amount, label: PLAN_LABELS[plan_type] || `tengaPOS ${plan_type}`, months: p.renewalMonths }
     }
 
     const checkoutKind = isPlatformInvoice ? 'platform_invoice' : isFiscal ? 'fiscalisation' : isAccountingErp ? 'accounting_erp' : isAiInsights ? 'ai_insights' : 'plan'
