@@ -267,13 +267,16 @@ export default function Reports() {
         </div>
       </div>
 
-      {/* Period selector — filters the summary cards and branch breakdown below */}
-      <div className="mb-4 flex flex-wrap items-center gap-2">
+      {/* Period selector — filters the summary cards and branch breakdown below.
+          Grid, not flex-wrap: 4 items at intrinsic widths wrapped Custom
+          onto its own row on a phone -- a grid forces all 4 into one neat
+          row/columns instead. */}
+      <div className="mb-4 grid grid-cols-4 gap-2">
         {DATE_PRESETS.filter((p) => PRIMARY_DATE_PRESETS.includes(p.key)).map((p) => (
           <button
             key={p.key}
             onClick={() => setReportPreset(p.key)}
-            className={`rounded-lg border px-3 py-1.5 text-xs font-semibold transition-colors ${
+            className={`rounded-lg border px-2 py-1.5 text-xs font-semibold transition-colors ${
               reportPreset === p.key
                 ? 'border-brand-600 bg-brand-600 text-white'
                 : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700'
@@ -285,7 +288,7 @@ export default function Reports() {
         <div className="relative">
           <button
             onClick={() => setMorePresetOpen((o) => !o)}
-            className={`flex items-center gap-1 rounded-lg border px-3 py-1.5 text-xs font-semibold transition-colors ${
+            className={`flex w-full items-center justify-center gap-1 rounded-lg border px-2 py-1.5 text-xs font-semibold transition-colors ${
               !PRIMARY_DATE_PRESETS.includes(reportPreset)
                 ? 'border-brand-600 bg-brand-600 text-white'
                 : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700'
@@ -294,7 +297,7 @@ export default function Reports() {
             {!PRIMARY_DATE_PRESETS.includes(reportPreset)
               ? (DATE_PRESETS.find((p) => p.key === reportPreset)?.label || 'Custom')
               : 'Custom'}
-            <ChevronDown className="h-3 w-3" />
+            <ChevronDown className="h-3 w-3 flex-shrink-0" />
           </button>
           <AnimatePresence>
             {morePresetOpen && (
@@ -323,16 +326,16 @@ export default function Reports() {
             )}
           </AnimatePresence>
         </div>
-        {reportPreset === 'custom' && (
-          <>
-            <DateInput value={reportCustomStart} onChange={(e) => setReportCustomStart(e.target.value)} placeholder="From" className="w-36" />
-            <TimeField value={reportCustomStartTime} onChange={(e) => setReportCustomStartTime(e.target.value)} label="" />
-            <span className="text-xs text-slate-400">—</span>
-            <DateInput value={reportCustomEnd} onChange={(e) => setReportCustomEnd(e.target.value)} placeholder="To" className="w-36" />
-            <TimeField value={reportCustomEndTime} onChange={(e) => setReportCustomEndTime(e.target.value)} label="" />
-          </>
-        )}
       </div>
+      {reportPreset === 'custom' && (
+        <div className="mb-4 flex flex-wrap items-center gap-2">
+          <DateInput value={reportCustomStart} onChange={(e) => setReportCustomStart(e.target.value)} placeholder="From" className="w-36" />
+          <TimeField value={reportCustomStartTime} onChange={(e) => setReportCustomStartTime(e.target.value)} label="" />
+          <span className="text-xs text-slate-400">—</span>
+          <DateInput value={reportCustomEnd} onChange={(e) => setReportCustomEnd(e.target.value)} placeholder="To" className="w-36" />
+          <TimeField value={reportCustomEndTime} onChange={(e) => setReportCustomEndTime(e.target.value)} label="" />
+        </div>
+      )}
 
       {/* Summary Cards */}
       <div className="mb-6 grid grid-cols-2 gap-4 sm:grid-cols-4">
