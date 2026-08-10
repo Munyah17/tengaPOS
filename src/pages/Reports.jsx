@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { motion } from 'framer-motion'
-import { BarChart3, TrendingUp, DollarSign, Package, RefreshCw, Calendar, Download } from 'lucide-react'
+import { motion, AnimatePresence } from 'framer-motion'
+import { BarChart3, TrendingUp, DollarSign, Package, RefreshCw, Calendar, Download, ChevronDown } from 'lucide-react'
 import {
   BarChart, Bar, LineChart, Line, XAxis, YAxis, Tooltip,
   ResponsiveContainer, CartesianGrid,
@@ -15,6 +15,8 @@ import { formatCurrency } from '@/utils/formatters'
 import { DATE_PRESETS, getPresetRange, combineDateAndTime } from '@/utils/dateRanges'
 import { exportToCSV, exportToExcel, exportToPDF } from '@/utils/exportUtils'
 import toast from 'react-hot-toast'
+
+const PRIMARY_DATE_PRESETS = ['today', 'this_week', 'this_month']
 
 const TRANSACTION_COLUMNS = [
   { header: 'Reference', key: 'reference' },
@@ -45,6 +47,11 @@ export default function Reports() {
   const [reportCustomEnd, setReportCustomEnd] = useState('')
   const [reportCustomStartTime, setReportCustomStartTime] = useState('')
   const [reportCustomEndTime, setReportCustomEndTime] = useState('')
+  // Only the 3 most-used presets get their own pill on mobile -- the rest
+  // (Yesterday, Last Week, Last 3 Months, This Year, Custom Range) were
+  // wrapping across 3-4 rows of tiny buttons on a phone. Reported live as
+  // visibly cluttered; folded behind one "More" dropdown instead.
+  const [morePresetOpen, setMorePresetOpen] = useState(false)
 
   const reportRange = (() => {
     if (reportPreset === 'custom') {
@@ -262,7 +269,7 @@ export default function Reports() {
 
       {/* Period selector — filters the summary cards and branch breakdown below */}
       <div className="mb-4 flex flex-wrap items-center gap-2">
-        {DATE_PRESETS.filter((p) => p.key !== 'custom').map((p) => (
+        {DATE_PRESETS.filter((p) => PRIMARY_DATE_PRESETS.includes(p.key)).map((p) => (
           <button
             key={p.key}
             onClick={() => setReportPreset(p.key)}
@@ -275,16 +282,47 @@ export default function Reports() {
             {p.label}
           </button>
         ))}
-        <button
-          onClick={() => setReportPreset('custom')}
-          className={`rounded-lg border px-3 py-1.5 text-xs font-semibold transition-colors ${
-            reportPreset === 'custom'
-              ? 'border-brand-600 bg-brand-600 text-white'
-              : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700'
-          }`}
-        >
-          Custom Range
-        </button>
+        <div className="relative">
+          <button
+            onClick={() => setMorePresetOpen((o) => !o)}
+            className={`flex items-center gap-1 rounded-lg border px-3 py-1.5 text-xs font-semibold transition-colors ${
+              !PRIMARY_DATE_PRESETS.includes(reportPreset)
+                ? 'border-brand-600 bg-brand-600 text-white'
+                : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700'
+            }`}
+          >
+            {!PRIMARY_DATE_PRESETS.includes(reportPreset)
+              ? (DATE_PRESETS.find((p) => p.key === reportPreset)?.label || 'Custom')
+              : 'Custom'}
+            <ChevronDown className="h-3 w-3" />
+          </button>
+          <AnimatePresence>
+            {morePresetOpen && (
+              <motion.div
+                initial={{ opacity: 0, y: -4 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -4 }}
+                className="absolute left-0 z-20 mt-2 w-40 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl dark:border-slate-700 dark:bg-slate-800"
+              >
+                {DATE_PRESETS.filter((p) => !PRIMARY_DATE_PRESETS.includes(p.key) && p.key !== 'custom').map((p) => (
+                  <button
+                    key={p.key}
+                    onClick={() => { setReportPreset(p.key); setMorePresetOpen(false) }}
+                    className="block w-full px-4 py-2.5 text-left text-sm text-slate-700 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-700"
+                  >
+                    {p.label}
+                  </button>
+                ))}
+                <button
+                  onClick={() => { setReportPreset('custom'); setMorePresetOpen(false) }}
+                  className="block w-full border-t border-slate-100 px-4 py-2.5 text-left text-sm text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-700"
+                >
+                  Custom Range
+                </button>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
         {reportPreset === 'custom' && (
           <>
             <DateInput value={reportCustomStart} onChange={(e) => setReportCustomStart(e.target.value)} placeholder="From" className="w-36" />
@@ -297,7 +335,7 @@ export default function Reports() {
       </div>
 
       {/* Summary Cards */}
-      <div className="mb-6 grid gap-4 sm:grid-cols-4">
+      <div className="mb-6 grid grid-cols-2 gap-4 sm:grid-cols-4">
         {summaryCards.map((card, i) => (
           <motion.div
             key={card.label}
