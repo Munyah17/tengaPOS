@@ -171,7 +171,6 @@ export default function Landing() {
 
             <p className="mx-auto mt-4 max-w-xl text-lg text-slate-400">
               Join hundreds of African retailers and restaurants already running on tengaPOS.
-              Start free, scale at your pace — cancel any time.
             </p>
 
             <div className="mt-8 flex flex-col items-center gap-4 sm:flex-row sm:justify-center">
@@ -179,7 +178,7 @@ export default function Landing() {
                 to="/register"
                 className="inline-flex items-center gap-2 rounded-xl bg-brand-600 px-6 py-3 text-sm font-semibold text-white transition-colors hover:bg-brand-700"
               >
-                Start Your Free Trial
+                Get Started
                 <ArrowRight className="h-4 w-4" />
               </Link>
               <button className="inline-flex items-center gap-2 rounded-xl border border-slate-700 px-6 py-3 text-sm font-semibold text-slate-300 transition-colors hover:border-slate-600 hover:text-white">
@@ -188,7 +187,7 @@ export default function Landing() {
             </div>
 
             <p className="mt-6 text-sm text-slate-500">
-              Free setup &amp; onboarding included &nbsp;·&nbsp; 24/7 support &nbsp;·&nbsp; Cancel anytime
+              Free setup &amp; onboarding included &nbsp;·&nbsp; 24/7 support
             </p>
           </motion.div>
         </div>

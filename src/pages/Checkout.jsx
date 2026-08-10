@@ -2,8 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate, useSearchParams, Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import {
-  CheckCircle, Clock, ArrowRight,
-  Sparkles, ShieldCheck, Loader2, ArrowLeft, Banknote,
+  CheckCircle, ShieldCheck, Loader2, ArrowLeft, Banknote,
 } from 'lucide-react'
 import posIcon from '@/assets/pos-icon.png'
 import paynowBanner from '@/assets/paynow-banner.svg'
@@ -17,35 +16,41 @@ const PLANS = [
   {
     key: 'byod_monthly',
     name: 'BYOD Monthly',
-    price: 30,
+    price: 60,
     cycle: 'per month',
     desc: 'Use your own device',
+    onboardingEligible: true,
     features: ['POS & Inventory', 'Transactions & Reports', 'Task manager', '1 branch · 3 users'],
+  },
+  {
+    key: 'byod_yearly',
+    name: 'BYOD Yearly',
+    price: 600,
+    cycle: 'per year',
+    desc: 'Use your own device',
+    onboardingEligible: true,
+    features: ['Everything in BYOD Monthly', '2 months free vs. paying monthly'],
   },
   {
     key: 'standard_plan',
     name: 'Standard Plan',
     price: 170,
-    cycle: 'once-off · 6 months included',
-    renewal: 'Free renewal — Ts & Cs apply',
+    cycle: 'once-off hardware · 6 months included',
     desc: '10″ tablet + thermal printer + software',
     popular: true,
-    features: ['Everything in BYOD', 'Kitchen display & Orders', 'Staff management · 5 users', 'No subscriptions'],
+    hosting: { monthly: 20, yearly: 200 },
+    features: ['Everything in BYOD', 'Kitchen display & Orders', 'Staff management · 5 users'],
   },
   {
     key: 'pro_package',
     name: 'Pro Package',
     price: 200,
-    cycle: 'once-off · 6 months included',
-    renewal: 'Free renewal — Ts & Cs apply',
+    cycle: 'once-off hardware · 6 months included',
     desc: '12″ tablet + thermal printer + software',
-    features: ['Everything in Standard', 'Dining board & Drive-through', 'Advanced reports · 3 branches', 'No subscriptions'],
+    hosting: { monthly: 35, yearly: 300 },
+    features: ['Everything in Standard', 'Dining board & Drive-through', 'Advanced reports · 3 branches'],
   },
 ]
-
-function daysLeft(iso) {
-  return Math.max(0, Math.ceil((new Date(iso) - Date.now()) / 86400000))
-}
 
 export default function Checkout() {
   const navigate = useNavigate()
@@ -53,13 +58,14 @@ export default function Checkout() {
   const { isAuthenticated, tenant, initAuth } = useAuthStore()
   const { pricing } = usePlanPricing()
   const planPrice = (plan) => pricing[plan.key]?.price ?? plan.price
-  // Set server-side by notify_trial_reminders() from day 3 of the trial-
+  // Set server-side by notify_trial_reminders() from day 4 of the trial-
   // expired reminder sequence -- automatic, no promo code to type in. The
   // 10% math here must match signup-checkout's exactly (same rounding),
   // since what's shown here is a preview of what actually gets charged.
   const trialDiscountActive = !!tenant?.trial_discount_expires_at && new Date(tenant.trial_discount_expires_at) > new Date()
   const finalPrice = (plan) => trialDiscountActive ? Math.round(planPrice(plan) * 0.9 * 100) / 100 : planPrice(plan)
   const [selectedPlan, setSelectedPlan] = useState('standard_plan')
+  const [wantsOnboarding, setWantsOnboarding] = useState(false)
   const [provider, setProvider] = useState('paynow')
   const [redirecting, setRedirecting] = useState(false)
   const [confirming, setConfirming] = useState(false)
@@ -68,27 +74,17 @@ export default function Checkout() {
   const returnStatus = params.get('status')
   const returnRef = params.get('ref')
 
-  const trialActive = tenant?.trial_ends_at && !tenant?.plan_start_date && new Date(tenant.trial_ends_at) > new Date()
-  const trialExpired = tenant?.trial_ends_at && !tenant?.plan_start_date && new Date(tenant.trial_ends_at) <= new Date()
   const hasPaidPlan = !!tenant?.plan_start_date
-  // Trial is opt-in and once per business
-  const trialAvailable = !tenant?.trial_ends_at && !hasPaidPlan
-  const [startingTrial, setStartingTrial] = useState(false)
-
-  const startTrial = async () => {
-    setStartingTrial(true)
-    try {
-      const { data, error } = await supabase.rpc('start_free_trial')
-      if (error) throw error
-      if (data?.ok === false) throw new Error('Could not start trial')
-      await initAuth()
-      toast.success('Your 7-day free trial is live — $0 due today!')
-      navigate('/app/dashboard')
-    } catch (err) {
-      toast.error(err.message || 'Could not start the free trial')
-      setStartingTrial(false)
-    }
-  }
+  // Standard/Pro hardware plans activated under the new pricing carry a
+  // real (even if already-past) hosting_expires_at the moment they're
+  // approved -- see stripe-webhook/paynow-signup-callback. A tenant who
+  // bought their hardware before this pricing existed has this column
+  // null forever and is correctly never asked to pay it.
+  const isHardwarePlan = tenant?.plan_type === 'standard_plan' || tenant?.plan_type === 'pro_package'
+  const hostingSubject = isHardwarePlan && !!tenant?.hosting_expires_at
+  const hostingLapsed = hostingSubject && new Date(tenant.hosting_expires_at) < new Date()
+  const [hostingPeriod, setHostingPeriod] = useState('monthly')
+  const hostingTable = tenant?.plan_type ? PLANS.find((p) => p.key === tenant.plan_type)?.hosting : null
 
   useEffect(() => {
     if (!isAuthenticated) navigate('/login')
@@ -124,12 +120,16 @@ export default function Checkout() {
     setRedirecting(true)
     try {
       const { data: { session } } = await supabase.auth.getSession()
+      const body = hostingLapsed
+        ? { type: 'hosting', period: hostingPeriod, provider, return_url: `${window.location.origin}/checkout` }
+        : {
+            plan_type: selectedPlan,
+            provider,
+            onboarding: wantsOnboarding,
+            return_url: `${window.location.origin}/checkout`,
+          }
       const { data, error } = await supabase.functions.invoke('signup-checkout', {
-        body: {
-          plan_type: selectedPlan,
-          provider,
-          return_url: `${window.location.origin}/checkout`,
-        },
+        body,
         headers: { Authorization: `Bearer ${session?.access_token}` },
       })
       if (error) {
@@ -170,65 +170,98 @@ export default function Checkout() {
     )
   }
 
+  // A Standard/Pro tenant whose hosting has lapsed sees a dedicated
+  // "pay your hosting" screen here instead of the plan grid -- they
+  // already own the hardware, this is a different purchase, not a
+  // re-selection of their plan.
+  if (hostingLapsed && hostingTable) {
+    const hostingAmount = hostingPeriod === 'yearly' ? hostingTable.yearly : hostingTable.monthly
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-brand-950 px-4 py-10 sm:py-14">
+        <div className="mx-auto max-w-lg">
+          <div className="mb-8 text-center">
+            <img src={posIcon} alt="tengaPOS" className="mx-auto mb-4 h-12 w-auto" />
+            <h1 className="text-2xl font-extrabold text-white sm:text-3xl">Hosting payment due</h1>
+            <p className="mt-2 text-sm text-slate-400">
+              Your hardware is already yours — this keeps your account, data, and support active. Your data is safe either way.
+            </p>
+          </div>
+
+          {cashSubmitted ? (
+            <div className="rounded-2xl border-2 border-amber-500/70 bg-amber-500/10 p-5 text-center">
+              <Banknote className="mx-auto mb-2 h-8 w-8 text-amber-400" />
+              <h3 className="font-bold text-white">Request submitted</h3>
+              <p className="mt-1 text-sm text-amber-200/80">
+                We'll confirm your payment and reactivate hosting shortly.
+              </p>
+            </div>
+          ) : (
+            <>
+              <div className="grid grid-cols-2 gap-3">
+                {['monthly', 'yearly'].map((p) => (
+                  <button
+                    key={p}
+                    onClick={() => setHostingPeriod(p)}
+                    className={`rounded-2xl border p-4 text-left transition-all ${
+                      hostingPeriod === p ? 'border-brand-500 bg-brand-500/10' : 'border-white/10 bg-white/5 hover:border-white/25'
+                    }`}
+                  >
+                    <p className="text-2xl font-extrabold text-white">${p === 'yearly' ? hostingTable.yearly : hostingTable.monthly}</p>
+                    <p className="text-xs text-slate-400">{p === 'yearly' ? 'per year' : 'per month'}</p>
+                  </button>
+                ))}
+              </div>
+
+              <p className="mb-2 mt-6 text-center text-xs font-bold uppercase tracking-widest text-slate-500">Pay with</p>
+              <div className="grid grid-cols-3 gap-3">
+                <button onClick={() => setProvider('paynow')} className={`flex items-center justify-center rounded-xl border px-4 py-3 transition-all ${provider === 'paynow' ? 'border-green-500 bg-white' : 'border-white/10 bg-white/90 hover:border-white/25'}`}>
+                  <img src={paynowBanner} alt="Paynow" className="h-6 w-auto" />
+                </button>
+                <button onClick={() => setProvider('stripe')} className={`flex items-center justify-center rounded-xl border px-4 py-3 transition-all ${provider === 'stripe' ? 'border-indigo-500 bg-white' : 'border-white/10 bg-white/90 hover:border-white/25'}`}>
+                  <img src={stripeBanner} alt="Stripe" className="h-6 w-auto" />
+                </button>
+                <button onClick={() => setProvider('cash')} className={`flex items-center justify-center gap-1.5 rounded-xl border px-4 py-3 text-sm font-bold transition-all ${provider === 'cash' ? 'border-amber-500 bg-white text-amber-700' : 'border-white/10 bg-white/90 text-slate-700 hover:border-white/25'}`}>
+                  <Banknote className="h-5 w-5" /> Cash
+                </button>
+              </div>
+
+              <button
+                onClick={startCheckout}
+                disabled={redirecting}
+                className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-brand-600 py-3.5 text-sm font-bold text-white transition-colors hover:bg-brand-700 disabled:opacity-60"
+              >
+                {redirecting ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}
+                {redirecting ? 'Redirecting…' : provider === 'cash' ? `Request Cash Payment — $${hostingAmount}` : `Continue to secure checkout — $${hostingAmount}`}
+              </button>
+            </>
+          )}
+
+          <p className="mt-6 text-center text-xs text-white">
+            Need help? <a href="mailto:sales@tengapos.co.zw" className="text-brand-400 hover:text-brand-300">Contact sales</a>
+          </p>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-brand-950 px-4 py-10 sm:py-14">
       <div className="mx-auto max-w-4xl">
         <div className="mb-8 text-center">
           <img src={posIcon} alt="tengaPOS" className="mx-auto mb-4 h-12 w-auto" />
           <h1 className="text-2xl font-extrabold text-white sm:text-3xl">Choose your plan</h1>
-          {trialActive ? (
-            <div className="mx-auto mt-4 flex max-w-md items-center justify-center gap-2 rounded-2xl border border-green-500/30 bg-green-500/10 px-4 py-3">
-              <Sparkles className="h-5 w-5 flex-shrink-0 text-green-400" />
-              <p className="text-sm text-green-300">
-                <b>Your 7-day free trial is active</b> — {daysLeft(tenant.trial_ends_at)} day{daysLeft(tenant.trial_ends_at) !== 1 ? 's' : ''} left.
-                Due today: <b>$0!</b>
-              </p>
-            </div>
-          ) : trialExpired ? (
-            <div className="mx-auto mt-4 flex max-w-md items-center justify-center gap-2 rounded-2xl border border-amber-500/30 bg-amber-500/10 px-4 py-3">
-              <Clock className="h-5 w-5 flex-shrink-0 text-amber-400" />
-              <p className="text-sm text-amber-300">
-                <b>Your free trial has ended.</b> Pick a plan below to keep using tengaPOS — your data is safe.
-                {trialDiscountActive && <> <b className="text-green-300">10% off is applied automatically</b> for a limited time.</>}
-              </p>
-            </div>
-          ) : hasPaidPlan ? (
+          {hasPaidPlan ? (
             <p className="mt-2 text-sm text-slate-400">Manage or change your subscription</p>
           ) : (
             <p className="mt-2 text-sm text-slate-400">Secure checkout — powered by Stripe & Paynow</p>
           )}
+          {trialDiscountActive && (
+            <p className="mt-2 text-sm text-green-300"><b>10% off is applied automatically</b> for a limited time.</p>
+          )}
         </div>
 
-        {/* 7-Day Free Trial — its own pricing option */}
-        {trialAvailable && (
-          <div className="mx-auto mb-6 max-w-2xl rounded-2xl border-2 border-green-500/70 bg-green-500/10 p-5 sm:p-6">
-            <div className="flex flex-col items-center gap-4 sm:flex-row sm:justify-between">
-              <div className="text-center sm:text-left">
-                <div className="flex flex-wrap items-center justify-center gap-2 sm:justify-start">
-                  <Sparkles className="h-5 w-5 text-green-400" />
-                  <h2 className="text-lg font-extrabold text-white">7-Day Free Trial</h2>
-                  <span className="rounded-full bg-green-500 px-3 py-0.5 text-xs font-bold text-white">
-                    Due today — $0!
-                  </span>
-                </div>
-                <p className="mt-1 text-sm text-green-200/80">
-                  Full vendor dashboard access for 7 days. No card needed. One trial per business.
-                </p>
-              </div>
-              <button
-                onClick={startTrial}
-                disabled={startingTrial}
-                className="flex flex-shrink-0 items-center gap-2 rounded-xl bg-green-600 px-6 py-3 text-sm font-bold text-white hover:bg-green-500 disabled:opacity-60"
-              >
-                {startingTrial ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-                {startingTrial ? 'Starting…' : 'Start Free Trial'}
-              </button>
-            </div>
-          </div>
-        )}
-
         {/* Plans */}
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {PLANS.map((plan) => (
             <motion.button
               key={plan.key}
@@ -256,8 +289,10 @@ export default function Checkout() {
                 <p className="mt-3 text-3xl font-extrabold text-white">${planPrice(plan)}</p>
               )}
               <p className="text-xs text-slate-500">{plan.cycle}</p>
-              {plan.renewal && (
-                <p className="mt-0.5 text-xs font-semibold text-green-400">{plan.renewal}</p>
+              {plan.hosting && (
+                <p className="mt-0.5 text-xs font-semibold text-amber-400">
+                  + ${plan.hosting.monthly}/mo or ${plan.hosting.yearly}/yr hosting (set up right after)
+                </p>
               )}
               <ul className="mt-4 space-y-1.5">
                 {plan.features.map((f) => (
@@ -288,6 +323,22 @@ export default function Checkout() {
             </div>
           ) : (
           <>
+          {PLANS.find((p) => p.key === selectedPlan)?.onboardingEligible && (
+            <label className="mb-4 flex items-start gap-2.5 rounded-xl border border-white/10 bg-white/5 p-3.5 text-sm text-slate-300">
+              <input
+                type="checkbox"
+                checked={wantsOnboarding}
+                onChange={(e) => setWantsOnboarding(e.target.checked)}
+                className="mt-0.5 h-4 w-4"
+              />
+              <span>
+                <b className="text-white">Add physical onboarding — +$30</b>
+                <br />
+                <span className="text-xs text-slate-400">Our team sets it up in person. The in-app self-serve walkthrough is free either way.</span>
+              </span>
+            </label>
+          )}
+
           <p className="mb-2 text-center text-xs font-bold uppercase tracking-widest text-slate-500">Pay with</p>
           <div className="grid grid-cols-3 gap-3">
             <button
@@ -331,8 +382,8 @@ export default function Checkout() {
             {redirecting
               ? 'Redirecting to secure checkout…'
               : provider === 'cash'
-                ? `Request Cash Payment — $${finalPrice(PLANS.find((p) => p.key === selectedPlan))}`
-                : `Continue to secure checkout — $${finalPrice(PLANS.find((p) => p.key === selectedPlan))}`}
+                ? `Request Cash Payment — $${finalPrice(PLANS.find((p) => p.key === selectedPlan)) + (wantsOnboarding && PLANS.find((p) => p.key === selectedPlan)?.onboardingEligible ? 30 : 0)}`
+                : `Continue to secure checkout — $${finalPrice(PLANS.find((p) => p.key === selectedPlan)) + (wantsOnboarding && PLANS.find((p) => p.key === selectedPlan)?.onboardingEligible ? 30 : 0)}`}
           </button>
 
           <p className="mt-3 text-center text-xs text-white">
@@ -341,16 +392,6 @@ export default function Checkout() {
               : `You'll be redirected to ${provider === 'stripe' ? 'Stripe' : 'Paynow'}'s secure hosted page. tengaPOS never sees or stores your payment details.`}
           </p>
           </>
-          )}
-
-          {trialActive && (
-            <button
-              onClick={() => navigate('/app/dashboard')}
-              className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl border border-white/10 py-3 text-sm font-semibold text-slate-300 hover:bg-white/5"
-            >
-              Continue free trial — $0 due today
-              <ArrowRight className="h-4 w-4" />
-            </button>
           )}
 
           <p className="mt-6 text-center text-xs text-white">

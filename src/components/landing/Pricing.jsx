@@ -7,7 +7,7 @@ const plans = [
   {
     key: 'byod_monthly',
     name: 'Bring Your Own Device',
-    price: '$30',
+    price: '$60',
     period: '/ month',
     description: 'Use your own hardware. Full cloud POS access with all core features included.',
     icon: Smartphone,
@@ -24,6 +24,7 @@ const plans = [
     ],
     cta: 'Get Started',
     ctaStyle: 'border border-slate-300 text-slate-900 hover:bg-slate-50 dark:border-slate-600 dark:text-white dark:hover:bg-slate-800',
+    extras: ['Or $600/year — 2 months free', 'Optional +$30 physical onboarding (in-app setup is free)'],
   },
   {
     key: 'standard_plan',
@@ -45,7 +46,7 @@ const plans = [
     ],
     cta: 'Get Started',
     ctaStyle: 'bg-brand-600 text-white hover:bg-brand-700',
-    extras: ['6 months free use included', 'Free renewal while using our hardware — Ts & Cs apply'],
+    extras: ['6 months free use included', '+ $20/month or $200/year hosting'],
   },
   {
     key: 'pro_package',
@@ -67,7 +68,7 @@ const plans = [
     ],
     cta: 'Get Started',
     ctaStyle: 'border border-slate-300 text-slate-900 hover:bg-slate-50 dark:border-slate-600 dark:text-white dark:hover:bg-slate-800',
-    extras: ['6 months free use included', 'Free renewal while using our hardware — Ts & Cs apply'],
+    extras: ['6 months free use included', '+ $35/month or $300/year hosting'],
   },
 ]
 
@@ -143,37 +144,8 @@ export default function Pricing() {
                 Optional ZIMRA Fiscalisation add-on — ${fiscalPricing.monthly?.price ?? 20}/month
               </span>
               <span className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-4 py-1.5 text-sm font-medium text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400">
-                &#x21bb; 6 months free use with every hardware purchase + free renewal (Ts &amp; Cs apply)
+                &#x21bb; 6 months free use with every hardware purchase
               </span>
-            </div>
-          </motion.div>
-
-          {/* 7-day free trial banner */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            className="mx-auto mt-10 max-w-3xl rounded-2xl border-2 border-green-500/60 bg-gradient-to-r from-green-50 to-emerald-50 p-6 dark:from-green-950/40 dark:to-emerald-950/40"
-          >
-            <div className="flex flex-col items-center gap-4 sm:flex-row sm:justify-between">
-              <div className="text-center sm:text-left">
-                <div className="flex items-center justify-center gap-2 sm:justify-start">
-                  <h3 className="text-xl font-extrabold text-slate-900 dark:text-white">7-Day Free Trial</h3>
-                  <span className="rounded-full bg-green-600 px-3 py-0.5 text-xs font-bold text-white">
-                    Due today — $0!
-                  </span>
-                </div>
-                <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
-                  Full access to the complete vendor dashboard. No credit card required.
-                  Pick a plan only when your trial ends.
-                </p>
-              </div>
-              <Link
-                to="/register"
-                className="flex-shrink-0 rounded-xl bg-green-600 px-6 py-3 text-sm font-bold text-white transition-colors hover:bg-green-700"
-              >
-                Start Free Trial
-              </Link>
             </div>
           </motion.div>
 
@@ -308,7 +280,7 @@ export default function Pricing() {
             viewport={{ once: true }}
             className="mt-10 text-center text-sm text-slate-500 dark:text-slate-500"
           >
-            Free renewal available as long as you continue using tengaPOS-supplied hardware.{' '}
+            Business/Enterprise hosting and support terms are quoted individually.{' '}
             <a href="#" className="font-medium text-brand-600 hover:underline dark:text-brand-400">
               Contact us to learn more.
             </a>

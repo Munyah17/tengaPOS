@@ -42,12 +42,12 @@ export default function Register() {
         specialRequirements: form.specialRequirements,
       })
       if (data.user && !data.session) {
-        // Email confirmation required — they pick trial or plan after signing in
-        toast.success('Almost there! Check your email to confirm, then sign in to choose your plan or free trial.')
+        // Email confirmation required — they pick a plan after signing in
+        toast.success('Almost there! Check your email to confirm, then sign in to choose your plan.')
         navigate('/login')
       } else {
-        // Immediate session — choose free trial or a plan on checkout
-        toast.success('Account created! Pick your free trial or a plan.')
+        // Immediate session — choose a plan on checkout
+        toast.success('Account created! Pick your plan next.')
         navigate('/checkout')
       }
     } catch (err) {
@@ -89,7 +89,7 @@ export default function Register() {
             <img src={posIcon} alt="tengaPOS" className="mx-auto mb-4 h-12 w-auto sm:h-14" />
             <h1 className="text-2xl font-extrabold text-white">Create your account</h1>
             <p className="mt-1 text-sm text-slate-400">
-              Choose a <span className="font-semibold text-green-400">free 7-day trial</span> or a plan next — nothing is charged until you decide
+              Choose your plan next — nothing is charged until you decide
             </p>
           </div>
 
@@ -181,7 +181,7 @@ export default function Register() {
                 placeholder="+263 77 123 4567"
                 required
               />
-              <p className="mt-1 text-xs text-slate-500">Where tengaPOS will reach you — trial reminders, account updates, offers</p>
+              <p className="mt-1 text-xs text-slate-500">Where tengaPOS will reach you — account updates, receipts, offers</p>
             </div>
 
             <button

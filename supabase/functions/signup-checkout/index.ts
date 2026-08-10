@@ -15,9 +15,19 @@ const CORS = {
 // Fallback prices — live prices come from platform_settings (Super Admin editable).
 // The client can never set its own amount.
 const FALLBACK_PLAN_PRICES: Record<string, { price: number; renewalMonths: number }> = {
-  byod_monthly:  { price: 30,  renewalMonths: 1 },
+  byod_monthly:  { price: 60,  renewalMonths: 1 },
+  byod_yearly:   { price: 600, renewalMonths: 12 },
   standard_plan: { price: 170, renewalMonths: 6 },
   pro_package:   { price: 200, renewalMonths: 6 },
+}
+// Optional, BYOD only -- the in-app self-serve onboarding stays free either way.
+const BYOD_ONBOARDING_FEE = 30
+// Standard/Pro's hardware (tablet + printer) stays a once-off payment --
+// this is a NEW, separate, ongoing hosting subscription on top of it, new
+// signups only. Priced per plan since Pro's is higher.
+const HOSTING_PRICES: Record<string, { monthly: number; yearly: number }> = {
+  standard_plan: { monthly: 20, yearly: 200 },
+  pro_package:   { monthly: 35, yearly: 300 },
 }
 const FALLBACK_FISCAL_PRICES: Record<string, { price: number; months: number; label: string }> = {
   monthly:   { price: 20,  months: 1,  label: 'Monthly' },
@@ -33,8 +43,9 @@ const AI_INSIGHTS_PRICES: Record<string, number> = { monthly: 1, quarterly: 3, h
 const WHATSAPP_RECEIPTS_PRICES: Record<string, number> = { monthly: 5, yearly: 50 }
 const PLAN_LABELS: Record<string, string> = {
   byod_monthly: 'tengaPOS BYOD Monthly (1 month)',
-  standard_plan: 'tengaPOS Standard Plan (once-off, 6 months included)',
-  pro_package: 'tengaPOS Pro Package (once-off, 6 months included)',
+  byod_yearly: 'tengaPOS BYOD Yearly (12 months)',
+  standard_plan: 'tengaPOS Standard Plan (once-off hardware, 6 months included)',
+  pro_package: 'tengaPOS Pro Package (once-off hardware, 6 months included)',
 }
 
 function json(body: unknown, status = 200) {
@@ -66,19 +77,20 @@ serve(async (req) => {
     const { data: { user: caller }, error: authErr } = await admin.auth.getUser(jwt)
     if (authErr || !caller) return json({ error: 'Not authenticated' }, 401)
 
-    const { plan_type, provider, return_url, type, period, invoice_id } = await req.json()
+    const { plan_type, provider, return_url, type, period, invoice_id, onboarding } = await req.json()
     if (!['stripe', 'paynow', 'cash'].includes(provider)) return json({ error: 'provider must be stripe, paynow, or cash' }, 400)
 
     const isFiscal = type === 'fiscalisation'
     const isAccountingErp = type === 'accounting_erp'
     const isAiInsights = type === 'ai_insights'
     const isWhatsappReceipts = type === 'whatsapp_receipts'
+    const isHosting = type === 'hosting'
     const isPlatformInvoice = type === 'platform_invoice'
 
     // Resolve the caller's tenant server-side — never trust a client tenant_id
     const { data: userRow } = await admin
       .from('users')
-      .select('tenant_id, email, tenants(name, trial_discount_expires_at)')
+      .select('tenant_id, email, tenants(name, plan_type, trial_discount_expires_at)')
       .eq('id', caller.id)
       .single()
     if (!userRow?.tenant_id) return json({ error: 'No tenant found for this account' }, 400)
@@ -121,12 +133,30 @@ serve(async (req) => {
       const price = WHATSAPP_RECEIPTS_PRICES[period as string]
       if (!months || !price) return json({ error: 'Invalid WhatsApp Receipts period' }, 400)
       plan = { amount: price, label: `WhatsApp Receipts — ${PERIOD_LABEL[period as string]}`, months }
+    } else if (isHosting) {
+      // Hosting price depends on which hardware plan this tenant is
+      // actually on (Pro's is higher) -- read from the tenant row itself,
+      // never trust a client-supplied plan for pricing.
+      const tenantPlanType = (userRow.tenants as { plan_type?: string } | null)?.plan_type
+      const hostingTable = tenantPlanType ? HOSTING_PRICES[tenantPlanType] : undefined
+      if (!hostingTable) return json({ error: 'Hosting is only for Standard/Pro hardware plans' }, 400)
+      const months = period === 'yearly' ? 12 : period === 'monthly' ? 1 : 0
+      const price = period === 'yearly' ? hostingTable.yearly : period === 'monthly' ? hostingTable.monthly : undefined
+      if (!months || !price) return json({ error: 'Invalid hosting period' }, 400)
+      plan = { amount: price, label: `tengaPOS Hosting — ${PERIOD_LABEL[period as string]}`, months }
     } else {
       const { data: pp } = await admin.from('platform_settings').select('value').eq('key', 'plan_pricing').maybeSingle()
       const table = { ...FALLBACK_PLAN_PRICES, ...((pp?.value as Record<string, { price: number; renewalMonths: number }>) || {}) }
       const p = table[plan_type as string]
       if (!p?.price) return json({ error: 'Business and Enterprise plans are quoted — contact sales' }, 400)
       let amount = p.price
+      let label = PLAN_LABELS[plan_type] || `tengaPOS ${plan_type}`
+      // Optional physical onboarding -- BYOD only. The in-app self-serve
+      // onboarding walkthrough stays free either way.
+      if (onboarding && String(plan_type).startsWith('byod')) {
+        amount += BYOD_ONBOARDING_FEE
+        label += ' + physical onboarding'
+      }
       // Automatic post-trial win-back discount -- set by
       // notify_trial_reminders() on day 3 of the reminder sequence, no
       // promo code involved. Checkout.jsx shows the same discounted price
@@ -135,12 +165,12 @@ serve(async (req) => {
       if (discountExpiresAt && new Date(discountExpiresAt) > new Date()) {
         amount = Math.round(amount * 0.9 * 100) / 100
       }
-      plan = { amount, label: PLAN_LABELS[plan_type] || `tengaPOS ${plan_type}`, months: p.renewalMonths }
+      plan = { amount, label, months: p.renewalMonths }
     }
 
-    const checkoutKind = isPlatformInvoice ? 'platform_invoice' : isFiscal ? 'fiscalisation' : isAccountingErp ? 'accounting_erp' : isAiInsights ? 'ai_insights' : isWhatsappReceipts ? 'whatsapp_receipts' : 'plan'
-    const planKey = isPlatformInvoice ? 'platform_invoice' : isFiscal ? `fiscal_${period}` : isAccountingErp ? `erp_${period}` : isAiInsights ? `ai_${period}` : isWhatsappReceipts ? `wa_${period}` : plan_type
-    const refPrefix = isPlatformInvoice ? 'PINV' : isFiscal ? 'FIS' : isAccountingErp ? 'ERP' : isAiInsights ? 'AI' : isWhatsappReceipts ? 'WA' : 'SUB'
+    const checkoutKind = isPlatformInvoice ? 'platform_invoice' : isFiscal ? 'fiscalisation' : isAccountingErp ? 'accounting_erp' : isAiInsights ? 'ai_insights' : isWhatsappReceipts ? 'whatsapp_receipts' : isHosting ? 'hosting' : 'plan'
+    const planKey = isPlatformInvoice ? 'platform_invoice' : isFiscal ? `fiscal_${period}` : isAccountingErp ? `erp_${period}` : isAiInsights ? `ai_${period}` : isWhatsappReceipts ? `wa_${period}` : isHosting ? `hosting_${period}` : plan_type
+    const refPrefix = isPlatformInvoice ? 'PINV' : isFiscal ? 'FIS' : isAccountingErp ? 'ERP' : isAiInsights ? 'AI' : isWhatsappReceipts ? 'WA' : isHosting ? 'HOST' : 'SUB'
     const reference = `${refPrefix}-${Date.now()}-${Math.random().toString(36).slice(2, 7).toUpperCase()}`
     const amountStr = plan.amount.toFixed(2)
     const returnUrl = return_url || 'https://www.tengapos.co.zw/checkout'

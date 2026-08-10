@@ -142,14 +142,28 @@ serve(async (req) => {
         features: { ...(t?.features || {}), whatsapp_receipts: true },
         whatsapp_receipts_expires_at: renewal.toISOString(),
       }).eq('id', tenantId)
+    } else if (kind === 'hosting') {
+      // Extends hosting_expires_at -- App.jsx gates access for a Standard/
+      // Pro tenant whose hosting has lapsed (new-signup tenants only, see
+      // 1786090000_hosting_fee.sql).
+      await admin.from('tenants').update({ hosting_expires_at: renewal.toISOString() }).eq('id', tenantId)
     } else {
-      // Activate the tenant on the paid plan (clears any trial lock)
+      // Activate the tenant on the paid plan (clears any trial lock).
+      // Standard/Pro hardware plans also start needing hosting -- setting
+      // hosting_expires_at to right now (already "due") rather than
+      // leaving it null is what actually marks this tenant as subject to
+      // the new hosting requirement at all, since null is otherwise
+      // indistinguishable from an existing pre-hosting-fee tenant who's
+      // rightfully exempt forever. BYOD doesn't touch this column -- its
+      // own recurring fee already covers everything.
+      const isHardwarePlan = planType === 'standard_plan' || planType === 'pro_package'
       await admin.from('tenants').update({
         status: 'active',
         plan_type: planType,
         plan_start_date: now.toISOString(),
         next_renewal_date: renewal.toISOString(),
         approved_at: now.toISOString(),
+        ...(isHardwarePlan ? { hosting_expires_at: now.toISOString() } : {}),
       }).eq('id', tenantId)
     }
 

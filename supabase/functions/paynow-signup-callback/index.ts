@@ -102,6 +102,7 @@ serve(async (req) => {
       const isAccountingErp = String(checkout.plan_type).startsWith('erp_')
       const isAiInsights = String(checkout.plan_type).startsWith('ai_')
       const isWhatsappReceipts = String(checkout.plan_type).startsWith('wa_')
+      const isHosting = String(checkout.plan_type).startsWith('hosting_')
       const FISCAL_MONTHS: Record<string, number> = {
         fiscal_monthly: 1, fiscal_quarterly: 3, fiscal_halfyear: 6, fiscal_yearly: 12,
       }
@@ -114,6 +115,9 @@ serve(async (req) => {
       const WHATSAPP_MONTHS: Record<string, number> = {
         wa_monthly: 1, wa_yearly: 12,
       }
+      const HOSTING_MONTHS: Record<string, number> = {
+        hosting_monthly: 1, hosting_yearly: 12,
+      }
       const months = isFiscal
         ? (FISCAL_MONTHS[checkout.plan_type] || 1)
         : isAccountingErp
@@ -122,6 +126,8 @@ serve(async (req) => {
         ? (AI_MONTHS[checkout.plan_type] || 1)
         : isWhatsappReceipts
         ? (WHATSAPP_MONTHS[checkout.plan_type] || 1)
+        : isHosting
+        ? (HOSTING_MONTHS[checkout.plan_type] || 1)
         : (PLAN_MONTHS[checkout.plan_type] || 6)
       const now = new Date()
       const renewal = new Date(now)
@@ -163,13 +169,17 @@ serve(async (req) => {
           features: { ...(t?.features || {}), whatsapp_receipts: true },
           whatsapp_receipts_expires_at: renewal.toISOString(),
         }).eq('id', checkout.tenant_id)
+      } else if (isHosting) {
+        await admin.from('tenants').update({ hosting_expires_at: renewal.toISOString() }).eq('id', checkout.tenant_id)
       } else {
+        const isHardwarePlan = checkout.plan_type === 'standard_plan' || checkout.plan_type === 'pro_package'
         await admin.from('tenants').update({
           status: 'active',
           plan_type: checkout.plan_type,
           plan_start_date: now.toISOString(),
           next_renewal_date: renewal.toISOString(),
           approved_at: now.toISOString(),
+          ...(isHardwarePlan ? { hosting_expires_at: now.toISOString() } : {}),
         }).eq('id', checkout.tenant_id)
       }
 

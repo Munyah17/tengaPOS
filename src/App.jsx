@@ -101,6 +101,16 @@ function ProtectedRoute({ children }) {
   const trialExpired = onTrial && new Date(tenant.trial_ends_at) <= new Date()
   const neverActivated = !tenant?.trial_ends_at && !tenant?.plan_start_date
   if (trialExpired) return <Navigate to="/checkout" replace />
+  // Standard/Pro hardware plans activated under the new pricing carry a
+  // hosting_expires_at (set to "already due" the moment their hardware
+  // purchase is approved, then extended each time they pay hosting) --
+  // a hardware-plan tenant from before this pricing existed has this
+  // column null forever and is correctly never redirected here. Doesn't
+  // touch tenant.status at all -- deliberately kept separate from a real
+  // Super-Admin-imposed suspension below, which must never look payable.
+  const isHardwarePlan = tenant?.plan_type === 'standard_plan' || tenant?.plan_type === 'pro_package'
+  const hostingLapsed = isHardwarePlan && !!tenant?.hosting_expires_at && new Date(tenant.hosting_expires_at) < new Date()
+  if (hostingLapsed) return <Navigate to="/checkout" replace />
   if (tenantStatus === 'pending') {
     return <Navigate to={neverActivated ? '/checkout' : '/pending'} replace />
   }
