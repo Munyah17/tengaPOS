@@ -279,6 +279,7 @@ export const useAuthStore = create(
           options: {
             data: {
               name, business_name: businessName, business_type: businessType || 'retail', phone,
+              whatsapp_number: detail.whatsappNumber || null,
               industry: detail.industry || null,
               location: detail.location || null,
               requested_branches: detail.requestedBranches || null,

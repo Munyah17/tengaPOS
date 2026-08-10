@@ -178,6 +178,33 @@ export async function uploadProductImage(tenantId, file) {
   return data.publicUrl
 }
 
+// Uploads a generated receipt PDF into the private 'receipts' bucket, then
+// asks send-whatsapp-receipt to mint a short-lived signed URL for it and
+// push it to the given phone. Paid add-on -- the edge function is what
+// actually enforces tenants.features.whatsapp_receipts, this just carries
+// the two steps (upload, then send) as one call for the caller.
+export async function sendReceiptViaWhatsApp(tenantId, phone, pdfBlob, receiptNumber) {
+  const path = `${tenantId}/${Date.now()}-${receiptNumber || 'receipt'}.pdf`
+  const { error: uploadErr } = await supabase.storage.from('receipts').upload(path, pdfBlob, {
+    contentType: 'application/pdf',
+    upsert: false,
+  })
+  if (uploadErr) throw uploadErr
+
+  const { data: { session } } = await supabase.auth.getSession()
+  const { data, error } = await supabase.functions.invoke('send-whatsapp-receipt', {
+    body: { tenant_id: tenantId, phone, storage_path: path, filename: `Receipt-${receiptNumber || 'tengaPOS'}.pdf`, receipt_number: receiptNumber },
+    headers: { Authorization: `Bearer ${session?.access_token}` },
+  })
+  if (error) {
+    let msg = error.message
+    try { const ctx = await error.context?.json(); if (ctx?.error) msg = ctx.error } catch { /* keep default */ }
+    throw new Error(msg)
+  }
+  if (data?.error) throw new Error(data.error)
+  return data
+}
+
 // Upload a site asset (e.g. announcement popup background) to storage; returns its public URL
 export async function uploadSiteAsset(file) {
   const ext = file.name.split('.').pop()?.toLowerCase() || 'jpg'

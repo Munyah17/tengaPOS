@@ -135,6 +135,13 @@ serve(async (req) => {
         features: { ...(t?.features || {}), ai_insights: true },
         ai_insights_expires_at: renewal.toISOString(),
       }).eq('id', tenantId)
+    } else if (kind === 'whatsapp_receipts') {
+      // Unlock WhatsApp Receipts for the paid period
+      const { data: t } = await admin.from('tenants').select('features').eq('id', tenantId).maybeSingle()
+      await admin.from('tenants').update({
+        features: { ...(t?.features || {}), whatsapp_receipts: true },
+        whatsapp_receipts_expires_at: renewal.toISOString(),
+      }).eq('id', tenantId)
     } else {
       // Activate the tenant on the paid plan (clears any trial lock)
       await admin.from('tenants').update({

@@ -1,10 +1,12 @@
 import { useRef, useState } from 'react'
-import { Printer, X, CheckCircle, Usb } from 'lucide-react'
+import { Printer, X, CheckCircle, Usb, MessageCircle } from 'lucide-react'
 import { useFiscalStore } from '@/stores/fiscalStore'
 import { useReceiptConfigStore } from '@/stores/receiptConfigStore'
 import { useAuthStore } from '@/stores/authStore'
 import { formatCurrency, formatUnitPrice } from '@/utils/formatters'
 import { printToPosPrinter, paperWidthToChars } from '@/lib/posPrinter'
+import { generateReceiptPdfBlob } from '@/utils/receiptPdf'
+import { sendReceiptViaWhatsApp } from '@/lib/db'
 import toast from 'react-hot-toast'
 
 // ZIMRA payment method mapping per FDMS spec v7.2
@@ -36,6 +38,9 @@ export default function ZimraReceipt({ receipt, onClose }) {
   const fdmsQrUrl = receipt.fdmsQrUrl || null
   const receiptRef = useRef(null)
   const [posPrinting, setPosPrinting] = useState(false)
+  const [showWhatsApp, setShowWhatsApp] = useState(false)
+  const [whatsappPhone, setWhatsappPhone] = useState('')
+  const [sendingWhatsApp, setSendingWhatsApp] = useState(false)
   const fiscal = useFiscalStore()
   const receiptConfig = useReceiptConfigStore()
   const { tenant } = useAuthStore()
@@ -323,6 +328,26 @@ export default function ZimraReceipt({ receipt, onClose }) {
     }
   }
 
+  const handleSendWhatsApp = async () => {
+    if (!whatsappPhone.trim()) { toast.error('Enter a phone number'); return }
+    setSendingWhatsApp(true)
+    try {
+      const pdfBlob = generateReceiptPdfBlob(receipt, {
+        storeName, storeAddress, storeContacts, tin, vatNo, logoUrl: receiptConfig.logoUrl,
+        dateStr, timeStr, showFiscalSection, deviceID, receiptGlobalNo,
+        shopFooterLines, systemFooterLines, headerMessage, customLines,
+      })
+      await sendReceiptViaWhatsApp(tenant.id, whatsappPhone.trim(), pdfBlob, receipt.receiptNumber)
+      toast.success('Receipt sent via WhatsApp')
+      setShowWhatsApp(false)
+      setWhatsappPhone('')
+    } catch (err) {
+      toast.error(err.message || 'Could not send via WhatsApp')
+    } finally {
+      setSendingWhatsApp(false)
+    }
+  }
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       {/* Backdrop */}
@@ -559,6 +584,40 @@ export default function ZimraReceipt({ receipt, onClose }) {
               </button>
             )}
           </div>
+
+          {/* WhatsApp Receipts is a paid add-on -- no button at all for a
+              tenant who hasn't subscribed, rather than a disabled one with
+              no clear next step in this modal. */}
+          {tenant?.features?.whatsapp_receipts === true && (
+            showWhatsApp ? (
+              <div className="flex gap-2">
+                <input
+                  type="tel"
+                  autoFocus
+                  value={whatsappPhone}
+                  onChange={(e) => setWhatsappPhone(e.target.value)}
+                  placeholder="e.g. 263771234567"
+                  className="flex-1 rounded-xl border border-slate-200 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                />
+                <button
+                  onClick={handleSendWhatsApp}
+                  disabled={sendingWhatsApp}
+                  className="flex-shrink-0 rounded-xl bg-green-600 px-4 py-2 text-sm font-semibold text-white hover:bg-green-700 disabled:opacity-60"
+                >
+                  {sendingWhatsApp ? 'Sending…' : 'Send'}
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => setShowWhatsApp(true)}
+                className="flex w-full items-center justify-center gap-1.5 rounded-xl border border-green-600 py-2.5 text-sm font-semibold text-green-600 hover:bg-green-50 dark:text-green-400 dark:hover:bg-slate-800"
+              >
+                <MessageCircle className="h-4 w-4 flex-shrink-0" />
+                Send via WhatsApp
+              </button>
+            )
+          )}
+
           <button
             onClick={onClose}
             className="w-full rounded-xl border border-slate-200 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"

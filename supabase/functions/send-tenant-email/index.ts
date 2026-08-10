@@ -90,12 +90,23 @@ function template(name: string, tenantName: string, extra: Record<string, unknow
 // — a heads-up to act on, not a tenant-facing email.
 const ADMIN_ALERT_TEMPLATES = new Set(['new_signup_admin', 'trial_expired_admin'])
 
-async function sendMail(to: string, subject: string, body: string) {
+// All tengaPOS mailboxes share one password on this host (cPanel-style
+// shared hosting) -- switching mailboxes is just switching the auth
+// username to match, no separate secret per box needed. Only the
+// trial-conversion discount email uses this: it's a genuine sales pitch
+// ("10% off, come back"), and sending it from sales@ instead of the
+// generic noreply@ every other automated email uses is the difference
+// between "a system emailed me" and "someone actually wants my business."
+const SENDER_OVERRIDE: Record<string, string> = {
+  trial_reminder_discount: 'sales@tengapos.co.zw',
+}
+
+async function sendMail(to: string, subject: string, body: string, senderOverride?: string) {
   const host = Deno.env.get('SMTP_HOST')
   const port = Number(Deno.env.get('SMTP_PORT') || 587)
-  const user = Deno.env.get('SMTP_USER')
+  const user = senderOverride || Deno.env.get('SMTP_USER')
   const pass = Deno.env.get('SMTP_PASS')
-  const from = Deno.env.get('SMTP_FROM') || user
+  const from = senderOverride || Deno.env.get('SMTP_FROM') || user
   if (!host || !user || !pass) throw new Error('SMTP not configured')
 
   const client = new SMTPClient({
@@ -172,7 +183,7 @@ serve(async (req) => {
     })
     if (!t) return json({ error: `Unknown template ${templateName}` }, 400)
 
-    await sendMail(recipient, t.subject, t.body)
+    await sendMail(recipient, t.subject, t.body, SENDER_OVERRIDE[templateName])
     return json({ sent: true })
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err)

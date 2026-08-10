@@ -12,10 +12,11 @@ const TEAM_SIZE_RANGES = ['1-5', '6-15', '16-30', '31-50', '50+']
 
 export default function Register() {
   const [form, setForm] = useState({
-    name: '', email: '', phone: '', password: '', businessName: '', businessType: 'retail',
+    name: '', email: '', phone: '', whatsappNumber: '', password: '', businessName: '', businessType: 'retail',
     industry: '', location: '', requestedBranches: '', teamSizeRange: '', requestedPlanPref: '',
     workAddress: '', workContact: '', specialRequirements: '',
   })
+  const [sameAsPhone, setSameAsPhone] = useState(true)
   const [showMore, setShowMore] = useState(false)
   const [loading, setLoading] = useState(false)
   const navigate = useNavigate()
@@ -25,9 +26,12 @@ export default function Register() {
     e.preventDefault()
     if (form.password.length < 8) { toast.error('Password must be at least 8 characters'); return }
     if (!form.phone.trim()) { toast.error('Phone number is required'); return }
+    const whatsappNumber = sameAsPhone ? form.phone : form.whatsappNumber
+    if (!whatsappNumber.trim()) { toast.error('WhatsApp number is required'); return }
     setLoading(true)
     try {
       const data = await signUp(form.email, form.password, form.name, form.businessName, form.businessType, form.phone, {
+        whatsappNumber,
         industry: form.industry,
         location: form.location,
         requestedBranches: form.requestedBranches,
@@ -150,6 +154,34 @@ export default function Register() {
                 required
               />
               <p className="mt-1 text-xs text-slate-500">So we can reach you if you need help getting set up</p>
+            </div>
+
+            <div>
+              <label className="mb-1.5 flex items-center justify-between text-sm font-medium text-slate-300">
+                WhatsApp Number
+                <span className="flex items-center gap-1.5 text-xs font-normal text-slate-500">
+                  <input
+                    type="checkbox"
+                    checked={sameAsPhone}
+                    onChange={(e) => {
+                      setSameAsPhone(e.target.checked)
+                      if (e.target.checked) setForm((f) => ({ ...f, whatsappNumber: f.phone }))
+                    }}
+                    className="h-3.5 w-3.5"
+                  />
+                  Same as phone
+                </span>
+              </label>
+              <input
+                type="tel"
+                value={sameAsPhone ? form.phone : form.whatsappNumber}
+                onChange={(e) => { setSameAsPhone(false); setForm((f) => ({ ...f, whatsappNumber: e.target.value })) }}
+                disabled={sameAsPhone}
+                className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white placeholder-slate-500 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 disabled:opacity-60"
+                placeholder="+263 77 123 4567"
+                required
+              />
+              <p className="mt-1 text-xs text-slate-500">Where tengaPOS will reach you — trial reminders, account updates, offers</p>
             </div>
 
             <button

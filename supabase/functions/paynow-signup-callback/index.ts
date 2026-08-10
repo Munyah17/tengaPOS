@@ -101,6 +101,7 @@ serve(async (req) => {
       const isFiscal = String(checkout.plan_type).startsWith('fiscal_')
       const isAccountingErp = String(checkout.plan_type).startsWith('erp_')
       const isAiInsights = String(checkout.plan_type).startsWith('ai_')
+      const isWhatsappReceipts = String(checkout.plan_type).startsWith('wa_')
       const FISCAL_MONTHS: Record<string, number> = {
         fiscal_monthly: 1, fiscal_quarterly: 3, fiscal_halfyear: 6, fiscal_yearly: 12,
       }
@@ -110,12 +111,17 @@ serve(async (req) => {
       const AI_MONTHS: Record<string, number> = {
         ai_monthly: 1, ai_quarterly: 3, ai_halfyear: 6, ai_yearly: 12,
       }
+      const WHATSAPP_MONTHS: Record<string, number> = {
+        wa_monthly: 1, wa_yearly: 12,
+      }
       const months = isFiscal
         ? (FISCAL_MONTHS[checkout.plan_type] || 1)
         : isAccountingErp
         ? (ERP_MONTHS[checkout.plan_type] || 1)
         : isAiInsights
         ? (AI_MONTHS[checkout.plan_type] || 1)
+        : isWhatsappReceipts
+        ? (WHATSAPP_MONTHS[checkout.plan_type] || 1)
         : (PLAN_MONTHS[checkout.plan_type] || 6)
       const now = new Date()
       const renewal = new Date(now)
@@ -149,6 +155,13 @@ serve(async (req) => {
         await admin.from('tenants').update({
           features: { ...(t?.features || {}), ai_insights: true },
           ai_insights_expires_at: renewal.toISOString(),
+        }).eq('id', checkout.tenant_id)
+      } else if (isWhatsappReceipts) {
+        // Unlock WhatsApp Receipts for the paid period
+        const { data: t } = await admin.from('tenants').select('features').eq('id', checkout.tenant_id).maybeSingle()
+        await admin.from('tenants').update({
+          features: { ...(t?.features || {}), whatsapp_receipts: true },
+          whatsapp_receipts_expires_at: renewal.toISOString(),
         }).eq('id', checkout.tenant_id)
       } else {
         await admin.from('tenants').update({

@@ -29,6 +29,8 @@ const PERIOD_MONTHS: Record<string, number> = { monthly: 1, quarterly: 3, halfye
 const PERIOD_LABEL: Record<string, string> = { monthly: 'Monthly', quarterly: '3 Months', halfyear: '6 Months', yearly: 'Yearly' }
 const ACCOUNTING_ERP_PRICES: Record<string, number> = { monthly: 5, quarterly: 13, halfyear: 24, yearly: 45 }
 const AI_INSIGHTS_PRICES: Record<string, number> = { monthly: 1, quarterly: 3, halfyear: 5, yearly: 9 }
+// Only monthly/yearly -- no quarterly/halfyear tier was asked for.
+const WHATSAPP_RECEIPTS_PRICES: Record<string, number> = { monthly: 5, yearly: 50 }
 const PLAN_LABELS: Record<string, string> = {
   byod_monthly: 'tengaPOS BYOD Monthly (1 month)',
   standard_plan: 'tengaPOS Standard Plan (once-off, 6 months included)',
@@ -70,6 +72,7 @@ serve(async (req) => {
     const isFiscal = type === 'fiscalisation'
     const isAccountingErp = type === 'accounting_erp'
     const isAiInsights = type === 'ai_insights'
+    const isWhatsappReceipts = type === 'whatsapp_receipts'
     const isPlatformInvoice = type === 'platform_invoice'
 
     // Resolve the caller's tenant server-side — never trust a client tenant_id
@@ -113,6 +116,11 @@ serve(async (req) => {
       const price = AI_INSIGHTS_PRICES[period as string]
       if (!months || !price) return json({ error: 'Invalid AI Insights period' }, 400)
       plan = { amount: price, label: `AI Insights — ${PERIOD_LABEL[period as string]}`, months }
+    } else if (isWhatsappReceipts) {
+      const months = PERIOD_MONTHS[period as string]
+      const price = WHATSAPP_RECEIPTS_PRICES[period as string]
+      if (!months || !price) return json({ error: 'Invalid WhatsApp Receipts period' }, 400)
+      plan = { amount: price, label: `WhatsApp Receipts — ${PERIOD_LABEL[period as string]}`, months }
     } else {
       const { data: pp } = await admin.from('platform_settings').select('value').eq('key', 'plan_pricing').maybeSingle()
       const table = { ...FALLBACK_PLAN_PRICES, ...((pp?.value as Record<string, { price: number; renewalMonths: number }>) || {}) }
@@ -130,9 +138,9 @@ serve(async (req) => {
       plan = { amount, label: PLAN_LABELS[plan_type] || `tengaPOS ${plan_type}`, months: p.renewalMonths }
     }
 
-    const checkoutKind = isPlatformInvoice ? 'platform_invoice' : isFiscal ? 'fiscalisation' : isAccountingErp ? 'accounting_erp' : isAiInsights ? 'ai_insights' : 'plan'
-    const planKey = isPlatformInvoice ? 'platform_invoice' : isFiscal ? `fiscal_${period}` : isAccountingErp ? `erp_${period}` : isAiInsights ? `ai_${period}` : plan_type
-    const refPrefix = isPlatformInvoice ? 'PINV' : isFiscal ? 'FIS' : isAccountingErp ? 'ERP' : isAiInsights ? 'AI' : 'SUB'
+    const checkoutKind = isPlatformInvoice ? 'platform_invoice' : isFiscal ? 'fiscalisation' : isAccountingErp ? 'accounting_erp' : isAiInsights ? 'ai_insights' : isWhatsappReceipts ? 'whatsapp_receipts' : 'plan'
+    const planKey = isPlatformInvoice ? 'platform_invoice' : isFiscal ? `fiscal_${period}` : isAccountingErp ? `erp_${period}` : isAiInsights ? `ai_${period}` : isWhatsappReceipts ? `wa_${period}` : plan_type
+    const refPrefix = isPlatformInvoice ? 'PINV' : isFiscal ? 'FIS' : isAccountingErp ? 'ERP' : isAiInsights ? 'AI' : isWhatsappReceipts ? 'WA' : 'SUB'
     const reference = `${refPrefix}-${Date.now()}-${Math.random().toString(36).slice(2, 7).toUpperCase()}`
     const amountStr = plan.amount.toFixed(2)
     const returnUrl = return_url || 'https://www.tengapos.co.zw/checkout'
