@@ -37,6 +37,14 @@ export default function AppLayout() {
     // NOT applied via setSession() here, same reasoning as viewAsTenant().
     sessionStorage.removeItem('tengapos_impersonation_mode')
     if (saved) sessionStorage.setItem('tengapos_session_handoff', saved)
+    // This tab was opened via window.open() from the admin panel in the
+    // normal case (see viewAsTenant()) -- closing it just returns focus to
+    // that still-open, untouched Super Admin tab, no navigation needed.
+    // window.close() silently no-ops on a tab the browser doesn't consider
+    // script-opened (e.g. the popup-blocked fallback path, or a page
+    // refresh while impersonating); execution reaching the line after it
+    // means that happened, so fall back to navigating there instead.
+    window.close()
     window.location.href = '/admin/super/tenants'
   }
 

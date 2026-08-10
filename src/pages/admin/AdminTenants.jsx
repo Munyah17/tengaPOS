@@ -318,6 +318,16 @@ export function TenantModal({ tenant, technicians, onClose, onSaved }) {
   // account (full rights, not a restricted view), for support/operations.
   // The current admin session is stashed first so AppLayout's banner can
   // restore it on "Exit to Super Admin" -- see viewAsTenant().
+  //
+  // Opens in a genuinely separate tab rather than navigating this one away
+  // -- the Super Admin panel should stay exactly where the admin left it
+  // while assisting a tenant, not get replaced by it. window.open() on the
+  // same origin hands the new tab a COPY of this tab's sessionStorage at
+  // the moment it opens, which is why the impersonation flags below are
+  // set BEFORE calling it -- the new tab picks them up immediately and
+  // switches to the isolated impersonation storage key (see supabase.js),
+  // while THIS tab's session is never touched at all. Falls back to
+  // same-tab navigation only if the browser blocks the popup.
   const [impersonating, setImpersonating] = useState(false)
   const viewAsTenant = async () => {
     setImpersonating(true)
@@ -347,11 +357,18 @@ export function TenantModal({ tenant, technicians, onClose, onSaved }) {
       sessionStorage.setItem('tengapos_session_handoff', JSON.stringify({
         access_token: data.access_token, refresh_token: data.refresh_token,
       }))
-      // Hard navigation, not client-side routing -- guarantees every bit of
-      // in-memory state (React Query cache, cart/receipt/theme stores) is
-      // wiped clean for the new identity instead of carrying anything over,
-      // and forces supabase.js to re-evaluate which storage key to use.
-      window.location.href = '/app/dashboard'
+      // A real, full page load (not client-side routing) either way --
+      // guarantees every bit of in-memory state (React Query cache, cart/
+      // receipt/theme stores) starts clean for the new identity instead of
+      // carrying anything over, and forces supabase.js to re-evaluate
+      // which storage key to use.
+      const newTab = window.open('/app/dashboard', '_blank')
+      if (!newTab) {
+        toast('Pop-up blocked — opening here instead. Allow pop-ups for tengapos.co.zw to keep your Super Admin panel open in its own tab next time.', { icon: '⚠️', duration: 6000 })
+        window.location.href = '/app/dashboard'
+      } else {
+        setImpersonating(false)
+      }
     } catch (err) {
       toast.error(err.message || 'Could not view as this tenant')
       setImpersonating(false)
