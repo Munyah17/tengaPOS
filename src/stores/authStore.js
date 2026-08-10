@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { supabase } from '@/lib/supabase'
+import { isStaleJwtError, refreshSessionOnce } from '@/lib/authRetry'
 
 // On a weak/slow connection, signInWithPassword could otherwise hang for a
 // very long time with no feedback (the browser's own fetch timeout, if any,
@@ -356,7 +357,21 @@ export const useAuthStore = create(
         if (!cached.isAuthenticated || !cached.user) return
 
         try {
-          const { data: { user: serverUser }, error: authErr } = await supabase.auth.getUser()
+          let { data: { user: serverUser }, error: authErr } = await supabase.auth.getUser()
+          // A token signed under a since-rotated key fails verification
+          // here every single time (it isn't expired, so autoRefreshToken
+          // never replaces it on its own) -- this state was previously
+          // indistinguishable from "couldn't reach the server", so it was
+          // silently left alone forever: cached auth state still says
+          // logged in, but every real API call using that same broken
+          // token keeps failing (reported live as products/inventory
+          // silently not loading). One refresh attempt is enough to
+          // recover if that's genuinely what happened; a real network
+          // failure just fails the refresh too and still falls through to
+          // "inconclusive" below, exactly as before.
+          if (authErr && isStaleJwtError(authErr.message) && await refreshSessionOnce(supabase)) {
+            ;({ data: { user: serverUser }, error: authErr } = await supabase.auth.getUser())
+          }
           if (authErr || !serverUser) return // couldn't reach/validate — inconclusive, not a mismatch
 
           if (serverUser.id !== cached.user.id) {

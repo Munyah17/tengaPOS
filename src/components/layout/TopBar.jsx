@@ -186,7 +186,19 @@ export default function TopBar({ onMenuClick }) {
         )}
 
         <div className="flex-shrink-0"><ThemeToggle /></div>
+      </div>
 
+      {/* Bell + Avatar are pinned outside the scroll container above, not
+          inside it. Setting overflow-x also forces the browser to clip
+          overflow-y (a CSS rule: overflow-x and overflow-y can't be
+          "visible" vs. non-visible on the same axis pair) -- so anything
+          absolutely-positioned inside that scrolling row that extends
+          below it, like these two dropdowns, was getting clipped right at
+          the header's edge instead of floating over the page. Reported
+          live as the avatar menu appearing to render behind the header
+          bar rather than sliding over it. Keeping them as their own,
+          non-scrolling flex items sidesteps the clipping entirely. */}
+      <div className="flex flex-shrink-0 items-center gap-1.5">
         {/* Bell dropdown */}
         <div ref={bellRef} className="relative flex-shrink-0">
           <button

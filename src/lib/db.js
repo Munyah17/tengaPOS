@@ -5,14 +5,29 @@ import { generateUUID } from '@/lib/uuid'
 
 // ─── Products ────────────────────────────────────────────────────────────────
 
-export async function fetchProducts(tenantId) {
+// A session token signed under a since-rotated key fails verification on
+// every call that uses it -- not "expired", so autoRefreshToken never
+// proactively replaces it, and every read just silently comes back empty
+// or throws forever with the same stale token (see isStaleJwtError).
+// saveCheckout already refreshes-and-retries once for exactly this; POS/
+// Inventory's own product fetch never did, so a tenant hitting this
+// mid-session would see "no products" with no obvious error rather than
+// a clear failure -- reported live as items/inventory silently not
+// appearing. This is the single most-called read in the app (every POS
+// and Inventory load), so it gets the same resilience checkout has.
+export async function fetchProducts(tenantId, _retried = false) {
   const { data, error } = await supabase
     .from('products')
     .select('*, categories(name, color)')
     .eq('tenant_id', tenantId)
     .eq('is_active', true)
     .order('name')
-  if (error) throw error
+  if (error) {
+    if (!_retried && isStaleJwtError(error.message) && await refreshSessionOnce(supabase)) {
+      return fetchProducts(tenantId, true)
+    }
+    throw error
+  }
   return data.map(p => ({
     ...p,
     stock: p.stock_qty ?? 0,
