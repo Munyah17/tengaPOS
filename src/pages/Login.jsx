@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { Eye, EyeOff, LogIn, ArrowLeft, Mail, Sparkles } from 'lucide-react'
+import { Eye, EyeOff, LogIn, ArrowLeft, Mail } from 'lucide-react'
 import posIcon from '@/assets/pos-icon.png'
 import { useAuthStore } from '@/stores/authStore'
 import { supabase } from '@/lib/supabase'
@@ -205,15 +205,6 @@ export default function Login() {
             </button>
           </form>
           )} {/* end !resetMode */}
-
-          {/* 7-day free trial CTA — replaces the old demo roles */}
-          <Link
-            to="/register"
-            className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl border border-green-500/30 bg-green-500/10 px-4 py-3 text-sm font-semibold text-green-300 transition-colors hover:bg-green-500/20"
-          >
-            <Sparkles className="h-4 w-4" />
-            New here? Start a 7-day free trial — $0 due today
-          </Link>
 
           <p className="mt-6 text-center text-sm text-slate-400">
             {"Don't have an account? "}

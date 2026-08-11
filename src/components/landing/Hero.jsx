@@ -63,15 +63,15 @@ export default function Hero() {
                 to="/register"
                 className="inline-flex items-center justify-center gap-2 rounded-xl bg-brand-600 px-6 py-3 text-sm font-semibold text-white transition-colors hover:bg-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-2 focus:ring-offset-[#040c1a]"
               >
-                Start 7-Day Free Trial
+                Get Started
                 <ArrowRight className="h-4 w-4" />
               </Link>
               <Link
-                to="/register"
+                to="/demo"
                 className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-700 px-6 py-3 text-sm font-semibold text-slate-300 transition-colors hover:border-slate-600 hover:text-white"
               >
                 <Play className="h-4 w-4 fill-current" />
-                Request Demo
+                Live Demo
               </Link>
             </motion.div>
 
@@ -82,7 +82,7 @@ export default function Hero() {
               transition={{ delay: 0.5 }}
               className="mt-6 flex flex-wrap gap-4"
             >
-              {['7-Day Free Trial — $0 Due Today', 'No Credit Card', 'Cancel Anytime'].map((badge) => (
+              {['Works 100% Offline', 'Setup in Under 24h', '24/7 Support'].map((badge) => (
                 <div
                   key={badge}
                   className="flex items-center gap-1.5 text-sm text-slate-500"

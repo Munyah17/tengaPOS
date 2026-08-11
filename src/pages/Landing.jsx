@@ -59,19 +59,19 @@ export default function Landing() {
       <Hero />
 
       {/* Trusted by */}
-      <section className="border-y border-slate-100 bg-slate-50 py-10 dark:border-slate-800 dark:bg-slate-900">
+      <section className="border-y border-slate-100 bg-slate-50 py-8 dark:border-slate-800 dark:bg-slate-900 sm:py-10">
         <div className="mx-auto max-w-7xl px-6">
-          <p className="mb-8 text-center text-sm font-semibold uppercase tracking-widest text-slate-400">
+          <p className="mb-6 text-center text-xs font-semibold uppercase tracking-widest text-slate-400 sm:mb-8 sm:text-sm">
             Trusted by businesses of all sizes
           </p>
-          <div className="flex flex-wrap items-center justify-center gap-8">
+          <div className="grid grid-cols-3 gap-x-3 gap-y-4 sm:flex sm:flex-wrap sm:items-center sm:justify-center sm:gap-8">
             {trustedBy.map((company) => (
               <div
                 key={company.name}
-                className="flex items-center gap-2 text-slate-500 transition-colors hover:text-slate-700 dark:hover:text-slate-300"
+                className="flex flex-col items-center gap-1 text-slate-500 transition-colors hover:text-slate-700 dark:hover:text-slate-300 sm:flex-row sm:gap-2"
               >
-                <span className="text-lg">{company.icon}</span>
-                <span className="text-sm font-semibold">{company.name}</span>
+                <span className="text-base sm:text-lg">{company.icon}</span>
+                <span className="text-[11px] font-semibold sm:text-sm">{company.name}</span>
               </div>
             ))}
           </div>

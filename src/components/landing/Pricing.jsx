@@ -46,7 +46,7 @@ const plans = [
     ],
     cta: 'Get Started',
     ctaStyle: 'bg-brand-600 text-white hover:bg-brand-700',
-    extras: ['6 months free use included', '+ $20/month or $200/year hosting'],
+    extras: ['+ $20/month or $200/year hosting'],
   },
   {
     key: 'pro_package',
@@ -142,9 +142,6 @@ export default function Pricing() {
               <span className="inline-flex items-center gap-1.5 rounded-full border border-green-200 bg-green-50 px-4 py-1.5 text-sm font-medium text-green-700 dark:border-green-800 dark:bg-green-950/40 dark:text-green-400">
                 <Check className="h-3.5 w-3.5" />
                 Optional ZIMRA Fiscalisation add-on — ${fiscalPricing.monthly?.price ?? 20}/month
-              </span>
-              <span className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-4 py-1.5 text-sm font-medium text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400">
-                &#x21bb; 6 months free use with every hardware purchase
               </span>
             </div>
           </motion.div>
