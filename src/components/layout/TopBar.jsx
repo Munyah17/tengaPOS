@@ -120,20 +120,29 @@ export default function TopBar({ onMenuClick }) {
           enough for every badge below to fit) items are swipeable rather
           than silently clipped off-screen and unreachable (body has
           overflow-x:hidden globally, so unconstrained overflow here would
-          otherwise just disappear — including the avatar/sign-out menu). */}
+          otherwise just disappear — including the avatar/sign-out menu).
+          These badges used to switch on at `md:` (768px) -- squarely
+          inside a 6-8" tablet's own portrait width, so a device that
+          class of screen was always the one stacking every badge at once
+          with the least room to show them in. Reported live as the
+          header overflowing/getting clipped specifically on tablets.
+          Non-essential ones now wait for `lg:` (1024px, real desktop
+          width) instead; the two actionable alerts (pending/failed sync)
+          stay reachable earlier since they're money/data-safety signals,
+          not just decoration. */}
       <div className="flex min-w-0 items-center gap-1.5 overflow-x-auto">
         {/* Read-only badge */}
         {isReadOnly && (
-          <div className="hidden flex-shrink-0 items-center gap-1.5 rounded-lg bg-amber-50 px-2.5 py-1.5 text-xs font-semibold text-amber-700 dark:bg-amber-950 dark:text-amber-400 md:flex">
+          <div className="hidden flex-shrink-0 items-center gap-1.5 rounded-lg bg-amber-50 px-2.5 py-1.5 text-xs font-semibold text-amber-700 dark:bg-amber-950 dark:text-amber-400 lg:flex">
             <ShieldAlert className="h-3.5 w-3.5" />
             Read-only
           </div>
         )}
 
         {/* Online status */}
-        <div className={`hidden flex-shrink-0 items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium md:flex ${isOnline ? 'bg-green-50 text-green-700 dark:bg-green-950 dark:text-green-400' : 'bg-red-50 text-red-700 dark:bg-red-950 dark:text-red-400'}`}>
+        <div className={`hidden flex-shrink-0 items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium lg:flex ${isOnline ? 'bg-green-50 text-green-700 dark:bg-green-950 dark:text-green-400' : 'bg-red-50 text-red-700 dark:bg-red-950 dark:text-red-400'}`}>
           {isOnline ? <Wifi className="h-3.5 w-3.5" /> : <WifiOff className="h-3.5 w-3.5" />}
-          <span className="hidden md:inline">{isOnline ? 'Online' : 'Offline'}</span>
+          <span className="hidden lg:inline">{isOnline ? 'Online' : 'Offline'}</span>
         </div>
 
         {/* Pending offline sync count — reassurance that queued work hasn't been lost.
@@ -142,10 +151,10 @@ export default function TopBar({ onMenuClick }) {
           <button
             onClick={() => setShowSyncManager(true)}
             title={`${pendingSync} item${pendingSync !== 1 ? 's' : ''} saved offline, waiting to sync — click to view`}
-            className="hidden flex-shrink-0 items-center gap-1.5 rounded-lg bg-amber-50 px-2.5 py-1.5 text-xs font-medium text-amber-700 hover:bg-amber-100 dark:bg-amber-950 dark:text-amber-400 dark:hover:bg-amber-900 md:flex"
+            className="flex flex-shrink-0 items-center gap-1.5 rounded-lg bg-amber-50 px-2.5 py-1.5 text-xs font-medium text-amber-700 hover:bg-amber-100 dark:bg-amber-950 dark:text-amber-400 dark:hover:bg-amber-900"
           >
             <CloudUpload className="h-3.5 w-3.5" />
-            {pendingSync} pending
+            <span className="hidden sm:inline">{pendingSync} pending</span>
           </button>
         )}
 
@@ -156,20 +165,21 @@ export default function TopBar({ onMenuClick }) {
           <button
             onClick={() => setShowSyncManager(true)}
             title={`${failedSync} item${failedSync !== 1 ? 's' : ''} couldn't sync — click to review`}
-            className="hidden flex-shrink-0 items-center gap-1.5 rounded-lg bg-red-50 px-2.5 py-1.5 text-xs font-medium text-red-700 hover:bg-red-100 dark:bg-red-950 dark:text-red-400 dark:hover:bg-red-900 md:flex"
+            className="flex flex-shrink-0 items-center gap-1.5 rounded-lg bg-red-50 px-2.5 py-1.5 text-xs font-medium text-red-700 hover:bg-red-100 dark:bg-red-950 dark:text-red-400 dark:hover:bg-red-900"
           >
             <AlertTriangle className="h-3.5 w-3.5" />
-            {failedSync} failed
+            <span className="hidden sm:inline">{failedSync} failed</span>
           </button>
         )}
 
         <div className="flex-shrink-0"><RefreshOnlineButton /></div>
 
-        {/* POS mode toggle — hidden below md (also reachable via the avatar
-            dropdown's own mode switcher), and only shown at all when Super
-            Admin has enabled more than one mode for this tenant */}
+        {/* POS mode toggle — hidden below lg (also reachable via the avatar
+            dropdown's own mode switcher, which is now the tablet/mobile
+            way to switch), and only shown at all when Super Admin has
+            enabled more than one mode for this tenant */}
         {enabledModes.length > 1 && (
-          <div className="hidden flex-shrink-0 items-center overflow-hidden rounded-xl border border-slate-200 dark:border-slate-700 md:flex">
+          <div className="hidden flex-shrink-0 items-center overflow-hidden rounded-xl border border-slate-200 dark:border-slate-700 lg:flex">
             {enabledModes.map((m) => {
               const meta = MODE_META[m] || MODE_META.retail
               return (
