@@ -314,7 +314,7 @@ export default function Insights() {
       </div>
 
       {/* KPI row */}
-      <div className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="mb-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
         <Metric label="Total Revenue" value={`$${totalRevenue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} icon={DollarSign} color="brand" sub={tlMeta.label} />
         <Metric label="Gross Profit"  value={`$${totalProfit.toLocaleString(undefined,  { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} icon={TrendingUp}  color="green"  sub={`${totalRevenue > 0 ? ((totalProfit / totalRevenue) * 100).toFixed(1) : 0}% margin`} />
         <Metric label="Units Sold"    value={totalUnits.toLocaleString()}            icon={ShoppingCart} color="purple" />

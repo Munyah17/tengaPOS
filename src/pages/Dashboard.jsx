@@ -250,7 +250,7 @@ export default function Dashboard() {
       {/* Workshop Mode: job card status at a glance -- what Retail/Restaurant's
           stat cards below don't cover, since job cards are Workshop-only */}
       {isWorkshop && (
-        <div className="mb-6 grid gap-4 sm:grid-cols-3">
+        <div className="mb-6 grid grid-cols-2 gap-4 sm:grid-cols-3">
           {[
             { label: 'Open', value: jobCards.filter((j) => j.status === 'open').length, icon: Clock, color: 'from-blue-500 to-blue-700' },
             { label: 'In Progress', value: jobCards.filter((j) => j.status === 'in_progress').length, icon: WrenchIcon, color: 'from-amber-500 to-amber-700' },
@@ -288,7 +288,7 @@ export default function Dashboard() {
         return (
           <div className="mb-6 rounded-2xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900">
             <h3 className="mb-3 text-sm font-bold uppercase tracking-wide text-slate-500">Today at the Workshop</h3>
-            <div className="grid gap-4 sm:grid-cols-4">
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
               <div>
                 <p className="text-xs text-slate-500">Jobs Completed</p>
                 <p className="text-2xl font-extrabold text-slate-900 dark:text-white">{completedToday.length}</p>
@@ -311,7 +311,7 @@ export default function Dashboard() {
       })()}
 
       {/* Stat Cards */}
-      <div className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="mb-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
         {statCards.map((card, i) => (
           <motion.div
             key={card.label}

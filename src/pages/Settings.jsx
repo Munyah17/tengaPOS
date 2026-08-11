@@ -1169,7 +1169,7 @@ export default function Settings() {
                 <h3 className="text-lg font-bold text-slate-900 dark:text-white">Payment Methods</h3>
                 <p className="text-sm text-slate-500">Providers your store accepts payments through.</p>
 
-                <div className="grid gap-3 sm:grid-cols-2">
+                <div className="grid grid-cols-2 gap-3">
                   {PAYMENT_PROVIDERS.map((p) => (
                     <div
                       key={p.id}
@@ -2001,7 +2001,7 @@ export default function Settings() {
                     <div className="flex items-center gap-2 rounded-xl border border-green-300 bg-green-50 px-4 py-2.5 text-sm font-semibold text-green-800 dark:border-green-700/60 dark:bg-green-900/20 dark:text-green-300">
                       <CheckCircle className="h-4 w-4" /> White label is active for your account
                     </div>
-                    <div className="grid gap-4 sm:grid-cols-2">
+                    <div className="grid grid-cols-2 gap-4">
                       <div>
                         <p className="text-xs font-semibold uppercase text-slate-400">Brand Name</p>
                         <p className="text-sm text-slate-900 dark:text-white">{tenant.whitelabel.brand_name || '—'}</p>

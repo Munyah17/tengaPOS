@@ -45,7 +45,7 @@ function BranchDetail({ branch, onBack }) {
       </div>
 
       {/* KPIs */}
-      <div className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="mb-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
         {[
           { label: 'Revenue', value: formatCurrency(branch.revenue), icon: DollarSign, color: 'brand' },
           { label: 'Gross Profit', value: formatCurrency(profit), sub: `${margin}% margin`, icon: TrendingUp, color: 'green' },
@@ -236,7 +236,7 @@ export default function Branches() {
 
       {/* Summary row */}
       {visibleBranches.length > 0 && (
-        <div className="mb-6 grid gap-3 sm:grid-cols-3">
+        <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3">
           <div className="rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
             <DollarSign className="mb-1.5 h-5 w-5 text-brand-500" />
             <div className="text-xl font-extrabold text-slate-900 dark:text-white">{formatCurrency(totalRevenue)}</div>

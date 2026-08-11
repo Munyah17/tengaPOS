@@ -98,7 +98,7 @@ export default function FinancialReports() {
         ))}
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-3">
         {cards.map((c) => (
           <div key={c.label} className="rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
             <div className="flex items-center gap-2 text-xs text-slate-500"><c.icon className="h-4 w-4" /> {c.label}</div>

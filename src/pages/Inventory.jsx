@@ -537,7 +537,7 @@ export default function Inventory() {
       </div>
 
       {/* Stats */}
-      <div className="mb-6 grid gap-4 sm:grid-cols-3">
+      <div className="mb-6 grid grid-cols-2 gap-4 sm:grid-cols-3">
         {[
           { label: 'Total Products', value: stats.total, icon: Package, color: 'brand' },
           { label: 'Low Stock Items', value: stats.lowStock, icon: AlertTriangle, color: 'amber' },
