@@ -8,6 +8,8 @@ import { useAuthStore, ROLE_COLORS, ROLE_LABELS, NAV_PERMISSIONS } from '@/store
 import { useFiscalStore } from '@/stores/fiscalStore'
 import { useTenantNotifications } from '@/hooks/useTenantNotifications'
 import { pendingSyncCount, failedSyncCount } from '@/lib/offlineSync'
+import { isDemoRoute } from '@/lib/demoMode'
+import { exitDemoMode } from '@/lib/demoAuth'
 import SyncQueueManager from './SyncQueueManager'
 
 // Retail/Restaurant/Workshop/Hardware/Manufacturing/Pharmacy — same modes as
@@ -89,13 +91,15 @@ export default function TopBar({ onMenuClick }) {
       setShowFiscalWarning(true)
       return
     }
-    await clearAuth()
+    if (isDemoRoute()) exitDemoMode()
+    else await clearAuth()
     navigate('/')
   }
 
   const confirmSignOut = async () => {
     setShowFiscalWarning(false)
-    await clearAuth()
+    if (isDemoRoute()) exitDemoMode()
+    else await clearAuth()
     navigate('/')
   }
 

@@ -13,7 +13,8 @@ import { Link } from 'react-router-dom'
 import { Megaphone, Sparkles, Bell, ChevronRight, X, Inbox } from 'lucide-react'
 import { useThemeStore } from '@/stores/themeStore'
 import { useAuthStore } from '@/stores/authStore'
-import { fetchDashboardMetrics, fetchVendorRequests, fetchJobCards } from '@/lib/db'
+import { fetchDashboardMetrics, fetchVendorRequests, fetchJobCards } from '@/lib/dataLayer'
+import { isDemoRoute } from '@/lib/demoMode'
 import { formatCurrency } from '@/utils/formatters'
 import { supabase } from '@/lib/supabase'
 import { withOfflineCache, seedFromOfflineCache } from '@/lib/offlineCache'
@@ -75,6 +76,7 @@ export default function Dashboard() {
   const dismissForever = async (id) => {
     dismissForSession(id)
     queryClient.setQueryData(['announcements', user?.id], (prev) => (prev || []).filter((a) => a.id !== id))
+    if (isDemoRoute()) return // no real user row to attach a dismissal to
     try {
       await supabase.from('announcement_dismissals').insert({ user_id: user.id, announcement_id: id })
     } catch {
@@ -123,7 +125,7 @@ export default function Dashboard() {
       const dismissedIds = new Set((dismissals || []).map((d) => d.announcement_id))
       return (anns || []).filter((a) => !dismissedIds.has(a.id)).slice(0, 3)
     },
-    enabled: !!user?.id,
+    enabled: !!user?.id && !isDemoRoute(),
     staleTime: 5 * 60000,
   })
 

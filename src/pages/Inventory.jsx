@@ -18,7 +18,7 @@ import {
   fetchBranches, fetchProductBranches, assignProductBranch, unassignProductBranch,
   fetchCategories, createCategory, fetchStockTransfers, transferStock,
   fetchStockReceipts, receiveStock,
-} from '@/lib/db'
+} from '@/lib/dataLayer'
 import { getOfflineProducts, queueOfflineInventoryWrite } from '@/lib/offlineSync'
 import { resizeImageFile } from '@/utils/imageResize'
 import toast from 'react-hot-toast'

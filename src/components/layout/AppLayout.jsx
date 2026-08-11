@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react'
-import { Outlet, useLocation } from 'react-router-dom'
+import { Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
+import { Gamepad2 } from 'lucide-react'
 import Sidebar from './Sidebar'
 import TopBar from './TopBar'
-import { useAuthStore } from '@/stores/authStore'
+import { useAuthStore, ROLE_LABELS } from '@/stores/authStore'
 import { useThemeStore } from '@/stores/themeStore'
 import { useReceiptConfigStore } from '@/stores/receiptConfigStore'
 import { useFiscalStore } from '@/stores/fiscalStore'
@@ -12,14 +13,31 @@ import { fetchEffectiveReceiptConfig } from '@/lib/db'
 import { loadWithOfflineCache } from '@/lib/offlineCache'
 import { applyWhitelabelTheme, clearWhitelabelTheme } from '@/lib/whitelabelTheme'
 import { supabase } from '@/lib/supabase'
+import { isDemoRoute } from '@/lib/demoMode'
+import { switchDemoRole, exitDemoMode, firstAllowedDemoPath } from '@/lib/demoAuth'
 import ErrorBoundary from '@/components/common/ErrorBoundary'
 import toast from 'react-hot-toast'
 
+const DEMO_SWITCHABLE_ROLES = ['vendor', 'shop_manager', 'supervisor', 'cashier', 'shop_assistant']
+
 export default function AppLayout() {
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false)
-  const { tenant, branch } = useAuthStore()
+  const { tenant, branch, role } = useAuthStore()
   const location = useLocation()
+  const navigate = useNavigate()
   const queryClient = useQueryClient()
+  const inDemo = isDemoRoute()
+
+  const handleDemoRoleChange = (e) => {
+    const nextRole = e.target.value
+    switchDemoRole(nextRole)
+    navigate(firstAllowedDemoPath(nextRole), { replace: true })
+  }
+
+  const handleExitDemo = () => {
+    exitDemoMode()
+    navigate('/', { replace: true })
+  }
 
   // "View as Tenant" (AdminTenants.jsx) stashes the admin's own session here
   // before switching to the tenant's -- this banner is the only way back.
@@ -127,7 +145,7 @@ export default function AppLayout() {
   // (non-reloading) refresh RefreshOnlineButton does: fire the shared
   // force-refresh event and invalidate every mounted React Query query.
   useEffect(() => {
-    if (!tenant?.id) return
+    if (!tenant?.id || isDemoRoute()) return
     return startBackgroundSync(tenant.id, {
       onSynced: ({ synced }) => {
         toast.success(`Synced ${synced} offline sale${synced !== 1 ? 's' : ''}`)
@@ -152,6 +170,7 @@ export default function AppLayout() {
   // minutes. Locks the account only on a genuine identity mismatch; a
   // network hiccup here does nothing (see validateSession).
   useEffect(() => {
+    if (isDemoRoute()) return
     const tick = () => useAuthStore.getState().validateSession()
     tick()
     const interval = setInterval(tick, 5 * 60 * 1000)
@@ -167,7 +186,7 @@ export default function AppLayout() {
   // firing) — without this, the trial banner and gated features would stay
   // stuck on stale data until the user manually logs out and back in.
   useEffect(() => {
-    if (!tenant?.id) return
+    if (!tenant?.id || isDemoRoute()) return
     const channel = supabase
       .channel(`tenant-live-${tenant.id}`)
       .on('postgres_changes', {
@@ -201,6 +220,31 @@ export default function AppLayout() {
     >
       <Sidebar open={mobileSidebarOpen} onClose={() => setMobileSidebarOpen(false)} />
       <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+        {inDemo && (
+          <div className="flex flex-shrink-0 flex-wrap items-center justify-between gap-2 bg-amber-500 px-4 py-2 text-sm text-white">
+            <span className="flex items-center gap-1.5 font-semibold">
+              <Gamepad2 className="h-4 w-4" />
+              Live Demo — sample data only, nothing here is saved
+            </span>
+            <div className="flex items-center gap-2">
+              <select
+                value={role}
+                onChange={handleDemoRoleChange}
+                className="rounded-lg border-none bg-white/20 px-2 py-1 text-xs font-bold text-white [&>option]:text-slate-900"
+              >
+                {DEMO_SWITCHABLE_ROLES.map((r) => (
+                  <option key={r} value={r}>{ROLE_LABELS[r]}</option>
+                ))}
+              </select>
+              <a href="/register" className="rounded-lg bg-white/20 px-3 py-1 text-xs font-bold hover:bg-white/30">
+                Sign Up
+              </a>
+              <button onClick={handleExitDemo} className="rounded-lg bg-white/15 px-3 py-1 text-xs font-bold hover:bg-white/25">
+                Exit Demo
+              </button>
+            </div>
+          </div>
+        )}
         {impersonatingTenant && (
           <div className="flex flex-shrink-0 flex-wrap items-center justify-between gap-2 bg-indigo-600 px-4 py-2 text-sm text-white">
             <span>

@@ -9,7 +9,7 @@ import {
 import { useThemeStore } from '@/stores/themeStore'
 import { useAuthStore } from '@/stores/authStore'
 import DateInput, { TimeField } from '@/components/common/DateInput'
-import { fetchReportMetrics, fetchTransactionsInRange } from '@/lib/db'
+import { fetchReportMetrics, fetchTransactionsInRange } from '@/lib/dataLayer'
 import { withOfflineCache, seedFromOfflineCache } from '@/lib/offlineCache'
 import { formatCurrency } from '@/utils/formatters'
 import { DATE_PRESETS, getPresetRange, combineDateAndTime } from '@/utils/dateRanges'

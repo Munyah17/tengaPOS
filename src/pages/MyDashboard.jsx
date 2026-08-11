@@ -7,7 +7,7 @@ import {
 } from 'recharts'
 import { useThemeStore } from '@/stores/themeStore'
 import { useAuthStore } from '@/stores/authStore'
-import { fetchMyDashboardMetrics } from '@/lib/db'
+import { fetchMyDashboardMetrics } from '@/lib/dataLayer'
 import { formatCurrency } from '@/utils/formatters'
 import { withOfflineCache, seedFromOfflineCache } from '@/lib/offlineCache'
 

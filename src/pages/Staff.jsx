@@ -9,7 +9,7 @@ import { useAuthStore } from '@/stores/authStore'
 import {
   fetchStaff, updateStaffStatus, fetchBranches, updateStaffUsername, updateStaffEmployeeNo, updateStaffName,
   fetchUserBranches, assignUserBranch, unassignUserBranch,
-} from '@/lib/db'
+} from '@/lib/dataLayer'
 import { loadWithOfflineCache } from '@/lib/offlineCache'
 import { supabase } from '@/lib/supabase'
 import { invokeEdgeFunction } from '@/lib/edgeFunction'

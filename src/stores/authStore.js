@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { supabase } from '@/lib/supabase'
 import { isStaleJwtError, refreshSessionOnce } from '@/lib/authRetry'
+import { isDemoRoute, setDemoActive, DEMO_ROLE_SESSION_KEY } from '@/lib/demoMode'
 
 // On a weak/slow connection, signInWithPassword could otherwise hang for a
 // very long time with no feedback (the browser's own fetch timeout, if any,
@@ -84,6 +85,25 @@ export const useAuthStore = create(
       isLoading: true,
 
       initAuth: async () => {
+        // A page refresh while inside the demo sandbox would otherwise
+        // fall straight through to the real-session check below, find
+        // nothing, and bounce the visitor to /login -- this restores the
+        // sandbox from a tab-scoped (not persisted) flag instead. Dynamic
+        // import avoids a static circular dependency (demoAuth.js imports
+        // useAuthStore from this same file).
+        const { restoreDemoModeIfAny } = await import('@/lib/demoAuth')
+        if (restoreDemoModeIfAny()) return
+        // /demo populates this same store with sandbox data via setState
+        // (see demoMode.js) so the real pages it reuses don't need a forked
+        // auth system -- but that means this store now sometimes holds a
+        // fake session with no real Supabase counterpart. Checking a real
+        // session here while on /demo would find none and, worse, would
+        // never actually clear the demo tenant/user/role fields it can't
+        // account for (only isAuthenticated), leaving stale demo identity
+        // sitting in the persisted store. Simplest correct fix: this store
+        // is never the source of truth for a real session while on /demo,
+        // so just don't touch it here.
+        if (isDemoRoute()) { set({ isLoading: false }); return }
         set({ isLoading: true })
         try {
           // One-time handoff from entering/exiting "View as Tenant"
@@ -166,6 +186,15 @@ export const useAuthStore = create(
       // (Login.jsx collects the email alongside it whenever the typed
       // identifier isn't already email-shaped).
       signIn: async (identifier, password, usernameEmail) => {
+        // A real credential login always ends any demo session -- otherwise
+        // a visitor who tried /demo earlier in this tab and then logs in
+        // for real would have their genuine session silently skipped by
+        // the persist/initAuth demo guards below (see demoMode.js), or
+        // worse, have this same tab's next refresh restore the sandbox
+        // instead of their real session (see the sessionStorage key
+        // initAuth checks first).
+        setDemoActive(false)
+        sessionStorage.removeItem(DEMO_ROLE_SESSION_KEY)
         set({ isLoading: true })
 
         try {
@@ -274,6 +303,8 @@ export const useAuthStore = create(
       },
 
       signUp: async (email, password, name, businessName, businessType, phone, detail = {}) => {
+        setDemoActive(false)
+        sessionStorage.removeItem(DEMO_ROLE_SESSION_KEY)
         const { data, error } = await supabase.auth.signUp({
           email,
           password,
@@ -419,7 +450,12 @@ export const useAuthStore = create(
     }),
     {
       name: 'tengapos-auth',
-      partialize: (state) => ({
+      // While on /demo this same store briefly holds sandbox data (fake
+      // tenant/user/role, no real session) -- never let that reach the
+      // persisted key a real login/logout normally owns. Returning {} here
+      // simply skips the write; whatever a real session last persisted
+      // stays exactly as it was for the next real page load.
+      partialize: (state) => (isDemoRoute() ? {} : {
         user: state.user,
         profile: state.profile,
         tenant: state.tenant,
