@@ -957,6 +957,32 @@ export async function closeCashUp(cashUpId, countedCash, notes) {
   return data
 }
 
+// The review-discipline gap: Cash-Up and Refund Auditing only help if the
+// vendor actually opens them. This is the two cheap counts a Dashboard
+// nudge needs to prompt that -- no new tables, just a same-day cash-up
+// check and a week's worth of validated returns/voids.
+export async function fetchVendorNudges(tenantId) {
+  const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0)
+  const weekAgo = new Date(); weekAgo.setDate(weekAgo.getDate() - 7)
+
+  const [cashUpRes, returnsRes, voidsRes] = await Promise.all([
+    supabase.from('cash_ups').select('id', { count: 'exact', head: true })
+      .eq('tenant_id', tenantId).gte('opened_at', todayStart.toISOString()),
+    supabase.from('returns').select('id', { count: 'exact', head: true })
+      .eq('tenant_id', tenantId).eq('status', 'validated').gte('validated_at', weekAgo.toISOString()),
+    supabase.from('voids').select('id', { count: 'exact', head: true })
+      .eq('tenant_id', tenantId).eq('status', 'validated').gte('validated_at', weekAgo.toISOString()),
+  ])
+  if (cashUpRes.error) throw cashUpRes.error
+  if (returnsRes.error) throw returnsRes.error
+  if (voidsRes.error) throw voidsRes.error
+
+  return {
+    cashUpMissingToday: (cashUpRes.count || 0) === 0,
+    refundsThisWeek: (returnsRes.count || 0) + (voidsRes.count || 0),
+  }
+}
+
 // ─── Refund Auditing (read-only, no new write path) ────────────────────────
 // Groups validated returns/voids by the ORIGINAL sale's cashier (orders.
 // served_by) -- not who merely requested the return, since request/approve/

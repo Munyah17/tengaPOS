@@ -10,10 +10,10 @@ import {
   ResponsiveContainer, PieChart, Pie, Cell,
 } from 'recharts'
 import { Link } from 'react-router-dom'
-import { Megaphone, Sparkles, Bell, ChevronRight, X, Inbox } from 'lucide-react'
+import { Megaphone, Sparkles, Bell, ChevronRight, X, Inbox, Wallet, ShieldAlert } from 'lucide-react'
 import { useThemeStore } from '@/stores/themeStore'
 import { useAuthStore } from '@/stores/authStore'
-import { fetchDashboardMetrics, fetchVendorRequests, fetchJobCards } from '@/lib/dataLayer'
+import { fetchDashboardMetrics, fetchVendorRequests, fetchJobCards, fetchVendorNudges } from '@/lib/dataLayer'
 import { isDemoRoute } from '@/lib/demoMode'
 import { formatCurrency } from '@/utils/formatters'
 import { supabase } from '@/lib/supabase'
@@ -109,6 +109,17 @@ export default function Dashboard() {
   })
   // Re-shows when the pending count changes, even if dismissed this session
   const requestsNoticeId = `pending-requests-${pendingRequests?.total || 0}`
+
+  // Cash-Up and Refund Auditing only close the loopholes they're built for
+  // if the vendor actually opens them -- this is the nudge that makes that
+  // happen instead of depending on remembering two separate pages.
+  const { data: vendorNudges = null } = useQuery({
+    queryKey: ['vendorNudges', tenant?.id],
+    queryFn: withOfflineCache(['vendorNudges', tenant?.id], () => fetchVendorNudges(tenant.id)),
+    enabled: !!tenant?.id && role === 'vendor',
+    staleTime: 60000,
+  })
+  const nudgesNoticeId = `vendor-nudges-${vendorNudges?.cashUpMissingToday ? 1 : 0}-${vendorNudges?.refundsThisWeek || 0}`
 
   const { data: announcements = [] } = useQuery({
     queryKey: ['announcements', user?.id],
@@ -213,6 +224,48 @@ export default function Dashboard() {
           </div>
           <button
             onClick={() => dismissForSession(requestsNoticeId)}
+            aria-label="Close"
+            className="absolute right-3 top-3 text-amber-400 hover:text-amber-600 dark:hover:text-amber-200"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      )}
+
+      {/* Cash-Up / Refund Auditing review nudge — the two review habits
+          only actually close the loopholes they're built for if the
+          vendor is prompted to open them, not left to remember. */}
+      {role === 'vendor' && (vendorNudges?.cashUpMissingToday || vendorNudges?.refundsThisWeek > 0) && !sessionDismissed.has(nudgesNoticeId) && (
+        <div className="relative mb-6 flex flex-col gap-3 rounded-2xl border border-amber-300 bg-amber-50 p-4 pr-10 dark:border-amber-700/60 dark:bg-amber-900/20 sm:flex-row sm:items-start">
+          <ShieldAlert className="mt-0.5 h-5 w-5 flex-shrink-0 text-amber-600 dark:text-amber-400" />
+          <div className="flex-1 space-y-2">
+            {vendorNudges.cashUpMissingToday && (
+              <div>
+                <p className="font-semibold text-amber-900 dark:text-amber-200">No cash-up recorded today</p>
+                <Link
+                  to="/app/cash-up"
+                  className="mt-1 inline-flex items-center gap-1 rounded-xl bg-amber-600 px-3 py-1 text-xs font-bold text-white hover:bg-amber-700"
+                >
+                  <Wallet className="h-3.5 w-3.5" /> Open Cash-Up
+                </Link>
+              </div>
+            )}
+            {vendorNudges.refundsThisWeek > 0 && (
+              <div>
+                <p className="font-semibold text-amber-900 dark:text-amber-200">
+                  {vendorNudges.refundsThisWeek} refund{vendorNudges.refundsThisWeek !== 1 ? 's' : ''} this week need your review
+                </p>
+                <Link
+                  to="/app/refund-audit"
+                  className="mt-1 inline-flex items-center gap-1 rounded-xl bg-amber-600 px-3 py-1 text-xs font-bold text-white hover:bg-amber-700"
+                >
+                  <ShieldAlert className="h-3.5 w-3.5" /> Review Refund Audit
+                </Link>
+              </div>
+            )}
+          </div>
+          <button
+            onClick={() => dismissForSession(nudgesNoticeId)}
             aria-label="Close"
             className="absolute right-3 top-3 text-amber-400 hover:text-amber-600 dark:hover:text-amber-200"
           >
