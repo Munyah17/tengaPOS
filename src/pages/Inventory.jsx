@@ -374,8 +374,12 @@ export default function Inventory() {
         // product shows up right away — same treatment as offline POS sales.
         await queueOfflineInventoryWrite(editTarget ? 'update' : 'insert', tenant.id, payload, editTarget?.id)
         if (editTarget) {
+          // stock is never part of an edit anymore (the field is disabled
+          // above) -- keep whatever's already cached rather than the
+          // form's snapshot, which can be stale by the time this queued
+          // write finally syncs.
           queryClient.setQueryData(['products', tenant.id], (old) =>
-            (old || []).map(p => p.id === editTarget.id ? { ...p, ...payload, stock: payload.stock ?? p.stock } : p))
+            (old || []).map(p => p.id === editTarget.id ? { ...p, ...payload, stock: p.stock } : p))
         } else {
           queryClient.setQueryData(['products', tenant.id], (old) => [...(old || []), { ...payload, id: `offline-${Date.now()}`, stock: payload.stock }])
         }
@@ -911,7 +915,20 @@ export default function Inventory() {
             { label: 'Selling Price (VAT-inclusive, leave blank to price later)', field: 'price', type: 'number', required: false, money: true },
             { label: 'Landing Price (what it cost you)', field: 'landingPrice', type: 'number', required: false, money: true },
             ...(form.isService ? [] : [
-              { label: 'Stock Quantity (leave blank to enter later)', field: 'stock', type: 'number', required: false },
+              {
+                label: editTarget ? 'Stock Quantity' : 'Stock Quantity (leave blank to enter later)',
+                field: 'stock', type: 'number', required: false,
+                // Editing an existing product's stock number here used to
+                // silently overwrite it with whatever was on screen when
+                // this form opened -- if a sale or a stock receipt landed
+                // on this product in the meantime, that real change got
+                // reverted with no error or trace. Correcting stock now
+                // only ever happens through Add Stock / Stock Take /
+                // Transfer Stock, which apply a safe, locked adjustment
+                // instead of an unconditional overwrite.
+                disabled: !!editTarget,
+                hint: editTarget ? 'Use Add Stock, Stock Take, or Transfer Stock to change this.' : undefined,
+              },
               { label: 'Low Stock Alert At', field: 'lowStockThreshold', type: 'number', required: false },
             ]),
           ].map(f => (
@@ -921,11 +938,13 @@ export default function Inventory() {
                 type={f.type}
                 value={form[f.field]}
                 onChange={e => setForm({ ...form, [f.field]: f.type === 'number' ? stripLeadingZero(e.target.value) : e.target.value })}
-                className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500 dark:border-slate-700 dark:bg-slate-800 dark:text-white dark:disabled:bg-slate-800/60 dark:disabled:text-slate-500"
                 required={f.required}
                 min={f.type === 'number' ? '0' : undefined}
                 step={f.money ? '0.0001' : undefined}
+                disabled={f.disabled}
               />
+              {f.hint && <p className="mt-1 text-xs text-slate-400">{f.hint}</p>}
             </div>
           ))}
           <div>

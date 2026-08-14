@@ -5,6 +5,7 @@ import {
   Settings, Users, ChefHat, ListTodo, LogOut, ChevronLeft, ChevronRight, ChevronDown,
   Store, Receipt, Cpu, X, Sparkles, CreditCard, BriefcaseBusiness, FileText, Inbox, Calculator,
   Wrench, Car, HardHat, FileSignature, Factory, Pill, ShieldCheck, FileBarChart, Landmark, Hammer,
+  ClipboardCheck, Wallet, ShieldAlert, PackagePlus,
 } from 'lucide-react'
 import { useState } from 'react'
 import { useThemeStore } from '@/stores/themeStore'
@@ -16,6 +17,9 @@ const ALL_NAV_ITEMS = [
   { key: 'requests', icon: Inbox, label: 'Requests', path: '/app/requests' },
   { key: 'pos', icon: ShoppingCart, label: 'POS', path: '/app/pos' },
   { key: 'inventory', icon: Package, label: 'Inventory', path: '/app/inventory' },
+  { key: 'stock_take', icon: ClipboardCheck, label: 'Stock Take', path: '/app/stock-take' },
+  { key: 'reorder', icon: PackagePlus, label: 'Reorder Suggestions', path: '/app/reorder' },
+  { key: 'cash_up', icon: Wallet, label: 'Cash-Up', path: '/app/cash-up' },
   { key: 'orders', icon: ClipboardList, label: 'Orders', path: '/app/orders' },
   { key: 'kitchen', icon: ChefHat, label: 'Kitchen', path: '/app/kitchen', restaurantOnly: true },
   { key: 'job_cards', icon: Wrench, label: 'Job Cards', path: '/app/job-cards', workshopOnly: true },
@@ -31,6 +35,7 @@ const ALL_NAV_ITEMS = [
   { key: 'prescriptions', icon: Pill, label: 'Prescriptions', path: '/app/prescriptions', pharmacyOnly: true },
   { key: 'age_verifications', icon: ShieldCheck, label: 'Age Verifications', path: '/app/age-verifications', barOnly: true },
   { key: 'transactions', icon: Receipt, label: 'Transactions', path: '/app/transactions' },
+  { key: 'refund_audit', icon: ShieldAlert, label: 'Refund Auditing', path: '/app/refund-audit' },
   { key: 'reports', icon: BarChart3, label: 'Reports', path: '/app/reports' },
   { key: 'insights', icon: Sparkles, label: 'AI Insights', path: '/app/insights', addonFeature: 'ai_insights', addonTitle: 'AI Insights is an optional add-on — request it in Settings' },
   { key: 'staff', icon: Users, label: 'Staff Management', path: '/app/staff' },

@@ -6,6 +6,7 @@ import { withOfflineCache, seedFromOfflineCache } from '@/lib/offlineCache'
 import { RefreshCw, X, Ban, CheckCircle, ShieldCheck, XCircle, Undo2, Wrench, Trash2, Loader2 } from 'lucide-react'
 import ExportMenu from '@/components/common/ExportMenu'
 import DateInput, { TimeField } from '@/components/common/DateInput'
+import ValidateReturnModal from '@/components/common/ValidateReturnModal'
 import { formatCurrency, formatDateTime, stripLeadingZero } from '@/utils/formatters'
 import { combineDateAndTime } from '@/utils/dateRanges'
 import { useAuthStore } from '@/stores/authStore'
@@ -143,6 +144,7 @@ export default function Transactions() {
   const [clearingVoided, setClearingVoided] = useState(false)
   const [voidTarget, setVoidTarget] = useState(null) // order_id currently requesting a void
   const [returnTarget, setReturnTarget] = useState(null) // { orderId, maxAmount } currently requesting a return
+  const [validatingReturnId, setValidatingReturnId] = useState(null) // return id awaiting the goods-condition confirmation
   const [deletingId, setDeletingId] = useState(null)
 
   const canApprove = ['shop_manager', 'supervisor', 'vendor'].includes(role)
@@ -275,10 +277,15 @@ export default function Transactions() {
     }
   }
 
-  const handleValidateReturn = async (returnId) => {
+  const handleValidateReturn = async (goodsCondition, notes) => {
     try {
-      await validateReturn(returnId)
-      toast.success('Return validated — stock restored, refund recorded')
+      await validateReturn(validatingReturnId, goodsCondition, notes)
+      setValidatingReturnId(null)
+      toast.success(
+        goodsCondition === 'sellable'
+          ? 'Return validated — stock restored, refund recorded'
+          : 'Return validated — refund recorded, stock left unchanged'
+      )
       refreshReturns()
       transactionsQuery.refetch()
     } catch (err) {
@@ -480,7 +487,10 @@ export default function Transactions() {
                       const isVoid = !!v
                       const badge = isVoid ? VOID_BADGE[item.status] : RETURN_BADGE[item.status]
                       const onApprove = isVoid ? handleApprove : handleApproveReturn
-                      const onValidate = isVoid ? handleValidate : handleValidateReturn
+                      // A return's validate opens the goods-condition modal
+                      // (validate_return now requires it) instead of firing
+                      // straight away like a void's does.
+                      const onValidate = isVoid ? handleValidate : () => setValidatingReturnId(item.id)
                       const onReject = isVoid ? handleReject : handleRejectReturn
 
                       return (
@@ -555,6 +565,9 @@ export default function Transactions() {
           onClose={() => setReturnTarget(null)}
           onSubmit={submitReturnRequest}
         />
+      )}
+      {validatingReturnId && (
+        <ValidateReturnModal onClose={() => setValidatingReturnId(null)} onSubmit={handleValidateReturn} />
       )}
     </div>
   )

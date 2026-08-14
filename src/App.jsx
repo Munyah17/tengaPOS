@@ -19,6 +19,10 @@ const Dashboard = lazy(() => import('@/pages/Dashboard'))
 const MyDashboard = lazy(() => import('@/pages/MyDashboard'))
 const POS = lazy(() => import('@/pages/POS'))
 const Inventory = lazy(() => import('@/pages/Inventory'))
+const StockTake = lazy(() => import('@/pages/StockTake'))
+const Reorder = lazy(() => import('@/pages/Reorder'))
+const CashUp = lazy(() => import('@/pages/CashUp'))
+const RefundAudit = lazy(() => import('@/pages/RefundAudit'))
 const Orders = lazy(() => import('@/pages/Orders'))
 const Prescriptions = lazy(() => import('@/pages/Prescriptions'))
 const AgeVerifications = lazy(() => import('@/pages/AgeVerifications'))
@@ -215,6 +219,9 @@ export default function App() {
             <Route path="dashboard" element={<RequireNav navKey="dashboard"><DashboardGate /></RequireNav>} />
             <Route path="pos" element={<RequireNav navKey="pos"><POS /></RequireNav>} />
             <Route path="inventory" element={<RequireNav navKey="inventory"><Inventory /></RequireNav>} />
+            <Route path="stock-take" element={<RequireNav navKey="stock_take"><StockTake /></RequireNav>} />
+            <Route path="reorder" element={<RequireNav navKey="reorder"><Reorder /></RequireNav>} />
+            <Route path="cash-up" element={<RequireNav navKey="cash_up"><CashUp /></RequireNav>} />
             <Route path="orders" element={<RequireNav navKey="orders"><Orders /></RequireNav>} />
             <Route path="prescriptions" element={<RequireNav navKey="prescriptions"><Prescriptions /></RequireNav>} />
             <Route path="age-verifications" element={<RequireNav navKey="age_verifications"><AgeVerifications /></RequireNav>} />
@@ -226,6 +233,7 @@ export default function App() {
             <Route path="production" element={<RequireNav navKey="production"><Production /></RequireNav>} />
             <Route path="equipment-rental" element={<RequireNav navKey="equipment_rental"><EquipmentRental /></RequireNav>} />
             <Route path="transactions" element={<RequireNav navKey="transactions"><Transactions /></RequireNav>} />
+            <Route path="refund-audit" element={<RequireNav navKey="refund_audit"><RefundAudit /></RequireNav>} />
             <Route path="reports" element={<RequireNav navKey="reports"><Reports /></RequireNav>} />
             <Route path="insights" element={<RequireNav navKey="insights"><Insights /></RequireNav>} />
             <Route path="payment/return" element={<PaymentReturn />} />

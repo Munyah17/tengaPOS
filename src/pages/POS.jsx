@@ -17,6 +17,8 @@ import { formatCurrency, formatUnitPrice, generateReceiptNumber, stripLeadingZer
 import { FRACTIONAL_UNITS, unitStep } from '@/lib/units'
 import { initiatePaynowCheckout } from '@/lib/paynow'
 import { fetchProducts, saveCheckout, fetchStaff, completeJobCard, recordPrescriptionDispense, recordAgeVerification } from '@/lib/dataLayer'
+import { authorizeDiscountOverride } from '@/lib/db'
+import { isDemoRoute } from '@/lib/demoMode'
 import { getOfflineProducts, queueOfflineSale } from '@/lib/offlineSync'
 import { isNetworkError } from '@/lib/authRetry'
 import { generateUUID } from '@/lib/uuid'
@@ -115,6 +117,13 @@ export default function POS() {
   // Bar/Liquor Store Mode: same data-driven pattern as pharmacyItems above.
   const [showAgeVerifyModal, setShowAgeVerifyModal] = useState(false)
   const [ageVerifyForm, setAgeVerifyForm] = useState({ verified: false, idType: '', idLast4: '' })
+  // Discount >10% needs a manager's own login to authorize (process_checkout
+  // enforces this server-side regardless -- this is just the UI for it).
+  // Skipped entirely in the /demo sandbox, where there's no real manager
+  // account to log into and nothing at stake either way.
+  const [showDiscountAuthModal, setShowDiscountAuthModal] = useState(false)
+  const [discountAuthForm, setDiscountAuthForm] = useState({ email: '', password: '' })
+  const [authorizingDiscount, setAuthorizingDiscount] = useState(false)
   const videoRef = useRef(null)
   const scanStreamRef = useRef(null)
   const fmt = (n) => formatCurrency(n, tenant?.currency)
@@ -297,7 +306,38 @@ export default function POS() {
       setShowAgeVerifyModal(true)
       return
     }
+    // Discount changes clear cart.discountAuthId (see cartStore.js), so a
+    // stale authorization from an earlier, different discount can never
+    // silently cover this one -- if it's set, it's for this exact sale.
+    if (!isDemoRoute() && cart.getEffectiveDiscountPct() > 10 && !cart.discountAuthId) {
+      setShowDiscountAuthModal(true)
+      return
+    }
     handleCheckout()
+  }
+
+  const handleAuthorizeDiscount = async () => {
+    if (!discountAuthForm.email.trim() || !discountAuthForm.password) {
+      toast.error('Manager email and password are required')
+      return
+    }
+    setAuthorizingDiscount(true)
+    try {
+      const result = await authorizeDiscountOverride(
+        tenant.id, branch?.id || null, user?.id || null,
+        discountAuthForm.email.trim(), discountAuthForm.password,
+        Math.min(100, Math.ceil(cart.getEffectiveDiscountPct()))
+      )
+      cart.setDiscountAuthId(result.id)
+      setShowDiscountAuthModal(false)
+      setDiscountAuthForm({ email: '', password: '' })
+      toast.success('Discount authorized')
+      handleCheckoutClick()
+    } catch (err) {
+      toast.error(err.message || 'Could not authorize this discount')
+    } finally {
+      setAuthorizingDiscount(false)
+    }
   }
 
   const handleCheckout = async () => {
@@ -353,6 +393,7 @@ export default function POS() {
         clientRef,
         salespersonName: salespersonName || null,
         salespersonEmployeeNo: salespersonEmployeeNo || null,
+        discountAuthId: cart.discountAuthId || null,
       }
 
       // navigator.onLine is only a hint, not ground truth — it's well known
@@ -922,6 +963,13 @@ export default function POS() {
               </button>
             )}
           </div>
+          {!isDemoRoute() && cart.getEffectiveDiscountPct() > 10 && (
+            <p className="mb-1 text-xs font-medium text-amber-600 dark:text-amber-400">
+              {cart.discountAuthId
+                ? 'Discount authorized by manager.'
+                : `Needs manager authorization (over 10% off) — you'll be asked at checkout.`}
+            </p>
+          )}
 
           {/* Salesperson — optional, distinct from the cashier. Silent on
               the receipt entirely unless one is actually picked/typed. */}
@@ -1194,6 +1242,60 @@ export default function POS() {
                 className="rounded-xl bg-brand-600 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-700"
               >
                 Continue to Payment
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Discount >10% — a manager/supervisor/vendor must authorize with
+          their own login before checkout can proceed. process_checkout
+          enforces this server-side regardless of anything client-side. */}
+      {showDiscountAuthModal && (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/70 px-4">
+          <div className="w-full max-w-md rounded-2xl bg-white p-5 shadow-2xl dark:bg-slate-900">
+            <h3 className="text-base font-bold text-slate-900 dark:text-white">Manager Authorization Required</h3>
+            <p className="mt-1 text-sm text-slate-500">
+              This sale has a {Math.ceil(cart.getEffectiveDiscountPct())}% discount — a shop manager, supervisor or
+              the vendor needs to sign in to authorize it.
+            </p>
+            <div className="mt-4 space-y-3">
+              <div>
+                <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">Manager Email</label>
+                <input
+                  autoFocus
+                  type="email"
+                  autoComplete="off"
+                  value={discountAuthForm.email}
+                  onChange={(e) => setDiscountAuthForm((f) => ({ ...f, email: e.target.value }))}
+                  className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">Manager Password</label>
+                <input
+                  type="password"
+                  autoComplete="off"
+                  value={discountAuthForm.password}
+                  onChange={(e) => setDiscountAuthForm((f) => ({ ...f, password: e.target.value }))}
+                  onKeyDown={(e) => { if (e.key === 'Enter') handleAuthorizeDiscount() }}
+                  className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                />
+              </div>
+            </div>
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                onClick={() => { setShowDiscountAuthModal(false); setDiscountAuthForm({ email: '', password: '' }) }}
+                className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleAuthorizeDiscount}
+                disabled={authorizingDiscount}
+                className="rounded-xl bg-brand-600 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-700 disabled:opacity-60"
+              >
+                {authorizingDiscount ? 'Authorizing…' : 'Authorize & Continue'}
               </button>
             </div>
           </div>

@@ -43,19 +43,23 @@ export const NAV_PERMISSIONS = {
   super_admin: ['dashboard', 'pos', 'inventory', 'orders', 'kitchen', 'job_cards', 'vehicle_registry', 'mechanics', 'quotations', 'production', 'equipment_rental', 'prescriptions', 'age_verifications', 'transactions', 'reports', 'insights', 'staff', 'tasks', 'branches', 'fiscalisation', 'payments', 'settings'],
   admin: ['dashboard', 'pos', 'inventory', 'orders', 'job_cards', 'vehicle_registry', 'mechanics', 'quotations', 'production', 'equipment_rental', 'prescriptions', 'age_verifications', 'transactions', 'reports', 'insights', 'staff', 'tasks', 'branches', 'fiscalisation', 'payments', 'settings'],
   associate: ['dashboard', 'reports', 'branches'],
-  vendor: ['dashboard', 'requests', 'pos', 'inventory', 'orders', 'kitchen', 'job_cards', 'vehicle_registry', 'mechanics', 'quotations', 'production', 'equipment_rental', 'prescriptions', 'age_verifications', 'transactions', 'reports', 'insights', 'staff', 'tasks', 'branches', 'fiscalisation', 'payments', 'hr', 'invoicing', 'customers', 'statements', 'accounting', 'settings'],
+  vendor: ['dashboard', 'requests', 'pos', 'inventory', 'stock_take', 'reorder', 'orders', 'kitchen', 'job_cards', 'vehicle_registry', 'mechanics', 'quotations', 'production', 'equipment_rental', 'prescriptions', 'age_verifications', 'transactions', 'refund_audit', 'cash_up', 'reports', 'insights', 'staff', 'tasks', 'branches', 'fiscalisation', 'payments', 'hr', 'invoicing', 'customers', 'statements', 'accounting', 'settings'],
   // Shop managers run day-to-day operations for their own branch — payment
   // gateway management and ZIMRA fiscal device registration stay Vendor-only.
-  shop_manager: ['dashboard', 'pos', 'inventory', 'orders', 'kitchen', 'job_cards', 'vehicle_registry', 'mechanics', 'quotations', 'production', 'equipment_rental', 'prescriptions', 'age_verifications', 'transactions', 'reports', 'insights', 'staff', 'tasks', 'branches', 'hr', 'invoicing', 'customers', 'statements', 'accounting', 'settings'],
-  supervisor: ['dashboard', 'pos', 'inventory', 'orders', 'job_cards', 'vehicle_registry', 'mechanics', 'quotations', 'production', 'equipment_rental', 'prescriptions', 'age_verifications', 'transactions', 'reports', 'tasks', 'invoicing', 'customers', 'statements', 'accounting'],
+  shop_manager: ['dashboard', 'pos', 'inventory', 'stock_take', 'reorder', 'orders', 'kitchen', 'job_cards', 'vehicle_registry', 'mechanics', 'quotations', 'production', 'equipment_rental', 'prescriptions', 'age_verifications', 'transactions', 'refund_audit', 'cash_up', 'reports', 'insights', 'staff', 'tasks', 'branches', 'hr', 'invoicing', 'customers', 'statements', 'accounting', 'settings'],
+  supervisor: ['dashboard', 'pos', 'inventory', 'stock_take', 'reorder', 'orders', 'job_cards', 'vehicle_registry', 'mechanics', 'quotations', 'production', 'equipment_rental', 'prescriptions', 'age_verifications', 'transactions', 'refund_audit', 'cash_up', 'reports', 'tasks', 'invoicing', 'customers', 'statements', 'accounting'],
   // Dispensing happens at the till, so cashier/shop_assistant need the log
-  // too — same reasoning as prescription_dispenses' RLS policy.
+  // too — same reasoning as prescription_dispenses' RLS policy. Stock Take
+  // counting and Cash-Up are both deliberately open to them too (see
+  // 1786120000_stock_take.sql / 1786130000_cash_up.sql) -- real
+  // stock-takes are usually counted by whoever's on the floor, and a
+  // shared till needs whoever's working it to be able to open/close one.
   // 'dashboard' is appended (not first) so it doesn't change their default
   // landing page on login, which stays POS -- it maps to MyDashboard (see
   // App.jsx's DashboardGate), an account-scoped summary, not the full
   // tenant Dashboard the rest of NAV_PERMISSIONS' 'dashboard' entries get.
-  cashier: ['pos', 'orders', 'job_cards', 'equipment_rental', 'prescriptions', 'age_verifications', 'tasks', 'dashboard'],
-  shop_assistant: ['pos', 'prescriptions', 'age_verifications', 'tasks', 'dashboard'],
+  cashier: ['pos', 'orders', 'job_cards', 'equipment_rental', 'prescriptions', 'age_verifications', 'tasks', 'stock_take', 'cash_up', 'dashboard'],
+  shop_assistant: ['pos', 'prescriptions', 'age_verifications', 'tasks', 'stock_take', 'cash_up', 'dashboard'],
   tech_support: ['dashboard', 'reports', 'insights', 'orders', 'transactions'],
 }
 

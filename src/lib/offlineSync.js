@@ -13,7 +13,15 @@ import { generateUUID } from '@/lib/uuid'
 // live (non-queued) checkout path already hard-stops on. "invalid input
 // syntax" is a data-shape problem (a malformed value hit a strongly-typed
 // column) — retrying the exact same payload forever can never fix it either.
-const PERMANENT_ERROR_PATTERNS = [/insufficient stock/i, /stock check failed/i, /invalid input syntax/i]
+// A discount authorization is only valid for 3 minutes (see
+// discount_authorizations.expires_at) -- if a sale with one attached hits
+// a genuine network failure right after authorizing and gets queued, a
+// replay minutes/hours later will find it expired every single time.
+// Retrying can never fix that (the manager would need to re-authorize,
+// which requires the cashier to be back at the till with them present),
+// so this needs the same "give up and surface it" treatment as insufficient
+// stock, not endless silent retries.
+const PERMANENT_ERROR_PATTERNS = [/insufficient stock/i, /stock check failed/i, /invalid input syntax/i, /discount authorization/i, /total exceeds the priced value/i]
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 

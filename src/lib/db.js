@@ -1,3 +1,4 @@
+import { createClient } from '@supabase/supabase-js'
 import { supabase } from '@/lib/supabase'
 import { generateReceiptNumber, generateDocNumber, parseOptionalNumber, parseOptionalMoney } from '@/utils/formatters'
 import { isStaleJwtError, refreshSessionOnce } from '@/lib/authRetry'
@@ -125,6 +126,17 @@ export async function bulkInsertProducts(tenantId, rows, onProgress) {
   return { inserted, total: rows.length, failedChunks }
 }
 
+// stock_qty is deliberately NOT part of the general edit payload below
+// (only ever set when converting TO a service, which has none). It used
+// to blindly overwrite stock_qty with whatever the edit form had
+// snapshotted when it was opened -- if a sale or stock receipt happened
+// on that same product in the meantime (very plausible in a busy shop, or
+// across a queued offline edit that replays later), submitting the edit
+// silently reverted stock back to the stale number, undoing the real
+// change with no error or trace. All *intentional* stock corrections now
+// go through Receive Stock / Stock Take / Transfer Stock instead, which
+// apply a locked, relative delta rather than an unconditional overwrite --
+// see stock_receipts.sql / stock_take.sql / stock_transfers.sql.
 export async function updateProduct(id, updates) {
   const { data, error } = await supabase
     .from('products')
@@ -135,7 +147,7 @@ export async function updateProduct(id, updates) {
       barcode: updates.barcode || null,
       price: parseOptionalMoney(updates.price),
       cost_price: parseOptionalMoney(updates.landingPrice),
-      stock_qty: updates.isService ? 0 : parseOptionalNumber(updates.stock),
+      ...(updates.isService === true ? { stock_qty: 0 } : {}),
       low_stock_threshold: parseInt(updates.lowStockThreshold) || 10,
       is_service: updates.isService === true,
       unit: updates.unit || null,
@@ -243,7 +255,7 @@ export async function deleteProduct(id) {
 
 // ─── Checkout / POS ──────────────────────────────────────────────────────────
 
-export async function saveCheckout({ tenantId, branchId, userId, cartItems, paymentMethod, subtotal, tax, total, posMode, orderType, receiptNo: receiptNoIn, clientRef: clientRefIn, salespersonName, salespersonEmployeeNo }, _retried = false) {
+export async function saveCheckout({ tenantId, branchId, userId, cartItems, paymentMethod, subtotal, tax, total, posMode, orderType, receiptNo: receiptNoIn, clientRef: clientRefIn, salespersonName, salespersonEmployeeNo, discountAuthId }, _retried = false) {
   // clientRef is the real idempotency key — a UUID with no meaningful
   // collision risk, generated once by the caller and reused on every retry
   // (a live retry queued after a network blip, or an offline-sync replay).
@@ -292,6 +304,7 @@ export async function saveCheckout({ tenantId, branchId, userId, cartItems, paym
     p_salesperson_name: salespersonName || null,
     p_salesperson_employee_no: salespersonEmployeeNo || null,
     p_client_ref: clientRef,
+    p_discount_auth_id: discountAuthId || null,
   })
   if (error) {
     // A session token minted before a JWT signing-key rotation fails
@@ -304,7 +317,7 @@ export async function saveCheckout({ tenantId, branchId, userId, cartItems, paym
     if (!_retried && isStaleJwtError(error.message) && await refreshSessionOnce(supabase)) {
       return saveCheckout({
         tenantId, branchId, userId, cartItems, paymentMethod, subtotal, tax, total, posMode, orderType,
-        receiptNo, clientRef, salespersonName, salespersonEmployeeNo,
+        receiptNo, clientRef, salespersonName, salespersonEmployeeNo, discountAuthId,
       }, true)
     }
     throw new Error(error.message?.includes('Insufficient stock')
@@ -313,6 +326,35 @@ export async function saveCheckout({ tenantId, branchId, userId, cartItems, paym
   }
 
   return { order: { id: data.order_id }, receiptNo: data.receipt_no }
+}
+
+// Manager types their own email+password into a modal on the POS -- this
+// spins up a throwaway, non-persisted Supabase client to verify it (a
+// real, server-checked login that never touches the cashier's own
+// session/localStorage), then uses THAT client's own freshly-authenticated
+// session to call authorize_discount_override, so the RPC's auth.uid() is
+// genuinely the manager. The throwaway client is discarded immediately
+// after -- nothing about it is ever persisted or reused.
+export async function authorizeDiscountOverride(tenantId, branchId, requestedBy, managerEmail, managerPassword, maxDiscountPct) {
+  const managerClient = createClient(
+    import.meta.env.VITE_SUPABASE_URL,
+    import.meta.env.VITE_SUPABASE_ANON_KEY,
+    { auth: { persistSession: false, autoRefreshToken: false } }
+  )
+  const { error: signInError } = await managerClient.auth.signInWithPassword({
+    email: managerEmail, password: managerPassword,
+  })
+  if (signInError) throw new Error('Incorrect manager email or password')
+
+  const { data, error } = await managerClient.rpc('authorize_discount_override', {
+    p_tenant_id: tenantId,
+    p_branch_id: branchId || null,
+    p_requested_by: requestedBy || null,
+    p_max_discount_pct: maxDiscountPct,
+  })
+  await managerClient.auth.signOut({ scope: 'local' })
+  if (error) throw new Error(error.message?.replace(/^.*?: /, '') || 'Not authorized to approve this discount')
+  return data
 }
 
 // ─── Payment Sessions (Paynow) ────────────────────────────────────────────────
@@ -570,8 +612,10 @@ export async function approveReturn(returnId) {
   if (error) throw error
 }
 
-export async function validateReturn(returnId) {
-  const { error } = await supabase.rpc('validate_return', { p_return_id: returnId })
+export async function validateReturn(returnId, goodsCondition, notes) {
+  const { error } = await supabase.rpc('validate_return', {
+    p_return_id: returnId, p_goods_condition: goodsCondition, p_inspection_notes: notes || null,
+  })
   if (error) throw error
 }
 
@@ -814,6 +858,185 @@ export async function receiveStock(tenantId, productId, qty, note) {
   })
   if (error) throw error
   return data
+}
+
+// ─── Stock Take (physical count vs system count) ──────────────────────────
+
+export async function fetchStockTakes(tenantId) {
+  const { data, error } = await supabase
+    .from('stock_takes')
+    .select('*, branches(name), starter:users!stock_takes_started_by_fkey(name), completer:users!stock_takes_completed_by_fkey(name)')
+    .eq('tenant_id', tenantId)
+    .order('started_at', { ascending: false })
+    .limit(50)
+  if (error) throw error
+  return data
+}
+
+export async function fetchStockTakeCounts(stockTakeId) {
+  const { data, error } = await supabase
+    .from('stock_take_counts')
+    .select('*, products(name, sku), users(name)')
+    .eq('stock_take_id', stockTakeId)
+    .order('counted_at', { ascending: false })
+  if (error) throw error
+  return data
+}
+
+export async function startStockTake(tenantId, branchId, note) {
+  const { data, error } = await supabase.rpc('start_stock_take', {
+    p_tenant_id: tenantId, p_branch_id: branchId || null, p_note: note || null,
+  })
+  if (error) throw error
+  return data
+}
+
+export async function recordStockTakeCount(stockTakeId, productId, countedQty, note) {
+  const { data, error } = await supabase.rpc('record_stock_take_count', {
+    p_stock_take_id: stockTakeId, p_product_id: productId, p_counted_qty: countedQty, p_note: note || null,
+  })
+  if (error) throw error
+  return data
+}
+
+export async function finalizeStockTake(stockTakeId) {
+  const { data, error } = await supabase.rpc('finalize_stock_take', { p_stock_take_id: stockTakeId })
+  if (error) throw error
+  return data
+}
+
+// ─── Cash-Up (daily cash reconciliation) ───────────────────────────────────
+
+export async function fetchCashUps(tenantId) {
+  const { data, error } = await supabase
+    .from('cash_ups')
+    .select('*, branches(name), opener:users!cash_ups_opened_by_fkey(name), closer:users!cash_ups_closed_by_fkey(name)')
+    .eq('tenant_id', tenantId)
+    .order('opened_at', { ascending: false })
+    .limit(50)
+  if (error) throw error
+  return data
+}
+
+export async function openCashUp(tenantId, branchId, openingFloat, shiftId) {
+  const { data, error } = await supabase.rpc('open_cash_up', {
+    p_tenant_id: tenantId, p_branch_id: branchId || null, p_opening_float: openingFloat, p_shift_id: shiftId || null,
+  })
+  if (error) throw error
+  return data
+}
+
+export async function closeCashUp(cashUpId, countedCash, notes) {
+  const { data, error } = await supabase.rpc('close_cash_up', {
+    p_cash_up_id: cashUpId, p_counted_cash: countedCash, p_notes: notes || null,
+  })
+  if (error) throw error
+  return data
+}
+
+// ─── Refund Auditing (read-only, no new write path) ────────────────────────
+// Groups validated returns/voids by the ORIGINAL sale's cashier (orders.
+// served_by) -- not who merely requested the return, since request/approve/
+// validate can each be a different person -- and computes each cashier's
+// refund rate against their own total sales in the same period, flagging
+// anyone whose rate is a statistical outlier (mean + 2 std devs, gated on a
+// minimum sample so a low-volume staffer's one refund doesn't look alarming).
+export async function fetchRefundAuditData(tenantId, { startDate, endDate } = {}) {
+  const now = new Date()
+  const start = startDate || new Date(now.getFullYear(), now.getMonth(), 1).toISOString()
+  const end = endDate || now.toISOString()
+
+  const [ordersRes, returnsRes, voidsRes] = await Promise.all([
+    supabase.from('orders')
+      .select('served_by, total, created_at, users(name)')
+      .eq('tenant_id', tenantId).gte('created_at', start).lte('created_at', end),
+    supabase.from('returns')
+      .select('id, refund_amount, requested_by, approved_by, validated_at, orders(order_no, served_by, users(name))')
+      .eq('tenant_id', tenantId).eq('status', 'validated').gte('validated_at', start).lte('validated_at', end),
+    supabase.from('voids')
+      .select('id, requested_by, approved_by, validated_at, orders(order_no, total, served_by, users(name))')
+      .eq('tenant_id', tenantId).eq('status', 'validated').gte('validated_at', start).lte('validated_at', end),
+  ])
+  if (ordersRes.error) throw ordersRes.error
+  if (returnsRes.error) throw returnsRes.error
+  if (voidsRes.error) throw voidsRes.error
+
+  const byCashier = {} // served_by -> { userId, name, salesTotal, refundCount, refundValue }
+  const ensure = (userId, name) => {
+    if (!userId) return null
+    if (!byCashier[userId]) byCashier[userId] = { userId, name: name || 'Unknown', salesTotal: 0, refundCount: 0, refundValue: 0 }
+    return byCashier[userId]
+  }
+
+  for (const o of ordersRes.data || []) {
+    const row = ensure(o.served_by, o.users?.name)
+    if (row) row.salesTotal += parseFloat(o.total || 0)
+  }
+
+  const sameActorFlags = []
+  for (const r of returnsRes.data || []) {
+    const servedBy = r.orders?.served_by
+    const row = ensure(servedBy, r.orders?.users?.name)
+    if (row) { row.refundCount += 1; row.refundValue += parseFloat(r.refund_amount || 0) }
+    if (r.requested_by && r.requested_by === r.approved_by) {
+      sameActorFlags.push({ type: 'return', id: r.id, orderNo: r.orders?.order_no })
+    }
+  }
+  for (const v of voidsRes.data || []) {
+    const servedBy = v.orders?.served_by
+    const row = ensure(servedBy, v.orders?.users?.name)
+    if (row) { row.refundCount += 1; row.refundValue += parseFloat(v.orders?.total || 0) }
+    if (v.requested_by && v.requested_by === v.approved_by) {
+      sameActorFlags.push({ type: 'void', id: v.id, orderNo: v.orders?.order_no })
+    }
+  }
+
+  const cashiers = Object.values(byCashier).map((c) => ({
+    ...c, refundRate: c.salesTotal > 0 ? (c.refundValue / c.salesTotal) * 100 : 0,
+  }))
+
+  // Outlier flag: mean + 2 standard deviations, only among cashiers with
+  // enough sample size to mean anything (avoids flagging someone who's
+  // barely sold anything and had one small refund).
+  const MIN_REFUNDS = 5
+  const eligible = cashiers.filter((c) => c.refundCount >= MIN_REFUNDS)
+  const rates = eligible.map((c) => c.refundRate)
+  const mean = rates.length ? rates.reduce((s, r) => s + r, 0) / rates.length : 0
+  const variance = rates.length ? rates.reduce((s, r) => s + (r - mean) ** 2, 0) / rates.length : 0
+  const stdDev = Math.sqrt(variance)
+  const outlierThreshold = mean + 2 * stdDev
+
+  const flagged = eligible
+    .filter((c) => c.refundRate > outlierThreshold && outlierThreshold > 0)
+    .map((c) => c.userId)
+
+  return {
+    cashiers: cashiers.sort((a, b) => b.refundValue - a.refundValue).map((c) => ({ ...c, outlier: flagged.includes(c.userId) })),
+    sameActorFlags,
+    mean, stdDev,
+  }
+}
+
+// ─── Auto-restock (low-stock reorder suggestions) ──────────────────────────
+// Same low-stock rule already used for the notification bell
+// (useTenantNotifications.js), just given its own dedicated view. Suggested
+// qty is simple par-level (reorder back up to double the threshold) --
+// deterministic, no historical-sales query needed for v1.
+export async function fetchReorderSuggestions(tenantId) {
+  const { data, error } = await supabase
+    .from('products')
+    .select('id, name, sku, stock_qty, low_stock_threshold, cost_price, unit')
+    .eq('tenant_id', tenantId)
+    .eq('is_active', true)
+    .eq('is_service', false)
+  if (error) throw error
+  return (data || [])
+    .filter((p) => p.stock_qty <= (p.low_stock_threshold ?? 10))
+    .map((p) => {
+      const threshold = p.low_stock_threshold ?? 10
+      return { ...p, suggestedQty: Math.max(1, threshold * 2 - (p.stock_qty ?? 0)) }
+    })
+    .sort((a, b) => (a.stock_qty ?? 0) - (b.stock_qty ?? 0))
 }
 
 // ─── Manufacturing Mode: Bill of Materials + Production Runs ──────────────

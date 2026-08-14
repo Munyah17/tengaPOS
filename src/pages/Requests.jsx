@@ -18,6 +18,7 @@ import {
   approveReturn, validateReturn, rejectReturn,
   approveConfigChange, rejectConfigChange,
 } from '@/lib/db'
+import ValidateReturnModal from '@/components/common/ValidateReturnModal'
 import { loadWithOfflineCache } from '@/lib/offlineCache'
 import { formatCurrency } from '@/utils/formatters'
 import toast from 'react-hot-toast'
@@ -86,6 +87,7 @@ export default function Requests() {
   const [requests, setRequests] = useState({ receiptConfigs: [], voids: [], returns: [], payments: [], configChanges: [], total: 0 })
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
+  const [validatingReturnId, setValidatingReturnId] = useState(null)
 
   const load = useCallback(() => {
     if (!tenant?.id) return
@@ -254,7 +256,7 @@ export default function Requests() {
                     <ActionButton tone="approve" onClick={() => act(approveReturn, 'Return approved')(r.id)}>Approve</ActionButton>
                   )}
                   {r.status === 'approved' && (
-                    <ActionButton tone="validate" onClick={() => act(validateReturn, 'Return validated — stock restored, refund recorded')(r.id)}>Validate</ActionButton>
+                    <ActionButton tone="validate" onClick={() => setValidatingReturnId(r.id)}>Validate</ActionButton>
                   )}
                   <ActionButton tone="reject" onClick={() => rejectWithReason(rejectReturn, 'Return rejected')(r.id)}>Reject</ActionButton>
                 </div>
@@ -292,6 +294,17 @@ export default function Requests() {
             </div>
           )}
         </div>
+      )}
+      {validatingReturnId && (
+        <ValidateReturnModal
+          onClose={() => setValidatingReturnId(null)}
+          onSubmit={async (goodsCondition, notes) => {
+            await act(validateReturn, goodsCondition === 'sellable'
+              ? 'Return validated — stock restored, refund recorded'
+              : 'Return validated — refund recorded, stock left unchanged')(validatingReturnId, goodsCondition, notes)
+            setValidatingReturnId(null)
+          }}
+        />
       )}
     </div>
   )

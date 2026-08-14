@@ -19,6 +19,11 @@ export const useCartStore = create((set, get) => ({
   paymentMethod: 'cash',
   discount: 0,
   discountType: 'percent', // 'percent' | 'fixed'
+  // Set once a manager authorizes a >10% discount (see POS.jsx's
+  // authorization modal + authorize_discount_override RPC) -- consumed
+  // server-side by process_checkout, cleared on every cart change so a
+  // stale id from a previous sale can never carry over to this one.
+  discountAuthId: null,
   customerId: null,
   orderType: 'counter',
   // Set when a Workshop job card is sent to POS to be paid out — after
@@ -81,12 +86,16 @@ export const useCartStore = create((set, get) => ({
       items: state.items.map((i) =>
         i.id === productId ? { ...i, itemDiscount: discount } : i
       ),
+      discountAuthId: null,
     })),
 
   setPaymentMethod: (method) => set({ paymentMethod: method }),
   setOrderType: (orderType) => set({ orderType }),
-  setDiscount: (discount) => set({ discount }),
-  setDiscountType: (discountType) => set({ discountType, discount: 0 }),
+  // Any discount change invalidates a previously-authorized override --
+  // it was only ever valid for the % it was granted for.
+  setDiscount: (discount) => set({ discount, discountAuthId: null }),
+  setDiscountType: (discountType) => set({ discountType, discount: 0, discountAuthId: null }),
+  setDiscountAuthId: (discountAuthId) => set({ discountAuthId }),
   setCustomerId: (customerId) => set({ customerId }),
 
   // Total of shelf prices (VAT-inclusive), after discounts
@@ -138,5 +147,16 @@ export const useCartStore = create((set, get) => ({
     return get().getTotal()
   },
 
-  clearCart: () => set({ items: [], discount: 0, discountType: 'percent', customerId: null, orderType: 'counter', sourceJobCardId: null }),
+  // Client-side estimate only, used to decide whether to show the manager
+  // authorization modal before checkout is even attempted -- the server
+  // (process_checkout) computes and enforces the real number from trusted
+  // product prices regardless of what this returns.
+  getEffectiveDiscountPct: () => {
+    const { items } = get()
+    const gross = items.reduce((sum, item) => sum + item.price * item.quantity, 0)
+    if (gross <= 0) return 0
+    return Math.max(0, ((gross - get().getTotal()) / gross) * 100)
+  },
+
+  clearCart: () => set({ items: [], discount: 0, discountType: 'percent', discountAuthId: null, customerId: null, orderType: 'counter', sourceJobCardId: null }),
 }))
