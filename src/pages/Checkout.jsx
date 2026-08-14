@@ -16,10 +16,11 @@ const PLANS = [
   {
     key: 'byod_monthly',
     name: 'BYOD Monthly',
-    price: 60,
+    price: 50,
     cycle: 'per month',
     desc: 'Use your own device',
     onboardingEligible: true,
+    hosting: { monthly: 20, yearly: 200 },
     features: ['POS & Inventory', 'Transactions & Reports', 'Task manager', '1 branch · 3 users'],
   },
   {
@@ -29,7 +30,8 @@ const PLANS = [
     cycle: 'per year',
     desc: 'Use your own device',
     onboardingEligible: true,
-    features: ['Everything in BYOD Monthly', '2 months free vs. paying monthly'],
+    hosting: { monthly: 20, yearly: 200 },
+    features: ['Everything in BYOD Monthly'],
   },
   {
     key: 'standard_plan',
@@ -75,13 +77,13 @@ export default function Checkout() {
   const returnRef = params.get('ref')
 
   const hasPaidPlan = !!tenant?.plan_start_date
-  // Standard/Pro hardware plans activated under the new pricing carry a
-  // real (even if already-past) hosting_expires_at the moment they're
-  // approved -- see stripe-webhook/paynow-signup-callback. A tenant who
-  // bought their hardware before this pricing existed has this column
-  // null forever and is correctly never asked to pay it.
-  const isHardwarePlan = tenant?.plan_type === 'standard_plan' || tenant?.plan_type === 'pro_package'
-  const hostingSubject = isHardwarePlan && !!tenant?.hosting_expires_at
+  // Every plan (BYOD included, not just Standard/Pro hardware) activated
+  // under the current pricing carries a real (even if already-past)
+  // hosting_expires_at the moment it's approved -- see stripe-webhook/
+  // paynow-signup-callback. A tenant from before this pricing existed has
+  // this column null forever and is correctly never asked to pay it.
+  const isHostingSubjectPlan = ['standard_plan', 'pro_package', 'byod_monthly', 'byod_yearly'].includes(tenant?.plan_type)
+  const hostingSubject = isHostingSubjectPlan && !!tenant?.hosting_expires_at
   const hostingLapsed = hostingSubject && new Date(tenant.hosting_expires_at) < new Date()
   const [hostingPeriod, setHostingPeriod] = useState('monthly')
   const hostingTable = tenant?.plan_type ? PLANS.find((p) => p.key === tenant.plan_type)?.hosting : null
@@ -183,7 +185,9 @@ export default function Checkout() {
             <img src={posIcon} alt="tengaPOS" className="mx-auto mb-4 h-12 w-auto" />
             <h1 className="text-2xl font-extrabold text-white sm:text-3xl">Hosting payment due</h1>
             <p className="mt-2 text-sm text-slate-400">
-              Your hardware is already yours — this keeps your account, data, and support active. Your data is safe either way.
+              {tenant?.plan_type === 'standard_plan' || tenant?.plan_type === 'pro_package'
+                ? 'Your hardware is already yours — this keeps your account, data, and support active.'
+                : 'This keeps your account, data, and support active.'} Your data is safe either way.
             </p>
           </div>
 

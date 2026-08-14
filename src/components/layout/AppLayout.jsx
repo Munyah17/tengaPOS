@@ -4,6 +4,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { Gamepad2 } from 'lucide-react'
 import Sidebar from './Sidebar'
 import TopBar from './TopBar'
+import BottomNav from './BottomNav'
 import { useAuthStore, ROLE_LABELS } from '@/stores/authStore'
 import { useThemeStore } from '@/stores/themeStore'
 import { useReceiptConfigStore } from '@/stores/receiptConfigStore'
@@ -259,7 +260,9 @@ export default function AppLayout() {
           </div>
         )}
         <TopBar onMenuClick={() => setMobileSidebarOpen(true)} />
-        <main className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain">
+        {/* pb-16 clears the fixed BottomNav below (mobile/tablet only --
+            BottomNav itself is lg:hidden, so this is a no-op on desktop). */}
+        <main className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain pb-16 lg:pb-0">
           {/* Keyed by path so a crash on one page doesn't take the sidebar/topbar
               down with it, and navigating away recovers cleanly instead of
               staying stuck on the fallback screen. */}
@@ -268,6 +271,7 @@ export default function AppLayout() {
           </ErrorBoundary>
         </main>
       </div>
+      <BottomNav />
     </div>
   )
 }

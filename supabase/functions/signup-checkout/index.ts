@@ -15,17 +15,23 @@ const CORS = {
 // Fallback prices — live prices come from platform_settings (Super Admin editable).
 // The client can never set its own amount.
 const FALLBACK_PLAN_PRICES: Record<string, { price: number; renewalMonths: number }> = {
-  byod_monthly:  { price: 60,  renewalMonths: 1 },
+  byod_monthly:  { price: 50,  renewalMonths: 1 },
   byod_yearly:   { price: 600, renewalMonths: 12 },
   standard_plan: { price: 170, renewalMonths: 6 },
   pro_package:   { price: 200, renewalMonths: 6 },
 }
 // Optional, BYOD only -- the in-app self-serve onboarding stays free either way.
 const BYOD_ONBOARDING_FEE = 30
-// Standard/Pro's hardware (tablet + printer) stays a once-off payment --
-// this is a NEW, separate, ongoing hosting subscription on top of it, new
-// signups only. Priced per plan since Pro's is higher.
+// A separate, ongoing hosting subscription on top of the plan itself, new
+// signups only (see hostingLapsed in App.jsx / the plain-plan activation
+// branch in stripe-webhook & paynow-signup-callback -- both gate this the
+// same "new customers only, existing ones grandfathered forever" way).
+// Standard/Pro's hardware stays a once-off payment; BYOD's own device
+// isn't hardware they bought from us, but the cloud infrastructure behind
+// either one is the same ongoing cost, so both carry hosting now.
 const HOSTING_PRICES: Record<string, { monthly: number; yearly: number }> = {
+  byod_monthly:  { monthly: 20, yearly: 200 },
+  byod_yearly:   { monthly: 20, yearly: 200 },
   standard_plan: { monthly: 20, yearly: 200 },
   pro_package:   { monthly: 35, yearly: 300 },
 }
@@ -139,7 +145,7 @@ serve(async (req) => {
       // never trust a client-supplied plan for pricing.
       const tenantPlanType = (userRow.tenants as { plan_type?: string } | null)?.plan_type
       const hostingTable = tenantPlanType ? HOSTING_PRICES[tenantPlanType] : undefined
-      if (!hostingTable) return json({ error: 'Hosting is only for Standard/Pro hardware plans' }, 400)
+      if (!hostingTable) return json({ error: 'No hosting plan found for this account' }, 400)
       const months = period === 'yearly' ? 12 : period === 'monthly' ? 1 : 0
       const price = period === 'yearly' ? hostingTable.yearly : period === 'monthly' ? hostingTable.monthly : undefined
       if (!months || !price) return json({ error: 'Invalid hosting period' }, 400)

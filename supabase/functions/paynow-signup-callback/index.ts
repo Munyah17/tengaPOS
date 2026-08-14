@@ -172,14 +172,17 @@ serve(async (req) => {
       } else if (isHosting) {
         await admin.from('tenants').update({ hosting_expires_at: renewal.toISOString() }).eq('id', checkout.tenant_id)
       } else {
-        const isHardwarePlan = checkout.plan_type === 'standard_plan' || checkout.plan_type === 'pro_package'
+        // Every plan now carries a separate hosting fee (BYOD included, not
+        // just Standard/Pro hardware) -- same "new signups only" gating as
+        // stripe-webhook's equivalent branch.
+        const isHostingSubjectPlan = ['standard_plan', 'pro_package', 'byod_monthly', 'byod_yearly'].includes(checkout.plan_type)
         await admin.from('tenants').update({
           status: 'active',
           plan_type: checkout.plan_type,
           plan_start_date: now.toISOString(),
           next_renewal_date: renewal.toISOString(),
           approved_at: now.toISOString(),
-          ...(isHardwarePlan ? { hosting_expires_at: now.toISOString() } : {}),
+          ...(isHostingSubjectPlan ? { hosting_expires_at: now.toISOString() } : {}),
         }).eq('id', checkout.tenant_id)
       }
 

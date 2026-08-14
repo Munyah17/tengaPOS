@@ -4,6 +4,20 @@ import { generateReceiptNumber, generateDocNumber, parseOptionalNumber, parseOpt
 import { isStaleJwtError, refreshSessionOnce } from '@/lib/authRetry'
 import { generateUUID } from '@/lib/uuid'
 
+// process_checkout errors matching one of these are things the cashier can
+// actually do something about (re-check stock, get a manager, re-scan an
+// item) -- safe to show verbatim. Anything else is an internal/infra
+// failure and gets a generic message instead (see saveCheckout below).
+const CHECKOUT_SAFE_ERROR_PATTERNS = [
+  /insufficient stock/i,
+  /invalid quantity/i,
+  /product not found/i,
+  /total exceeds the priced value/i,
+  /discount authorization/i,
+  /manager authorization/i,
+  /not authorized for this tenant/i,
+]
+
 // ─── Products ────────────────────────────────────────────────────────────────
 
 // A session token signed under a since-rotated key fails verification on
@@ -320,9 +334,18 @@ export async function saveCheckout({ tenantId, branchId, userId, cartItems, paym
         receiptNo, clientRef, salespersonName, salespersonEmployeeNo, discountAuthId,
       }, true)
     }
-    throw new Error(error.message?.includes('Insufficient stock')
-      ? error.message
-      : `Checkout failed: ${error.message}`)
+    // Only ever show the cashier a message that's actually theirs to act
+    // on (out of stock, needs a manager's discount approval, etc.) --
+    // anything else (a stale PostgREST schema cache after a migration, a
+    // dropped connection, a genuine bug) used to get dumped straight into
+    // the checkout toast verbatim, e.g. "Could not find the function
+    // public.process_checkout(p_branch_id, p_client_ref, ...) in the
+    // schema cache" -- confusing, and it hands a stranger the exact
+    // internal parameter names of a money-handling function for free.
+    // The real error is still logged to the console for support to see.
+    const safeToShow = CHECKOUT_SAFE_ERROR_PATTERNS.some((p) => p.test(error.message || ''))
+    if (!safeToShow) console.error('process_checkout RPC error:', error)
+    throw new Error(safeToShow ? error.message : 'Checkout failed — please try again, or contact support if this keeps happening.')
   }
 
   return { order: { id: data.order_id }, receiptNo: data.receipt_no }

@@ -7,7 +7,7 @@ const plans = [
   {
     key: 'byod_monthly',
     name: 'Bring Your Own Device',
-    price: '$60',
+    price: '$50',
     period: '/ month',
     description: 'Use your own hardware. Full cloud POS access with all core features included.',
     icon: Smartphone,
@@ -24,7 +24,7 @@ const plans = [
     ],
     cta: 'Get Started',
     ctaStyle: 'border border-slate-300 text-slate-900 hover:bg-slate-50 dark:border-slate-600 dark:text-white dark:hover:bg-slate-800',
-    extras: ['Or $600/year — 2 months free', 'Optional +$30 physical onboarding (in-app setup is free)'],
+    extras: ['+ $20/month or $200/year hosting', 'Optional +$30 physical onboarding (in-app setup is free)'],
   },
   {
     key: 'standard_plan',
@@ -68,7 +68,7 @@ const plans = [
     ],
     cta: 'Get Started',
     ctaStyle: 'border border-slate-300 text-slate-900 hover:bg-slate-50 dark:border-slate-600 dark:text-white dark:hover:bg-slate-800',
-    extras: ['6 months free use included', '+ $35/month or $300/year hosting'],
+    extras: ['+ $35/month or $300/year hosting'],
   },
 ]
 
