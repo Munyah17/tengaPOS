@@ -32,6 +32,7 @@ function freshState() {
     returns: [],
     stockTransfers: [],
     stockReceipts: [],
+    stockAdjustments: [],
     userBranches: Object.fromEntries(Object.values(DEMO_USERS).map((u) => [u.id, [DEMO_BRANCH_ID]])),
     productBranches: Object.fromEntries(DEMO_PRODUCTS_SEED.map((p) => [p.id, [DEMO_BRANCH_ID]])),
     role: 'vendor',
@@ -84,6 +85,24 @@ export const useDemoStore = create((set, get) => ({
       stockReceipts: [receipt, ...s.stockReceipts],
     }))
     return receipt
+  },
+  adjustStockRow: (productId, newQty, note) => {
+    let result = null
+    set((s) => {
+      const product = s.products.find((p) => p.id === productId)
+      const previousQty = product?.stock_qty ?? 0
+      const adjustment = {
+        id: generateUUID(), tenant_id: DEMO_TENANT_ID, product_id: productId,
+        previous_qty: previousQty, new_qty: newQty, delta: newQty - previousQty,
+        note: note || null, created_at: new Date().toISOString(),
+      }
+      result = adjustment
+      return {
+        products: s.products.map((p) => (p.id === productId ? { ...p, stock_qty: newQty } : p)),
+        stockAdjustments: [adjustment, ...s.stockAdjustments],
+      }
+    })
+    return result
   },
   transferStockRow: (productId, toBranchId, qty, note) => {
     const transfer = { id: generateUUID(), tenant_id: DEMO_TENANT_ID, product_id: productId, to_branch_id: toBranchId, qty, note: note || null, created_at: new Date().toISOString() }

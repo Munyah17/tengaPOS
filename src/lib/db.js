@@ -883,6 +883,33 @@ export async function receiveStock(tenantId, productId, qty, note) {
   return data
 }
 
+// Direct stock-quantity correction -- type the right number, save. Safe
+// against the same stale-snapshot risk the disabled Edit Product stock
+// field had: adjust_stock locks the row and computes the delta against
+// whatever stock_qty genuinely is at the moment of saving, not whatever
+// was on screen when this modal opened.
+export async function adjustStock(tenantId, productId, newQty, note) {
+  const { data, error } = await supabase.rpc('adjust_stock', {
+    p_tenant_id: tenantId,
+    p_product_id: productId,
+    p_new_qty: newQty,
+    p_note: note || null,
+  })
+  if (error) throw error
+  return data
+}
+
+export async function fetchStockAdjustments(tenantId) {
+  const { data, error } = await supabase
+    .from('stock_adjustments')
+    .select('*, products(name, sku), users(name)')
+    .eq('tenant_id', tenantId)
+    .order('created_at', { ascending: false })
+    .limit(100)
+  if (error) throw error
+  return data
+}
+
 // ─── Stock Take (physical count vs system count) ──────────────────────────
 
 export async function fetchStockTakes(tenantId) {

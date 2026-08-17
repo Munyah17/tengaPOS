@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { motion } from 'framer-motion'
 import {
   Search, Plus, Upload, Download, ExternalLink, Edit, Trash2,
-  AlertTriangle, Package, BarChart3, RefreshCw, ImageOff, ImagePlus, X, ArrowLeftRight, PackagePlus,
+  AlertTriangle, Package, BarChart3, RefreshCw, ImageOff, ImagePlus, X, ArrowLeftRight, PackagePlus, SlidersHorizontal,
 } from 'lucide-react'
 import Button from '@/components/common/Button'
 import Modal from '@/components/common/Modal'
@@ -17,7 +17,7 @@ import {
   fetchProducts, insertProduct, bulkInsertProducts, updateProduct, deleteProduct, uploadProductImage,
   fetchBranches, fetchProductBranches, assignProductBranch, unassignProductBranch,
   fetchCategories, createCategory, fetchStockTransfers, transferStock,
-  fetchStockReceipts, receiveStock,
+  fetchStockReceipts, receiveStock, adjustStock, fetchStockAdjustments,
 } from '@/lib/dataLayer'
 import { getOfflineProducts, queueOfflineInventoryWrite } from '@/lib/offlineSync'
 import { resizeImageFile } from '@/utils/imageResize'
@@ -77,6 +77,10 @@ export default function Inventory() {
   const [receiveForm, setReceiveForm] = useState({ productId: '', qty: '', note: '' })
   const [receiving, setReceiving] = useState(false)
   const [receipts, setReceipts] = useState([])
+  const [showAdjust, setShowAdjust] = useState(false)
+  const [adjustForm, setAdjustForm] = useState({ productId: '', newQty: '', note: '' })
+  const [adjusting, setAdjusting] = useState(false)
+  const [adjustments, setAdjustments] = useState([])
   const fileInputRef = useRef(null)
 
   useEffect(() => {
@@ -105,6 +109,12 @@ export default function Inventory() {
     setReceiveForm({ productId: '', qty: '', note: '' })
     setShowReceive(true)
   }
+
+  const loadAdjustments = () => {
+    if (!tenant?.id) return
+    fetchStockAdjustments(tenant.id).then(setAdjustments).catch(() => {})
+  }
+  useEffect(loadAdjustments, [tenant?.id])
 
   const loadCategories = () => {
     if (!tenant?.id) return
@@ -195,6 +205,33 @@ export default function Inventory() {
       toast.error(err.message || 'Failed to add stock')
     } finally {
       setReceiving(false)
+    }
+  }
+
+  const openAdjust = (productId = '') => {
+    const p = products.find((pr) => pr.id === productId)
+    setAdjustForm({ productId, newQty: p ? String(p.stock ?? p.stock_qty ?? 0) : '', note: '' })
+    setShowAdjust(true)
+  }
+
+  const adjustProduct = products.find((p) => p.id === adjustForm.productId)
+
+  const handleAdjust = async (e) => {
+    e.preventDefault()
+    const newQty = Number(adjustForm.newQty)
+    if (!adjustForm.productId) { toast.error('Choose a product'); return }
+    if (adjustForm.newQty === '' || isNaN(newQty) || newQty < 0) { toast.error('Enter a valid quantity'); return }
+    setAdjusting(true)
+    try {
+      await adjustStock(tenant.id, adjustForm.productId, newQty, adjustForm.note.trim() || null)
+      toast.success('Stock quantity updated')
+      queryClient.invalidateQueries({ queryKey: ['products', tenant.id] })
+      loadAdjustments()
+      setShowAdjust(false)
+    } catch (err) {
+      toast.error(err.message || 'Failed to adjust stock')
+    } finally {
+      setAdjusting(false)
     }
   }
 
@@ -529,6 +566,9 @@ export default function Inventory() {
           <Button variant="secondary" onClick={openReceive}>
             <PackagePlus className="h-4 w-4" /> Add Stock
           </Button>
+          <Button variant="secondary" onClick={() => openAdjust()}>
+            <SlidersHorizontal className="h-4 w-4" /> Adjust Stock
+          </Button>
           {branches.length > 1 && (
             <Button variant="secondary" onClick={openTransfer}>
               <ArrowLeftRight className="h-4 w-4" /> Transfer Stock
@@ -638,6 +678,11 @@ export default function Inventory() {
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex gap-1">
+                          {!product.is_service && (
+                            <button onClick={() => openAdjust(product.id)} title="Adjust stock" className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800">
+                              <SlidersHorizontal className="h-4 w-4" />
+                            </button>
+                          )}
                           <button onClick={() => openEdit(product)} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800">
                             <Edit className="h-4 w-4" />
                           </button>
@@ -680,6 +725,43 @@ export default function Inventory() {
                     <td className="px-4 py-2 text-sm font-semibold text-green-600 dark:text-green-400">+{r.qty}</td>
                     <td className="px-4 py-2 text-xs text-slate-500">{r.users?.name || '—'}</td>
                     <td className="px-4 py-2 text-xs text-slate-400">{r.note || '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Recent direct corrections -- kept separate from Recent Stock
+          Additions, since these can go either direction and always
+          include the reason a human gave for the change. */}
+      {adjustments.length > 0 && (
+        <div className="mt-6 overflow-hidden rounded-2xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
+          <div className="border-b border-slate-200 px-4 py-3 dark:border-slate-800">
+            <h2 className="text-sm font-bold text-slate-900 dark:text-white">Recent Stock Adjustments</h2>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-900">
+                  {['Date', 'Product', 'Was', 'Now', 'Change', 'By', 'Reason'].map((h) => (
+                    <th key={h} className="px-4 py-2 text-left text-xs font-semibold uppercase text-slate-500">{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {adjustments.map((a) => (
+                  <tr key={a.id} className="border-b border-slate-100 dark:border-slate-800">
+                    <td className="px-4 py-2 text-xs text-slate-500">{formatDateTime(a.created_at)}</td>
+                    <td className="px-4 py-2 text-sm text-slate-700 dark:text-slate-300">{a.products?.name || '—'}</td>
+                    <td className="px-4 py-2 text-sm text-slate-500">{a.previous_qty}</td>
+                    <td className="px-4 py-2 text-sm font-semibold text-slate-900 dark:text-white">{a.new_qty}</td>
+                    <td className={`px-4 py-2 text-sm font-semibold ${a.delta >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-500'}`}>
+                      {a.delta >= 0 ? '+' : ''}{a.delta}
+                    </td>
+                    <td className="px-4 py-2 text-xs text-slate-500">{a.users?.name || '—'}</td>
+                    <td className="px-4 py-2 text-xs text-slate-400">{a.note || '—'}</td>
                   </tr>
                 ))}
               </tbody>
@@ -736,6 +818,65 @@ export default function Inventory() {
           <div className="flex justify-end gap-2 pt-2">
             <Button variant="secondary" type="button" onClick={() => setShowReceive(false)}>Cancel</Button>
             <Button type="submit" disabled={receiving}>{receiving ? 'Adding…' : 'Add Stock'}</Button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* Adjust Stock Modal — a direct correction (can go up or down),
+          distinct from Add Stock (always additive, for deliveries). Safe
+          against the same stale-snapshot problem the disabled Edit Product
+          stock field had: adjust_stock locks the row and computes the
+          delta against the real, current stock_qty at save time, not
+          whatever this modal showed when it opened. */}
+      <Modal isOpen={showAdjust} onClose={() => setShowAdjust(false)} title="Adjust Stock">
+        <form onSubmit={handleAdjust} className="space-y-4">
+          <div>
+            <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">Product</label>
+            <select
+              value={adjustForm.productId}
+              onChange={(e) => {
+                const p = products.find((pr) => pr.id === e.target.value)
+                setAdjustForm((f) => ({ ...f, productId: e.target.value, newQty: p ? String(p.stock ?? p.stock_qty ?? 0) : '' }))
+              }}
+              required
+              className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+            >
+              <option value="">Select product…</option>
+              {products.filter((p) => !p.is_service).map((p) => (
+                <option key={p.id} value={p.id}>{p.name} (current stock: {p.stock_qty ?? 0})</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">Correct Quantity To</label>
+            <input
+              type="number" min="0" step="any" value={adjustForm.newQty}
+              onChange={(e) => setAdjustForm((f) => ({ ...f, newQty: e.target.value }))}
+              required
+              className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+            />
+            {adjustProduct && adjustForm.newQty !== '' && !isNaN(Number(adjustForm.newQty)) && (
+              <p className="mt-1 text-xs text-slate-500">
+                {adjustProduct.stock_qty ?? 0} → <b>{Number(adjustForm.newQty)}</b>{' '}
+                ({Number(adjustForm.newQty) - (adjustProduct.stock_qty ?? 0) >= 0 ? '+' : ''}{Number(adjustForm.newQty) - (adjustProduct.stock_qty ?? 0)})
+              </p>
+            )}
+          </div>
+          <div>
+            <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">Reason (optional)</label>
+            <input
+              type="text" value={adjustForm.note}
+              onChange={(e) => setAdjustForm((f) => ({ ...f, note: e.target.value }))}
+              placeholder="e.g. damaged, miscount, shrinkage"
+              className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+            />
+          </div>
+          <p className="text-xs text-slate-500">
+            Sets stock to exactly this number — use this for corrections. Every adjustment is logged below with who made it and the reason.
+          </p>
+          <div className="flex justify-end gap-2 pt-2">
+            <Button variant="secondary" type="button" onClick={() => setShowAdjust(false)}>Cancel</Button>
+            <Button type="submit" disabled={adjusting}>{adjusting ? 'Saving…' : 'Save Correction'}</Button>
           </div>
         </form>
       </Modal>
@@ -927,7 +1068,7 @@ export default function Inventory() {
                 // Transfer Stock, which apply a safe, locked adjustment
                 // instead of an unconditional overwrite.
                 disabled: !!editTarget,
-                hint: editTarget ? 'Use Add Stock, Stock Take, or Transfer Stock to change this.' : undefined,
+                hint: editTarget ? 'Use Adjust Stock, Add Stock, Stock Take, or Transfer Stock to change this.' : undefined,
               },
               { label: 'Low Stock Alert At', field: 'lowStockThreshold', type: 'number', required: false },
             ]),

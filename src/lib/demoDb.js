@@ -210,6 +210,18 @@ export async function receiveStock(_tenantId, productId, qty, note) {
   return store().receiveStockRow(productId, qty, note)
 }
 
+export async function adjustStock(_tenantId, productId, newQty, note) {
+  return store().adjustStockRow(productId, newQty, note)
+}
+
+export async function fetchStockAdjustments() {
+  const s = store()
+  return s.stockAdjustments.map((a) => {
+    const p = s.products.find((pr) => pr.id === a.product_id)
+    return { ...a, products: p ? { name: p.name, sku: p.sku } : null, users: { name: null } }
+  })
+}
+
 // ─── Job cards / prescriptions / age verification ──────────────────────────
 // Demo tenant is retail-mode only -- these code paths never actually run
 // from the demo UI, but the real pages import them unconditionally.
