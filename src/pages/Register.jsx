@@ -61,7 +61,7 @@ export default function Register() {
 
   return (
     <div
-      className="relative flex min-h-screen items-center justify-center overflow-y-auto bg-gradient-to-br from-slate-950 via-slate-900 to-brand-950 px-4 py-10 sm:py-14"
+      className="relative flex min-h-screen items-center justify-center overflow-x-hidden overflow-y-auto bg-gradient-to-br from-slate-950 via-slate-900 to-brand-950 px-4 py-10 sm:py-14"
       style={{ minHeight: '100dvh' }}
     >
       {/* absolute (not fixed) — a fixed background stays pinned to the
