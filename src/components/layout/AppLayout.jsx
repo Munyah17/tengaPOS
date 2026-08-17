@@ -202,6 +202,32 @@ export default function AppLayout() {
     return () => { supabase.removeChannel(channel) }
   }, [tenant?.id])
 
+  // Reported live: a client adding/editing inventory on one device could
+  // take a long time to show up on another (e.g. a cashier's POS screen
+  // left open all shift). staleTime alone doesn't fix this -- React Query
+  // only re-checks stale data on specific triggers (refocus, remount,
+  // explicit invalidation), never on a plain background timer, so a POS
+  // tab that just stays open and focused could go the whole shift without
+  // ever re-checking. This pushes the invalidation instead of waiting for
+  // one of those triggers to eventually happen: any insert/update/delete
+  // on this tenant's products refreshes every open tab within moments,
+  // on every device, same pattern as the tenant-live channel above.
+  useEffect(() => {
+    if (!tenant?.id || isDemoRoute()) return
+    const channel = supabase
+      .channel(`products-live-${tenant.id}`)
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'products',
+        filter: `tenant_id=eq.${tenant.id}`,
+      }, () => {
+        queryClient.invalidateQueries({ queryKey: ['products', tenant.id] })
+      })
+      .subscribe()
+    return () => { supabase.removeChannel(channel) }
+  }, [tenant?.id, queryClient])
+
   return (
     // Some mobile browsers (esp. ones with a persistent, non-retracting
     // top search/address bar) draw that bar as an overlay on top of page
