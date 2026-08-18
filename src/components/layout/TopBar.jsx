@@ -143,10 +143,14 @@ export default function TopBar({ onMenuClick }) {
           </div>
         )}
 
-        {/* Online status */}
-        <div className={`hidden flex-shrink-0 items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium lg:flex ${isOnline ? 'bg-green-50 text-green-700 dark:bg-green-950 dark:text-green-400' : 'bg-red-50 text-red-700 dark:bg-red-950 dark:text-red-400'}`}>
+        {/* Online status -- previously lg:-only, so a phone/small-tablet
+            user (most cashiers) had no way to even see their connection
+            state, let alone tell whether "offline mode not working" meant
+            they were actually offline at all. Icon always shows now; only
+            the text label collapses on the smallest screens. */}
+        <div className={`flex flex-shrink-0 items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-medium ${isOnline ? 'bg-green-50 text-green-700 dark:bg-green-950 dark:text-green-400' : 'bg-red-50 text-red-700 dark:bg-red-950 dark:text-red-400'}`}>
           {isOnline ? <Wifi className="h-3.5 w-3.5" /> : <WifiOff className="h-3.5 w-3.5" />}
-          <span className="hidden lg:inline">{isOnline ? 'Online' : 'Offline'}</span>
+          <span className="hidden sm:inline">{isOnline ? 'Online' : 'Offline'}</span>
         </div>
 
         {/* Pending offline sync count — reassurance that queued work hasn't been lost.

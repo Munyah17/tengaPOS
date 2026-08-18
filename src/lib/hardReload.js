@@ -7,6 +7,23 @@
 // manual "Refresh Online Updates" button -- three different triggers for
 // the same underlying need.
 export async function hardReload() {
+  // Reported live as "offline mode doesn't work at all" -- tracked down to
+  // this: unregistering the service worker and deleting every cache
+  // ALWAYS ran, even when the device genuinely had no connection to reload
+  // into. A user hitting "Refresh Online Updates" specifically because
+  // something wasn't syncing would, if they really were offline, have
+  // their entire offline safety net destroyed right before a reload that
+  // then had nothing left to fall back on -- turning "briefly offline"
+  // into "the app won't load at all" until a good connection came back.
+  // A real network probe first (a tiny, always-precached asset, no-store
+  // so it can't be answered from cache) means the teardown only happens
+  // when the reload can actually succeed off the network afterward.
+  try {
+    await fetch('/favicon.png', { cache: 'no-store' })
+  } catch {
+    window.location.reload()
+    return
+  }
   try {
     if ('serviceWorker' in navigator) {
       const regs = await navigator.serviceWorker.getRegistrations()

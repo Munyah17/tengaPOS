@@ -1,7 +1,6 @@
 import { useState } from 'react'
 import { RefreshCw } from 'lucide-react'
 import { useQueryClient } from '@tanstack/react-query'
-import toast from 'react-hot-toast'
 import { useAuthStore } from '@/stores/authStore'
 import { cacheProductsForOffline, processSyncQueue } from '@/lib/offlineSync'
 import { hardReload } from '@/lib/hardReload'
@@ -26,10 +25,14 @@ export default function RefreshOnlineButton() {
   const { tenant } = useAuthStore()
 
   const handleRefresh = async () => {
-    if (!navigator.onLine) {
-      toast.error("You're offline — reconnect to pull fresh updates")
-      return
-    }
+    // Deliberately no navigator.onLine pre-check -- this button exists
+    // specifically as the manual "force it now" escape hatch, and that
+    // API is known to report the wrong value on some networks (see
+    // offlineSync.js's startBackgroundSync). Refusing to even attempt a
+    // refresh based on it meant the one recovery path a frustrated user
+    // has could silently refuse to work right when they needed it most.
+    // A real attempt either succeeds or fails on its own -- the catch
+    // below and hardReload() already handle a genuine offline device fine.
     setRefreshing(true)
     try {
       window.dispatchEvent(new CustomEvent('tengapos:force-refresh'))

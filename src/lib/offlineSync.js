@@ -129,8 +129,20 @@ export async function processSyncQueue() {
 export function startBackgroundSync(tenantId, { intervalMs = 15000, onSynced, onFailed } = {}) {
   if (!tenantId) return () => {}
 
+  // Reported live: offline mode "not working" on devices where it turned
+  // out navigator.onLine was the actual culprit -- it only reflects
+  // whether a network interface is up (WiFi/ethernet link), not whether
+  // the connection can actually reach anything, and is well known to
+  // report the wrong value on some networks (see POS.jsx's checkout,
+  // which already avoids trusting it for exactly this reason). Gating
+  // the entire tick on it meant a false "offline" reading silently
+  // stopped both the product-cache refresh AND the sync queue drain
+  // indefinitely, with nothing on screen to explain why. Just attempt
+  // both every tick instead -- a genuinely offline device fails the
+  // fetch fast on its own (cacheProductsForOffline already catches that
+  // and falls back to the last-known cache; processSyncQueue already
+  // classifies a real connectivity failure as retry-later, not an error).
   const tick = async () => {
-    if (!navigator.onLine) return
     await cacheProductsForOffline(tenantId)
     const result = await processSyncQueue()
     if (result.synced > 0) onSynced?.(result)
