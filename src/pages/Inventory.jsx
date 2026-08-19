@@ -19,7 +19,8 @@ import {
   fetchCategories, createCategory, fetchStockTransfers, transferStock,
   fetchStockReceipts, receiveStock, adjustStock, fetchStockAdjustments,
 } from '@/lib/dataLayer'
-import { getOfflineProducts, queueOfflineInventoryWrite } from '@/lib/offlineSync'
+import { getOfflineProducts, queueOfflineInventoryWrite, queueOfflineAction } from '@/lib/offlineSync'
+import { isNetworkError } from '@/lib/authRetry'
 import { resizeImageFile } from '@/utils/imageResize'
 import toast from 'react-hot-toast'
 
@@ -181,7 +182,19 @@ export default function Inventory() {
       loadTransfers()
       setShowTransfer(false)
     } catch (err) {
-      toast.error(err.message || 'Failed to transfer stock')
+      // Same principle as POS checkout: attempt the real call first and
+      // only treat it as offline if the network itself failed, rather
+      // than pre-guessing off navigator.onLine (unreliable -- see
+      // offlineSync.js). A genuine server rejection (branch mismatch,
+      // insufficient stock) surfaces immediately instead of being queued
+      // to fail the exact same way again later.
+      if (isNetworkError(err)) {
+        await queueOfflineAction('transfer_stock', { tenantId: tenant.id, productId: transferForm.productId, toBranchId: transferForm.toBranchId, qty, note: transferForm.note.trim() || null })
+        toast('Offline — transfer saved, will sync automatically', { icon: '📴' })
+        setShowTransfer(false)
+      } else {
+        toast.error(err.message || 'Failed to transfer stock')
+      }
     } finally {
       setTransferring(false)
     }
@@ -202,7 +215,18 @@ export default function Inventory() {
       loadReceipts()
       setShowReceive(false)
     } catch (err) {
-      toast.error(err.message || 'Failed to add stock')
+      if (isNetworkError(err)) {
+        await queueOfflineAction('receive_stock', { tenantId: tenant.id, productId: receiveForm.productId, qty, note: receiveForm.note.trim() || null })
+        // Optimistic bump so the addition shows up right away instead of
+        // waiting for the eventual sync -- same treatment offline product
+        // inserts/edits already get.
+        queryClient.setQueryData(['products', tenant.id], (old) =>
+          (old || []).map((p) => p.id === receiveForm.productId ? { ...p, stock: (p.stock ?? 0) + qty, stock_qty: (p.stock_qty ?? 0) + qty } : p))
+        toast('Offline — stock added, will sync automatically', { icon: '📴' })
+        setShowReceive(false)
+      } else {
+        toast.error(err.message || 'Failed to add stock')
+      }
     } finally {
       setReceiving(false)
     }
@@ -229,7 +253,20 @@ export default function Inventory() {
       loadAdjustments()
       setShowAdjust(false)
     } catch (err) {
-      toast.error(err.message || 'Failed to adjust stock')
+      if (isNetworkError(err)) {
+        // Queued as a DELTA (this correction's intent, captured right
+        // now), not the absolute newQty -- adjust_stock_by_delta applies
+        // it on top of whatever stock genuinely is by the time this
+        // finally syncs, instead of stomping it with a stale number.
+        const delta = newQty - (adjustProduct?.stock_qty ?? adjustProduct?.stock ?? 0)
+        await queueOfflineAction('adjust_stock', { tenantId: tenant.id, productId: adjustForm.productId, delta, note: adjustForm.note.trim() || null })
+        queryClient.setQueryData(['products', tenant.id], (old) =>
+          (old || []).map((p) => p.id === adjustForm.productId ? { ...p, stock: newQty, stock_qty: newQty } : p))
+        toast('Offline — correction saved, will sync automatically', { icon: '📴' })
+        setShowAdjust(false)
+      } else {
+        toast.error(err.message || 'Failed to adjust stock')
+      }
     } finally {
       setAdjusting(false)
     }

@@ -12,6 +12,8 @@ import { fetchProducts, fetchBranches } from '@/lib/dataLayer'
 import {
   fetchStockTakes, fetchStockTakeCounts, startStockTake, recordStockTakeCount, finalizeStockTake,
 } from '@/lib/db'
+import { queueOfflineAction } from '@/lib/offlineSync'
+import { isNetworkError } from '@/lib/authRetry'
 import toast from 'react-hot-toast'
 
 export default function StockTake() {
@@ -108,7 +110,25 @@ export default function StockTake() {
       setCountValue('')
       loadCounts(activeTake.id)
     } catch (err) {
-      toast.error(err.message || 'Failed to record count')
+      if (isNetworkError(err)) {
+        // Safe to queue: record_stock_take_count upserts by (stock_take_id,
+        // product_id), so a replay after reconnecting just lands the same
+        // count -- counting into an already-started session works fine
+        // offline, only starting/finalizing the session itself needs a
+        // live connection.
+        await queueOfflineAction('stock_take_count', { stockTakeId: activeTake.id, productId: selectedProductId, countedQty: qty, note: null })
+        const p = products.find((pr) => pr.id === selectedProductId)
+        setCounts((prev) => [
+          { id: `offline-${Date.now()}`, product_id: selectedProductId, products: p ? { name: p.name } : null, system_qty: p?.stock ?? p?.stock_qty ?? 0, counted_qty: qty, counted_at: new Date().toISOString() },
+          ...prev,
+        ])
+        setSearch('')
+        setSelectedProductId('')
+        setCountValue('')
+        toast('Offline — count saved, will sync automatically', { icon: '📴' })
+      } else {
+        toast.error(err.message || 'Failed to record count')
+      }
     }
     setSaving(false)
   }

@@ -17,6 +17,8 @@ import {
   fetchReturns, requestReturn, approveReturn, validateReturn, rejectReturn, deleteOrder,
   clearVoidedTransactions,
 } from '@/lib/dataLayer'
+import { queueOfflineAction } from '@/lib/offlineSync'
+import { isNetworkError } from '@/lib/authRetry'
 import toast from 'react-hot-toast'
 
 const VOID_BADGE = {
@@ -205,7 +207,17 @@ export default function Transactions() {
       setVoidTarget(null)
       refreshVoids()
     } catch (err) {
-      toast.error(err.message || 'Failed to request void')
+      // Only the REQUEST step queues offline -- approve/validate stay
+      // online-only, on purpose (a manager approving a reversal from a
+      // queued, unattended replay is exactly the kind of loophole this
+      // app's approval tiers exist to close, not something to automate).
+      if (isNetworkError(err)) {
+        await queueOfflineAction('void_request', { orderId: voidTarget, reason })
+        toast('Offline — void request saved, will submit automatically', { icon: '📴' })
+        setVoidTarget(null)
+      } else {
+        toast.error(err.message || 'Failed to request void')
+      }
     }
   }
 
@@ -263,7 +275,13 @@ export default function Transactions() {
       setReturnTarget(null)
       refreshReturns()
     } catch (err) {
-      toast.error(err.message || 'Failed to request return')
+      if (isNetworkError(err)) {
+        await queueOfflineAction('return_request', { orderId: returnTarget.orderId, reason, refundAmount: amount })
+        toast('Offline — return request saved, will submit automatically', { icon: '📴' })
+        setReturnTarget(null)
+      } else {
+        toast.error(err.message || 'Failed to request return')
+      }
     }
   }
 

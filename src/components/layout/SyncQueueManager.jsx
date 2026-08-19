@@ -9,6 +9,12 @@ import toast from 'react-hot-toast'
 const LABELS = {
   checkout: 'POS Sale',
   inventory: 'Inventory Update',
+  receive_stock: 'Add Stock',
+  adjust_stock: 'Stock Correction',
+  transfer_stock: 'Stock Transfer',
+  void_request: 'Void Request',
+  return_request: 'Return Request',
+  stock_take_count: 'Stock Take Count',
 }
 
 // Self-serve recovery for the offline sync queue -- lets whoever's on this
@@ -62,7 +68,7 @@ export default function SyncQueueManager({ isOpen, onClose, onChanged }) {
     <Modal isOpen={isOpen} onClose={onClose} title="Offline Sync Queue" size="lg">
       <div className="space-y-3">
         <p className="text-xs text-slate-500">
-          Sales and inventory edits saved on this device while offline (or during a connection issue), waiting to reach the server.
+          Sales, stock changes, and requests saved on this device while offline (or during a connection issue), waiting to reach the server.
         </p>
         {loading ? (
           <div className="py-8 text-center text-sm text-slate-400">Loading…</div>

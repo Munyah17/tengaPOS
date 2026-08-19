@@ -2,7 +2,10 @@
 // working with no connection, queue sales made while offline, and
 // periodically sync everything back to Supabase in the background.
 import { db, addToSyncQueue, getSyncQueueItems, removeSyncQueueItem, markSyncItemFailed } from '@/db'
-import { fetchProducts, saveCheckout, insertProduct, updateProduct } from '@/lib/db'
+import {
+  fetchProducts, saveCheckout, insertProduct, updateProduct,
+  receiveStock, adjustStockByDelta, transferStock, requestVoid, requestReturn, recordStockTakeCount,
+} from '@/lib/db'
 import { generateUUID } from '@/lib/uuid'
 
 // A business-logic failure (out of stock by the time this replayed) can
@@ -21,7 +24,19 @@ import { generateUUID } from '@/lib/uuid'
 // which requires the cashier to be back at the till with them present),
 // so this needs the same "give up and surface it" treatment as insufficient
 // stock, not endless silent retries.
-const PERMANENT_ERROR_PATTERNS = [/insufficient stock/i, /stock check failed/i, /invalid input syntax/i, /discount authorization/i, /total exceeds the priced value/i]
+const PERMANENT_ERROR_PATTERNS = [
+  /insufficient stock/i, /stock check failed/i, /invalid input syntax/i, /discount authorization/i, /total exceeds the priced value/i,
+  // The newer queueable actions below (receive/adjust/transfer stock, void
+  // and return requests, stock-take counts) each have their own class of
+  // "retrying this exact payload can never succeed" failure -- the product
+  // was deleted since, the order's request already went through some
+  // other way, the stock-take session was finalized before this queued
+  // count ever got a chance to sync. Same reasoning as insufficient stock
+  // above: surface it for a person to look at, not loop forever.
+  /product not found/i, /services don't carry stock/i, /source and destination branch must be different/i,
+  /already pending or completed/i, /order not found/i, /reason is required/i, /refund amount/i,
+  /stock take not found/i, /already completed/i, /counted quantity cannot be negative/i,
+]
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
@@ -52,6 +67,17 @@ export async function queueOfflineInventoryWrite(operation, tenantId, payload, p
   await addToSyncQueue('inventory', operation, { tenantId, productId, payload })
 }
 
+// Generic queue entry for every other day-to-day action that can happen
+// with no connection: receiving/adjusting/transferring stock, requesting
+// a void or return, counting a product into an open stock take. One
+// shape (table_name doubles as the action type here, 'create' throughout
+// since none of these are edits-of-a-queued-item) instead of a bespoke
+// queue* function per action -- see processSyncQueue's REPLAY_ACTIONS
+// for what each one actually does on replay.
+export async function queueOfflineAction(actionType, payload) {
+  await addToSyncQueue(actionType, 'create', payload)
+}
+
 // Only counts items still being auto-retried — a permanently-failed item
 // (see failedSyncCount) needs a person, not just more waiting, so it's
 // tracked separately rather than inflating this indefinitely.
@@ -61,6 +87,22 @@ export async function pendingSyncCount() {
 
 export async function failedSyncCount() {
   return db.syncQueue.where('failed').equals(1).count()
+}
+
+// One entry per action queueOfflineAction can queue -- payload shape is
+// whatever that call site packed in, replayed against the real RPC
+// wrapper exactly as if it had been called live.
+const REPLAY_ACTIONS = {
+  receive_stock: (data) => receiveStock(data.tenantId, data.productId, data.qty, data.note),
+  // Deliberately delta, not adjustStock's absolute set -- see
+  // adjust_stock_by_delta's own migration comment for why a queued
+  // correction can't safely replay as "set to X" after sitting for a
+  // while.
+  adjust_stock: (data) => adjustStockByDelta(data.tenantId, data.productId, data.delta, data.note),
+  transfer_stock: (data) => transferStock(data.tenantId, data.productId, data.toBranchId, data.qty, data.note),
+  void_request: (data) => requestVoid(data.orderId, data.reason),
+  return_request: (data) => requestReturn(data.orderId, data.reason, data.refundAmount),
+  stock_take_count: (data) => recordStockTakeCount(data.stockTakeId, data.productId, data.countedQty, data.note),
 }
 
 /** Replays any queued offline writes (POS checkout + Inventory). Safe to call
@@ -102,6 +144,8 @@ export async function processSyncQueue() {
         } else {
           await updateProduct(data.productId, data.payload)
         }
+      } else if (REPLAY_ACTIONS[item.table_name]) {
+        await REPLAY_ACTIONS[item.table_name](item.data)
       } else {
         continue
       }

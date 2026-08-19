@@ -899,6 +899,19 @@ export async function adjustStock(tenantId, productId, newQty, note) {
   return data
 }
 
+// Offline-queue replay only -- see adjust_stock_by_delta's own comment for
+// why this applies a signed delta instead of adjustStock's absolute set.
+export async function adjustStockByDelta(tenantId, productId, delta, note) {
+  const { data, error } = await supabase.rpc('adjust_stock_by_delta', {
+    p_tenant_id: tenantId,
+    p_product_id: productId,
+    p_delta: delta,
+    p_note: note || null,
+  })
+  if (error) throw error
+  return data
+}
+
 export async function fetchStockAdjustments(tenantId) {
   const { data, error } = await supabase
     .from('stock_adjustments')
