@@ -80,7 +80,7 @@ function CartQtyField({ item, onCommit }) {
 
 export default function POS() {
   const { posMode } = useThemeStore()
-  const { tenant, user, branch } = useAuthStore()
+  const { tenant, user, branch, role } = useAuthStore()
   const isRestaurant = posMode === 'restaurant'
   // VAT only actually applies when it's both activated as a plan feature
   // (tenant.features.vat -- a Super Admin-approved add-on) AND not switched
@@ -309,7 +309,13 @@ export default function POS() {
     // Discount changes clear cart.discountAuthId (see cartStore.js), so a
     // stale authorization from an earlier, different discount can never
     // silently cover this one -- if it's set, it's for this exact sale.
-    if (!isDemoRoute() && cart.getEffectiveDiscountPct() > 10 && !cart.discountAuthId) {
+    // A vendor is already the top of the discount-approval chain (they're
+    // who a shop_manager/supervisor's own authorization ultimately answers
+    // to, and they can self-authorize up to 100% anyway) -- making them log
+    // into their own account a second time mid-checkout to approve their
+    // own discount is pure friction with no actual control behind it.
+    // process_checkout enforces this same exemption server-side.
+    if (!isDemoRoute() && role !== 'vendor' && cart.getEffectiveDiscountPct() > 10 && !cart.discountAuthId) {
       setShowDiscountAuthModal(true)
       return
     }
@@ -963,7 +969,7 @@ export default function POS() {
               </button>
             )}
           </div>
-          {!isDemoRoute() && cart.getEffectiveDiscountPct() > 10 && (
+          {!isDemoRoute() && role !== 'vendor' && cart.getEffectiveDiscountPct() > 10 && (
             <p className="mb-1 text-xs font-medium text-amber-600 dark:text-amber-400">
               {cart.discountAuthId
                 ? 'Discount authorized by manager.'
@@ -972,8 +978,13 @@ export default function POS() {
           )}
 
           {/* Salesperson — optional, distinct from the cashier. Silent on
-              the receipt entirely unless one is actually picked/typed. */}
-          {!showSalesperson ? (
+              the receipt entirely unless one is actually picked/typed. Gated
+              tenant-wide by Settings > General > "Salesperson at Checkout"
+              (default off) -- when the tenant hasn't turned it on, this
+              entire section (button included) must not render at all, not
+              just be disabled, so it never appears as clutter for tenants
+              who never asked for it. */}
+          {tenant?.salesperson_capture_enabled && (!showSalesperson ? (
             <button
               onClick={() => setShowSalesperson(true)}
               className="mt-2 flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-brand-600 dark:hover:text-brand-400"
@@ -1032,7 +1043,7 @@ export default function POS() {
                 </div>
               )}
             </div>
-          )}
+          ))}
 
           <div className="mt-3 space-y-1">
             {cart.discount > 0 && (

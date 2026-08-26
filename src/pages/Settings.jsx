@@ -664,6 +664,10 @@ export default function Settings() {
   const [currency, setCurrency] = useState(tenant?.currency || 'USD')
   const [vatEnabled, setVatEnabledLocal] = useState(tenant?.vat_enabled !== false)
   const [vatRate, setVatRate] = useState(tenant?.vat_rate ?? 15.5)
+  // Vendor-only, plain free switch (no unlock flow like VAT) -- see
+  // 1786190000_salesperson_capture_toggle.sql. Off by default so it never
+  // newly appears for a tenant that didn't ask for it.
+  const [salespersonCaptureEnabled, setSalespersonCaptureEnabled] = useState(tenant?.salesperson_capture_enabled === true)
   const [generalSaving, setGeneralSaving] = useState(false)
 
   useEffect(() => {
@@ -672,6 +676,7 @@ export default function Settings() {
       setCurrency(tenant.currency || 'USD')
       setVatEnabledLocal(tenant.vat_enabled !== false)
       setVatRate(tenant.vat_rate ?? 15.5)
+      setSalespersonCaptureEnabled(tenant.salesperson_capture_enabled === true)
     }
   }, [tenant])
 
@@ -736,7 +741,10 @@ export default function Settings() {
       } else {
         const { error } = await supabase
           .from('tenants')
-          .update({ name: businessName.trim(), currency, vat_enabled: vatEnabled, vat_rate: Number(vatRate) || 15.5 })
+          .update({
+            name: businessName.trim(), currency, vat_enabled: vatEnabled, vat_rate: Number(vatRate) || 15.5,
+            salesperson_capture_enabled: salespersonCaptureEnabled,
+          })
           .eq('id', tenant.id)
         if (error) throw error
         toast.success('Settings saved')
@@ -1116,6 +1124,35 @@ export default function Settings() {
                     )}
                   </div>
                 )}
+
+                {/* Salesperson capture at checkout -- Vendor-only, off by
+                    default so it doesn't newly appear for tenants who never
+                    asked for it. When on, POS.jsx shows "+ Add Salesperson"
+                    (staff dropdown + manual entry); when off, that entire
+                    section is not rendered at all -- see POS.jsx. */}
+                <div className="rounded-xl border border-slate-200 p-4 dark:border-slate-700">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <span className="text-sm font-semibold text-slate-900 dark:text-white">Salesperson at Checkout</span>
+                      <p className="text-xs text-slate-500">
+                        Lets the person checking out select or enter a salesperson (from your staff list, or typed manually) on each sale.
+                      </p>
+                    </div>
+                    <label className={`relative inline-flex items-center ${isShopManager ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}`}>
+                      <input
+                        type="checkbox"
+                        checked={salespersonCaptureEnabled}
+                        disabled={isShopManager}
+                        onChange={(e) => !isShopManager && setSalespersonCaptureEnabled(e.target.checked)}
+                        className="peer sr-only"
+                      />
+                      <div className="peer h-5 w-9 rounded-full bg-slate-300 after:absolute after:left-[2px] after:top-[2px] after:h-4 after:w-4 after:rounded-full after:bg-white after:transition-all peer-checked:bg-brand-600 peer-checked:after:translate-x-full dark:bg-slate-600" />
+                    </label>
+                  </div>
+                  {isShopManager && (
+                    <p className="mt-2 text-xs text-slate-400">Owner-only setting.</p>
+                  )}
+                </div>
 
                 <Button onClick={handleSaveGeneral} disabled={generalSaving}>
                   {generalSaving ? 'Saving…' : 'Save Changes'}
