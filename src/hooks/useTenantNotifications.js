@@ -2,7 +2,7 @@
 // ready to serve, and platform announcements. Shared by TopBar and the
 // full Notifications page so the two never drift out of sync.
 import { useState, useEffect, useCallback } from 'react'
-import { Package, UtensilsCrossed, Megaphone, Inbox, ClipboardEdit } from 'lucide-react'
+import { Package, UtensilsCrossed, Megaphone, Inbox, ClipboardEdit, CalendarClock } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 
 function timeAgo(iso) {
@@ -36,7 +36,7 @@ export function useTenantNotifications({ tenantId, posMode, role, userId, limit 
     const readIds = getReadIds()
     const includeAnnouncements = !ANNOUNCEMENTS_HIDDEN_FOR.includes(role)
     const [{ data: products }, { data: readyOrders }, { data: announcements }] = await Promise.all([
-      supabase.from('products').select('id, name, stock_qty, low_stock_threshold, updated_at').eq('tenant_id', tenantId).eq('is_active', true),
+      supabase.from('products').select('id, name, stock_qty, low_stock_threshold, updated_at, expiry_date').eq('tenant_id', tenantId).eq('is_active', true),
       posMode === 'restaurant'
         ? supabase.from('orders').select('id, order_no, updated_at').eq('tenant_id', tenantId).eq('status', 'ready').order('updated_at', { ascending: false }).limit(10)
         : Promise.resolve({ data: [] }),
@@ -85,6 +85,23 @@ export function useTenantNotifications({ tenantId, posMode, role, userId, limit 
         icon: Package,
       }))
 
+    // Expiring stock (e.g. pharmacy batches) -- same source query as low
+    // stock above, just a different filter, so no extra round trip.
+    const now = Date.now()
+    const in30Days = now + 30 * 86400000
+    const expiringSoon = (products || [])
+      .filter((p) => p.expiry_date && new Date(p.expiry_date).getTime() <= in30Days)
+      .map((p) => {
+        const daysLeft = Math.ceil((new Date(p.expiry_date).getTime() - now) / 86400000)
+        return {
+          id: `expiry-${p.id}`,
+          text: daysLeft < 0 ? `Expired: ${p.name}` : `Expiring soon: ${p.name} (${daysLeft}d left)`,
+          time: timeAgo(p.updated_at),
+          ts: p.updated_at,
+          icon: CalendarClock,
+        }
+      })
+
     const orderNotes = (readyOrders || []).map((o) => ({
       id: `order-${o.id}`,
       text: `Order ${o.order_no} ready to serve`,
@@ -123,7 +140,7 @@ export function useTenantNotifications({ tenantId, posMode, role, userId, limit 
       }
     })
 
-    const all = [...approvalNotes, ...ownPendingChangeNotes, ...lowStock, ...orderNotes, ...announcementNotes]
+    const all = [...approvalNotes, ...ownPendingChangeNotes, ...lowStock, ...expiringSoon, ...orderNotes, ...announcementNotes]
       .sort((a, b) => new Date(b.ts) - new Date(a.ts))
       .slice(0, limit)
       .map((n) => ({ ...n, unread: !readIds.has(n.id) }))

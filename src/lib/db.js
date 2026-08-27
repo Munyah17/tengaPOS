@@ -85,6 +85,10 @@ export async function insertProduct(tenantId, product) {
       // 'prescription'/'controlled' gate the sale on prescriber details.
       dispensing_class: product.dispensingClass || 'otc',
       controlled_schedule: product.dispensingClass === 'controlled' ? (product.controlledSchedule || null) : null,
+      // Pharmacy Mode — batch/expiry/storage detail, all optional.
+      batch_no: product.batchNo || null,
+      expiry_date: product.expiryDate || null,
+      storage_location: product.storageLocation || null,
       // Bar/Liquor Store Mode — gates the sale on an ID/age check at checkout.
       age_restricted: product.ageRestricted === true,
       is_active: true,
@@ -174,6 +178,9 @@ export async function updateProduct(id, updates) {
       price_tiers: (updates.priceTiers || []).filter((t) => t.min_qty > 0 && t.price >= 0),
       dispensing_class: updates.dispensingClass || 'otc',
       controlled_schedule: updates.dispensingClass === 'controlled' ? (updates.controlledSchedule || null) : null,
+      batch_no: updates.batchNo || null,
+      expiry_date: updates.expiryDate || null,
+      storage_location: updates.storageLocation || null,
       age_restricted: updates.ageRestricted === true,
       updated_at: new Date().toISOString(),
     })
@@ -731,6 +738,15 @@ export async function updateStaffEmployeeNo(userId, employeeNo) {
   if (error) throw error
 }
 
+// Display/reporting only, not an auth role -- see 1786230000_staff_job_title.sql.
+export async function updateStaffJobTitle(userId, jobTitle) {
+  const { error } = await supabase
+    .from('users')
+    .update({ job_title: jobTitle || null, updated_at: new Date().toISOString() })
+    .eq('id', userId)
+  if (error) throw error
+}
+
 export async function updateStaffName(userId, name) {
   const { error } = await supabase
     .from('users')
@@ -1235,7 +1251,7 @@ export async function fetchPrescriptionDispenses(tenantId) {
 // checkout already succeeded, same as the ZIMRA fiscal submission).
 export async function recordPrescriptionDispense(tenantId, {
   branchId, orderId, productId, qty, customerId, customerName,
-  prescriberName, prescriberLicenseNo, dispensingClass, controlledSchedule, userId,
+  prescriberName, prescriberLicenseNo, dispensingClass, controlledSchedule, userId, prescriptionId,
 }) {
   const { error } = await supabase.from('prescription_dispenses').insert({
     tenant_id: tenantId,
@@ -1250,7 +1266,241 @@ export async function recordPrescriptionDispense(tenantId, {
     dispensing_class: dispensingClass,
     controlled_schedule: controlledSchedule || null,
     created_by: userId || null,
+    // Optional link back to a pre-filed prescription record -- nullable,
+    // so a walk-in script with no pre-filed record is unaffected.
+    prescription_id: prescriptionId || null,
   })
+  if (error) throw error
+}
+
+// ─── Pharmacy Mode: Doctors directory ──────────────────────────────────────
+// Non-login master data, same shape as fetchSuppliers/createSupplier below
+// -- doctors never sign in, so this is a plain tenant-scoped directory.
+
+export async function fetchDoctors(tenantId) {
+  const { data, error } = await supabase.from('doctors').select('*').eq('tenant_id', tenantId).is('deleted_at', null).order('name')
+  if (error) throw error
+  return data
+}
+export async function createDoctor(tenantId, { name, phone, email, licenseNo, specialty }) {
+  const { data, error } = await supabase.from('doctors').insert({
+    tenant_id: tenantId, name, phone: phone || null, email: email || null,
+    license_no: licenseNo || null, specialty: specialty || null,
+  }).select().single()
+  if (error) throw error
+  return data
+}
+export async function updateDoctor(id, { name, phone, email, licenseNo, specialty, isActive }) {
+  const { data, error } = await supabase.from('doctors').update({
+    name, phone: phone || null, email: email || null, license_no: licenseNo || null,
+    specialty: specialty || null, is_active: isActive !== false, updated_at: new Date().toISOString(),
+  }).eq('id', id).select().single()
+  if (error) throw error
+  return data
+}
+export async function deleteDoctor(id) {
+  const { error } = await supabase.from('doctors').update({ deleted_at: new Date().toISOString() }).eq('id', id)
+  if (error) throw error
+}
+
+// ─── Pharmacy Mode: Prescription filing ────────────────────────────────────
+// The actual filed-prescription artifact -- separate from prescription_dispenses
+// (the post-sale compliance log above), searchable on its own, optionally
+// referenced when a dispense happens against it.
+
+export async function fetchPrescriptions(tenantId) {
+  const { data, error } = await supabase
+    .from('prescriptions')
+    .select('*, customers(name), doctors(name, license_no), users(name)')
+    .eq('tenant_id', tenantId)
+    .order('created_at', { ascending: false })
+    .limit(200)
+  if (error) throw error
+  return data
+}
+export async function createPrescription(tenantId, {
+  branchId, customerId, patientName, doctorId, doctorName, prescriptionDate, imagePath, notes, userId,
+}) {
+  const { data, error } = await supabase.from('prescriptions').insert({
+    tenant_id: tenantId, branch_id: branchId || null, customer_id: customerId || null,
+    patient_name: patientName || null, doctor_id: doctorId || null, doctor_name: doctorName || null,
+    prescription_date: prescriptionDate || null, image_path: imagePath || null, notes: notes || null,
+    created_by: userId || null,
+  }).select().single()
+  if (error) throw error
+  return data
+}
+export async function updatePrescriptionStatus(id, status) {
+  const { error } = await supabase.from('prescriptions').update({ status }).eq('id', id)
+  if (error) throw error
+}
+
+// Private bucket (patient data, unlike product-images) -- same tenant-
+// folder-prefix pattern as uploadProductImage/uploadDocumentLogo.
+export async function uploadPrescriptionImage(tenantId, file) {
+  const ext = file.name.split('.').pop()?.toLowerCase() || 'jpg'
+  const path = `${tenantId}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`
+  const { error } = await supabase.storage.from('prescription-documents').upload(path, file, {
+    cacheControl: '3600',
+    upsert: false,
+  })
+  if (error) throw error
+  return path
+}
+
+// Signed URL for viewing a filed prescription image -- the bucket is
+// private, so (unlike product images) there's no public URL to hand back
+// at upload time.
+export async function getPrescriptionImageUrl(path) {
+  const { data, error } = await supabase.storage.from('prescription-documents').createSignedUrl(path, 3600)
+  if (error) throw error
+  return data.signedUrl
+}
+
+// ─── Pharmacy Mode: Controlled-substance register (report, no new ledger) ──
+// Synthesizes an audit trail from tables that already exist -- dispensed
+// out (prescription_dispenses), received in (stock_receipts), and manual
+// corrections (stock_adjustments) -- filtered to controlled products, so
+// there's no second ledger that could drift from the real stock movements.
+export async function fetchControlledSubstanceLedger(tenantId, { startDate, endDate } = {}) {
+  const { data: controlledProducts, error: prodErr } = await supabase
+    .from('products').select('id, name').eq('tenant_id', tenantId).eq('dispensing_class', 'controlled')
+  if (prodErr) throw prodErr
+  const ids = (controlledProducts || []).map((p) => p.id)
+  const nameById = Object.fromEntries((controlledProducts || []).map((p) => [p.id, p.name]))
+  if (ids.length === 0) return []
+
+  let dispQuery = supabase.from('prescription_dispenses').select('id, product_id, qty, created_at, controlled_schedule, users(name)').in('product_id', ids)
+  let recvQuery = supabase.from('stock_receipts').select('id, product_id, qty, created_at, users(name)').in('product_id', ids)
+  let adjQuery = supabase.from('stock_adjustments').select('id, product_id, delta, created_at, users(name)').in('product_id', ids)
+  if (startDate) { dispQuery = dispQuery.gte('created_at', startDate); recvQuery = recvQuery.gte('created_at', startDate); adjQuery = adjQuery.gte('created_at', startDate) }
+  if (endDate) { dispQuery = dispQuery.lte('created_at', endDate); recvQuery = recvQuery.lte('created_at', endDate); adjQuery = adjQuery.lte('created_at', endDate) }
+
+  const [{ data: dispensed, error: e1 }, { data: received, error: e2 }, { data: adjusted, error: e3 }] = await Promise.all([dispQuery, recvQuery, adjQuery])
+  if (e1) throw e1; if (e2) throw e2; if (e3) throw e3
+
+  const rows = [
+    ...(dispensed || []).map((r) => ({ id: `disp-${r.id}`, date: r.created_at, product: nameById[r.product_id], type: 'Dispensed', qty: -r.qty, schedule: r.controlled_schedule, by: r.users?.name || '—' })),
+    ...(received || []).map((r) => ({ id: `recv-${r.id}`, date: r.created_at, product: nameById[r.product_id], type: 'Received', qty: r.qty, schedule: null, by: r.users?.name || '—' })),
+    ...(adjusted || []).map((r) => ({ id: `adj-${r.id}`, date: r.created_at, product: nameById[r.product_id], type: 'Adjusted', qty: r.delta, schedule: null, by: r.users?.name || '—' })),
+  ]
+  return rows.sort((a, b) => new Date(a.date) - new Date(b.date))
+}
+
+// ─── Pharmacy Mode: Insurers directory ─────────────────────────────────────
+// Same shape/pattern as suppliers below -- a claims-status workflow isn't
+// built yet (no real partner integration to drive one), this is a
+// quick-reference contact directory only.
+
+export async function fetchInsurers(tenantId) {
+  const { data, error } = await supabase.from('insurers').select('*').eq('tenant_id', tenantId).is('deleted_at', null).order('name')
+  if (error) throw error
+  return data
+}
+export async function createInsurer(tenantId, { name, phone, email, claimsContactName, claimsContactPhone, claimsContactEmail, memberVerificationPhone, notes }) {
+  const { data, error } = await supabase.from('insurers').insert({
+    tenant_id: tenantId, name, phone: phone || null, email: email || null,
+    claims_contact_name: claimsContactName || null, claims_contact_phone: claimsContactPhone || null,
+    claims_contact_email: claimsContactEmail || null, member_verification_phone: memberVerificationPhone || null,
+    notes: notes || null,
+  }).select().single()
+  if (error) throw error
+  return data
+}
+export async function updateInsurer(id, { name, phone, email, claimsContactName, claimsContactPhone, claimsContactEmail, memberVerificationPhone, notes }) {
+  const { data, error } = await supabase.from('insurers').update({
+    name, phone: phone || null, email: email || null,
+    claims_contact_name: claimsContactName || null, claims_contact_phone: claimsContactPhone || null,
+    claims_contact_email: claimsContactEmail || null, member_verification_phone: memberVerificationPhone || null,
+    notes: notes || null, updated_at: new Date().toISOString(),
+  }).eq('id', id).select().single()
+  if (error) throw error
+  return data
+}
+export async function deleteInsurer(id) {
+  const { error } = await supabase.from('insurers').update({ deleted_at: new Date().toISOString() }).eq('id', id)
+  if (error) throw error
+}
+
+// ─── Pharmacy Mode: Appointments ───────────────────────────────────────────
+
+export async function fetchAppointments(tenantId) {
+  const { data, error } = await supabase
+    .from('appointments')
+    .select('*, customers(name), doctors(name)')
+    .eq('tenant_id', tenantId)
+    .order('scheduled_at', { ascending: true })
+  if (error) throw error
+  return data
+}
+export async function createAppointment(tenantId, { branchId, customerId, patientName, doctorId, purpose, scheduledAt, notes, userId }) {
+  const { data, error } = await supabase.from('appointments').insert({
+    tenant_id: tenantId, branch_id: branchId || null, customer_id: customerId || null,
+    patient_name: patientName || null, doctor_id: doctorId || null, purpose: purpose || null,
+    scheduled_at: scheduledAt, notes: notes || null, created_by: userId || null,
+  }).select().single()
+  if (error) throw error
+  return data
+}
+export async function updateAppointmentStatus(id, status) {
+  const { error } = await supabase.from('appointments').update({ status }).eq('id', id)
+  if (error) throw error
+}
+
+// ─── Pharmacy Mode: Optometry / eye prescriptions ──────────────────────────
+// Filing + querying only this pass -- deliberately not wired into POS
+// checkout (see 1786270000_eye_prescriptions.sql's own comment).
+
+export async function fetchEyePrescriptions(tenantId) {
+  const { data, error } = await supabase
+    .from('eye_prescriptions')
+    .select('*, customers(name), doctors(name)')
+    .eq('tenant_id', tenantId)
+    .order('created_at', { ascending: false })
+    .limit(200)
+  if (error) throw error
+  return data
+}
+export async function createEyePrescription(tenantId, {
+  customerId, patientName, doctorId,
+  odSphere, odCylinder, odAxis, odAdd, osSphere, osCylinder, osAxis, osAdd, pd,
+  prescriptionDate, expiryDate, notes, userId,
+}) {
+  const { data, error } = await supabase.from('eye_prescriptions').insert({
+    tenant_id: tenantId, customer_id: customerId || null, patient_name: patientName || null, doctor_id: doctorId || null,
+    od_sphere: odSphere || null, od_cylinder: odCylinder || null, od_axis: odAxis || null, od_add: odAdd || null,
+    os_sphere: osSphere || null, os_cylinder: osCylinder || null, os_axis: osAxis || null, os_add: osAdd || null,
+    pd: pd || null, prescription_date: prescriptionDate || null, expiry_date: expiryDate || null,
+    notes: notes || null, created_by: userId || null,
+  }).select().single()
+  if (error) throw error
+  return data
+}
+
+// ─── Pharmacy Mode: Chronic-medication refill reminders ────────────────────
+// Due date is computed server-side at cron time (see notify_medication_refills
+// in 1786280000_medication_refill_reminders.sql), never stored here.
+
+export async function fetchMedicationSchedules(tenantId) {
+  const { data, error } = await supabase
+    .from('medication_schedules')
+    .select('*, customers(name, phone), products(name)')
+    .eq('tenant_id', tenantId)
+    .eq('is_active', true)
+    .order('created_at', { ascending: false })
+  if (error) throw error
+  return data
+}
+export async function createMedicationSchedule(tenantId, { branchId, customerId, productId, frequencyDays, userId }) {
+  const { data, error } = await supabase.from('medication_schedules').insert({
+    tenant_id: tenantId, branch_id: branchId || null, customer_id: customerId,
+    product_id: productId, frequency_days: frequencyDays, created_by: userId || null,
+  }).select().single()
+  if (error) throw error
+  return data
+}
+export async function deactivateMedicationSchedule(id) {
+  const { error } = await supabase.from('medication_schedules').update({ is_active: false }).eq('id', id)
   if (error) throw error
 }
 
@@ -2233,20 +2483,27 @@ export async function fetchCustomers(tenantId) {
   return data
 }
 
-export async function createCustomer(tenantId, { name, phone, email, address, notes }) {
+export async function createCustomer(tenantId, { name, phone, email, address, notes, medicalAidProvider, medicalAidNumber, insurerId }) {
   const { data, error } = await supabase
     .from('customers')
-    .insert({ tenant_id: tenantId, name, phone: phone || null, email: email || null, address: address || null, notes: notes || null })
+    .insert({
+      tenant_id: tenantId, name, phone: phone || null, email: email || null, address: address || null, notes: notes || null,
+      medical_aid_provider: medicalAidProvider || null, medical_aid_number: medicalAidNumber || null, insurer_id: insurerId || null,
+    })
     .select()
     .single()
   if (error) throw error
   return data
 }
 
-export async function updateCustomer(id, { name, phone, email, address, notes }) {
+export async function updateCustomer(id, { name, phone, email, address, notes, medicalAidProvider, medicalAidNumber, insurerId }) {
   const { data, error } = await supabase
     .from('customers')
-    .update({ name, phone: phone || null, email: email || null, address: address || null, notes: notes || null, updated_at: new Date().toISOString() })
+    .update({
+      name, phone: phone || null, email: email || null, address: address || null, notes: notes || null,
+      medical_aid_provider: medicalAidProvider || null, medical_aid_number: medicalAidNumber || null, insurer_id: insurerId || null,
+      updated_at: new Date().toISOString(),
+    })
     .eq('id', id)
     .select()
     .single()

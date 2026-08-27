@@ -5,7 +5,7 @@ import {
   Settings, Users, ChefHat, ListTodo, LogOut, ChevronLeft, ChevronRight, ChevronDown,
   Store, Receipt, Cpu, X, Sparkles, CreditCard, BriefcaseBusiness, FileText, Inbox, Calculator,
   Wrench, Car, HardHat, FileSignature, Factory, Pill, ShieldCheck, FileBarChart, Landmark, Hammer,
-  ClipboardCheck, Wallet, ShieldAlert, PackagePlus,
+  ClipboardCheck, Wallet, ShieldAlert, PackagePlus, Stethoscope, Building2, CalendarClock, Glasses,
 } from 'lucide-react'
 import { useState } from 'react'
 import { useThemeStore } from '@/stores/themeStore'
@@ -33,6 +33,11 @@ const ALL_NAV_ITEMS = [
   { key: 'production', icon: Factory, label: 'Production', path: '/app/production', manufacturingOnly: true },
   { key: 'equipment_rental', icon: Hammer, label: 'Equipment Rental', path: '/app/equipment-rental', hardwareOnly: true },
   { key: 'prescriptions', icon: Pill, label: 'Prescriptions', path: '/app/prescriptions', pharmacyOnly: true },
+  { key: 'doctors', icon: Stethoscope, label: 'Doctors', path: '/app/doctors', pharmacyOnly: true },
+  { key: 'insurers', icon: Building2, label: 'Insurers', path: '/app/insurers', pharmacyOnly: true },
+  { key: 'controlled_substances', icon: ShieldAlert, label: 'Controlled Substances', path: '/app/controlled-substances', pharmacyOnly: true },
+  { key: 'appointments', icon: CalendarClock, label: 'Appointments', path: '/app/appointments', pharmacyOnly: true },
+  { key: 'eye_prescriptions', icon: Glasses, label: 'Optometry', path: '/app/optometry', pharmacyOnly: true },
   { key: 'age_verifications', icon: ShieldCheck, label: 'Age Verifications', path: '/app/age-verifications', barOnly: true },
   { key: 'transactions', icon: Receipt, label: 'Transactions', path: '/app/transactions' },
   { key: 'refund_audit', icon: ShieldAlert, label: 'Refund Auditing', path: '/app/refund-audit' },

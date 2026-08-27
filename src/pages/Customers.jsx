@@ -5,15 +5,19 @@ import { Plus, RefreshCw, Search, Pencil, Trash2, Car, FileBarChart, Loader2 } f
 import Button from '@/components/common/Button'
 import Modal from '@/components/common/Modal'
 import { useAuthStore } from '@/stores/authStore'
-import { fetchCustomers, createCustomer, updateCustomer, deleteCustomer } from '@/lib/db'
+import { useThemeStore } from '@/stores/themeStore'
+import { fetchCustomers, createCustomer, updateCustomer, deleteCustomer, fetchInsurers } from '@/lib/db'
 import { loadWithOfflineCache } from '@/lib/offlineCache'
 import toast from 'react-hot-toast'
 
-const BLANK = { name: '', phone: '', email: '', address: '', notes: '' }
+const BLANK = { name: '', phone: '', email: '', address: '', notes: '', medicalAidProvider: '', medicalAidNumber: '', insurerId: '' }
 
 export default function Customers() {
   const { tenant } = useAuthStore()
+  const { posMode } = useThemeStore()
+  const isPharmacy = posMode === 'pharmacy'
   const [customers, setCustomers] = useState([])
+  const [insurers, setInsurers] = useState([])
   const [loading, setLoading] = useState(false)
   const [search, setSearch] = useState('')
   const [editing, setEditing] = useState(null) // customer row while editing, or {} for new
@@ -33,13 +37,24 @@ export default function Customers() {
   useEffect(() => { load() }, [tenant?.id])
 
   useEffect(() => {
+    if (!tenant?.id || !isPharmacy) return
+    fetchInsurers(tenant.id).then(setInsurers).catch(() => {})
+  }, [tenant?.id, isPharmacy])
+
+  useEffect(() => {
     window.addEventListener('tengapos:force-refresh', load)
     return () => window.removeEventListener('tengapos:force-refresh', load)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tenant?.id])
 
   const openAdd = () => { setForm(BLANK); setEditing({}) }
-  const openEdit = (c) => { setForm({ name: c.name || '', phone: c.phone || '', email: c.email || '', address: c.address || '', notes: c.notes || '' }); setEditing(c) }
+  const openEdit = (c) => {
+    setForm({
+      name: c.name || '', phone: c.phone || '', email: c.email || '', address: c.address || '', notes: c.notes || '',
+      medicalAidProvider: c.medical_aid_provider || '', medicalAidNumber: c.medical_aid_number || '', insurerId: c.insurer_id || '',
+    })
+    setEditing(c)
+  }
 
   const save = async (e) => {
     e.preventDefault()
@@ -242,6 +257,33 @@ export default function Customers() {
               className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
             />
           </div>
+          {isPharmacy && (
+            <div className="rounded-xl border border-slate-200 p-3 dark:border-slate-700">
+              <p className="mb-2 text-xs font-semibold uppercase text-slate-500">Medical Aid</p>
+              <div className="grid grid-cols-2 gap-2">
+                <input
+                  value={form.medicalAidProvider}
+                  onChange={(e) => setForm((f) => ({ ...f, medicalAidProvider: e.target.value }))}
+                  placeholder="Provider"
+                  className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                />
+                <input
+                  value={form.medicalAidNumber}
+                  onChange={(e) => setForm((f) => ({ ...f, medicalAidNumber: e.target.value }))}
+                  placeholder="Member No."
+                  className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                />
+              </div>
+              <select
+                value={form.insurerId}
+                onChange={(e) => setForm((f) => ({ ...f, insurerId: e.target.value }))}
+                className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+              >
+                <option value="">— No insurer linked —</option>
+                {insurers.map((i) => <option key={i.id} value={i.id}>{i.name}</option>)}
+              </select>
+            </div>
+          )}
           <div>
             <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">Notes</label>
             <textarea

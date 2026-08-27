@@ -27,6 +27,7 @@ export async function insertProduct(_tenantId, product) {
     image_unavailable: product.imageUnavailable === true, vat_treatment: product.vatTreatment || 'standard',
     attributes: product.attributes || {}, category_id: product.categoryId || null,
     price_tiers: product.priceTiers || [], dispensing_class: product.dispensingClass || 'otc',
+    batch_no: product.batchNo || null, expiry_date: product.expiryDate || null, storage_location: product.storageLocation || null,
     age_restricted: product.ageRestricted === true, is_active: true,
   })
   return { ...row, stock: row.stock_qty ?? 0, category: '', image: row.image_url ?? null }
@@ -47,6 +48,7 @@ export async function updateProduct(id, updates) {
     image_unavailable: updates.imageUnavailable === true, vat_treatment: updates.vatTreatment || 'standard',
     attributes: updates.attributes || {}, category_id: updates.categoryId || null,
     price_tiers: updates.priceTiers || [], dispensing_class: updates.dispensingClass || 'otc',
+    batch_no: updates.batchNo || null, expiry_date: updates.expiryDate || null, storage_location: updates.storageLocation || null,
     age_restricted: updates.ageRestricted === true,
   })
   return { ...row, stock: row.stock_qty ?? 0, image: row.image_url ?? null }
@@ -165,6 +167,9 @@ export async function updateStaffEmployeeNo(userId, employeeNo) {
 }
 export async function updateStaffName(userId, name) {
   store().updateStaffRow(userId, { name })
+}
+export async function updateStaffJobTitle(userId, jobTitle) {
+  store().updateStaffRow(userId, { job_title: jobTitle || null })
 }
 export async function fetchUserBranches(userId) {
   return store().userBranches[userId] || []

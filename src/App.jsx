@@ -25,6 +25,11 @@ const CashUp = lazy(() => import('@/pages/CashUp'))
 const RefundAudit = lazy(() => import('@/pages/RefundAudit'))
 const Orders = lazy(() => import('@/pages/Orders'))
 const Prescriptions = lazy(() => import('@/pages/Prescriptions'))
+const Doctors = lazy(() => import('@/pages/Doctors'))
+const Insurers = lazy(() => import('@/pages/Insurers'))
+const ControlledSubstances = lazy(() => import('@/pages/ControlledSubstances'))
+const Appointments = lazy(() => import('@/pages/Appointments'))
+const EyePrescriptions = lazy(() => import('@/pages/EyePrescriptions'))
 const AgeVerifications = lazy(() => import('@/pages/AgeVerifications'))
 const Kitchen = lazy(() => import('@/pages/Kitchen'))
 const JobCards = lazy(() => import('@/pages/JobCards'))
@@ -224,6 +229,11 @@ export default function App() {
             <Route path="cash-up" element={<RequireNav navKey="cash_up"><CashUp /></RequireNav>} />
             <Route path="orders" element={<RequireNav navKey="orders"><Orders /></RequireNav>} />
             <Route path="prescriptions" element={<RequireNav navKey="prescriptions"><Prescriptions /></RequireNav>} />
+            <Route path="doctors" element={<RequireNav navKey="doctors"><Doctors /></RequireNav>} />
+            <Route path="insurers" element={<RequireNav navKey="insurers"><Insurers /></RequireNav>} />
+            <Route path="controlled-substances" element={<RequireNav navKey="controlled_substances"><ControlledSubstances /></RequireNav>} />
+            <Route path="appointments" element={<RequireNav navKey="appointments"><Appointments /></RequireNav>} />
+            <Route path="optometry" element={<RequireNav navKey="eye_prescriptions"><EyePrescriptions /></RequireNav>} />
             <Route path="age-verifications" element={<RequireNav navKey="age_verifications"><AgeVerifications /></RequireNav>} />
             <Route path="kitchen" element={<RequireNav navKey="kitchen"><Kitchen /></RequireNav>} />
             <Route path="job-cards" element={<RequireNav navKey="job_cards"><JobCards /></RequireNav>} />

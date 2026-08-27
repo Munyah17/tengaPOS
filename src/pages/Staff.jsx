@@ -8,7 +8,7 @@ import { useThemeStore } from '@/stores/themeStore'
 import { useAuthStore } from '@/stores/authStore'
 import {
   fetchStaff, updateStaffStatus, fetchBranches, updateStaffUsername, updateStaffEmployeeNo, updateStaffName,
-  fetchUserBranches, assignUserBranch, unassignUserBranch,
+  updateStaffJobTitle, fetchUserBranches, assignUserBranch, unassignUserBranch,
 } from '@/lib/dataLayer'
 import { loadWithOfflineCache } from '@/lib/offlineCache'
 import { supabase } from '@/lib/supabase'
@@ -30,6 +30,12 @@ const roleColors = {
   tech_support: 'bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-300',
 }
 
+// Display/reporting only -- see 1786230000_staff_job_title.sql. Presets
+// only shown for Pharmacy Mode tenants; the field itself stays a plain
+// free-text input for everyone else, and free text is always allowed here
+// too (this is a <datalist>, not a closed <select>).
+const PHARMACY_JOB_TITLES = ['Pharmacist', 'Pharmacy Technician', 'Pharmacy Assistant', 'Dispatch', 'Cashier']
+
 const exportColumns = [
   { header: 'Name', key: 'name' },
   { header: 'Email', key: 'email' },
@@ -49,7 +55,7 @@ export default function Staff() {
   const [form, setForm] = useState({ name: '', email: '', password: '', role: 'cashier', branch_id: '', username: '' })
   const [showPassword, setShowPassword] = useState(false)
   const [creating, setCreating] = useState(false)
-  const [usernameEdit, setUsernameEdit] = useState(null) // { id, name, username, employee_no } while editing
+  const [usernameEdit, setUsernameEdit] = useState(null) // { id, name, username, employee_no, job_title } while editing
   const [savingUsername, setSavingUsername] = useState(false)
   const [branchesEdit, setBranchesEdit] = useState(null) // { id, name, homeBranchId, extraIds } while editing
   const [savingBranches, setSavingBranches] = useState(false)
@@ -131,12 +137,14 @@ export default function Staff() {
     try {
       const clean = usernameEdit.username.trim().toLowerCase()
       const cleanEmployeeNo = usernameEdit.employee_no.trim()
+      const cleanJobTitle = usernameEdit.job_title.trim()
       await Promise.all([
         updateStaffName(usernameEdit.id, cleanName),
         updateStaffUsername(usernameEdit.id, clean || null),
         updateStaffEmployeeNo(usernameEdit.id, cleanEmployeeNo || null),
+        updateStaffJobTitle(usernameEdit.id, cleanJobTitle || null),
       ])
-      setStaff((prev) => prev.map((s) => s.id === usernameEdit.id ? { ...s, name: cleanName, username: clean || null, employee_no: cleanEmployeeNo || null } : s))
+      setStaff((prev) => prev.map((s) => s.id === usernameEdit.id ? { ...s, name: cleanName, username: clean || null, employee_no: cleanEmployeeNo || null, job_title: cleanJobTitle || null } : s))
       toast.success('Details saved')
       setUsernameEdit(null)
     } catch (err) {
@@ -237,7 +245,10 @@ export default function Staff() {
                         <div className="flex h-8 w-8 items-center justify-center rounded-full bg-brand-100 text-sm font-bold text-brand-700 dark:bg-brand-900 dark:text-brand-300">
                           {member.name?.[0]?.toUpperCase() || '?'}
                         </div>
-                        <span className="text-sm font-medium text-slate-900 dark:text-white">{member.name}</span>
+                        <div>
+                          <span className="block text-sm font-medium text-slate-900 dark:text-white">{member.name}</span>
+                          {member.job_title && <span className="block text-xs text-slate-400">{member.job_title}</span>}
+                        </div>
                       </div>
                     </td>
                     <td className="px-4 py-3 text-sm text-slate-600 dark:text-slate-400">{member.email}</td>
@@ -255,7 +266,7 @@ export default function Staff() {
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-1">
                         <button
-                          onClick={() => setUsernameEdit({ id: member.id, name: member.name, username: member.username || '', employee_no: member.employee_no || '' })}
+                          onClick={() => setUsernameEdit({ id: member.id, name: member.name, username: member.username || '', employee_no: member.employee_no || '', job_title: member.job_title || '' })}
                           className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800"
                           title="Edit name / username / employee number"
                         >
@@ -438,6 +449,25 @@ export default function Staff() {
                 className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
                 placeholder="e.g. EMP-014"
               />
+            </div>
+            <div>
+              <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">Job Title</label>
+              <p className="mb-1.5 text-xs text-slate-500">
+                Optional. Display/reporting only — doesn't change their login permissions, which are still governed by their Role above.
+              </p>
+              <input
+                type="text"
+                list="job-title-presets"
+                value={usernameEdit.job_title}
+                onChange={(e) => setUsernameEdit((u) => ({ ...u, job_title: e.target.value }))}
+                className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                placeholder="e.g. Head Cashier"
+              />
+              {posMode === 'pharmacy' && (
+                <datalist id="job-title-presets">
+                  {PHARMACY_JOB_TITLES.map((t) => <option key={t} value={t} />)}
+                </datalist>
+              )}
             </div>
             <div className="flex justify-end gap-2 pt-2">
               <Button variant="secondary" type="button" onClick={() => setUsernameEdit(null)}>Cancel</Button>

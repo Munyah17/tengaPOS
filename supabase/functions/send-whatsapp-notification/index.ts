@@ -33,6 +33,11 @@ function json(body: unknown, status = 200) {
 const TEMPLATE_ENV_KEYS: Record<string, string> = {
   trial_reminder: 'WHATSAPP_TEMPLATE_TRIAL_REMINDER',
   trial_reminder_discount: 'WHATSAPP_TEMPLATE_TRIAL_REMINDER_DISCOUNT',
+  // Sent directly to the patient (not the tenant vendor) from
+  // notify_medication_refills() -- no-ops like every other template here
+  // until both WhatsApp is configured and this specific template is
+  // Meta-approved; the staff-facing email leg still goes out regardless.
+  medication_refill_reminder: 'WHATSAPP_TEMPLATE_MEDICATION_REFILL_REMINDER',
 }
 
 function normalizePhone(raw: string): string | null {

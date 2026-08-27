@@ -82,6 +82,14 @@ function template(name: string, tenantName: string, extra: Record<string, unknow
       subject: `10% off to come back — ${tenantName}'s trial has ended`,
       body: `Your 7-day free trial for ${tenantName} ended and access is paused. Your data is safe and waiting for you.\n\nAs a thank you for trying tengaPOS, we've applied a 10% discount to your account automatically -- no code needed, it's already applied when you sign in and choose a plan. This offer won't stay up forever, so it's worth doing sooner rather than later.\n\n(Day ${extra.day} of this reminder.)`,
     },
+    // Staff-facing nudge from notify_medication_refills() -- goes to the
+    // usual vendor recipient below, same as every other tenant template.
+    // The patient themselves gets a separate WhatsApp send (see
+    // send-whatsapp-notification), not this email.
+    medication_refill_reminder: {
+      subject: `Refill due: ${extra.customer_name} — ${tenantName}`,
+      body: `${extra.customer_name} is due for a refill of ${extra.product_name}, based on their last dispense and the reminder schedule set for them. Consider reaching out, or check Prescriptions for details.`,
+    },
   }
   return templates[name] || null
 }

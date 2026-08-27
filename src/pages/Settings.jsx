@@ -668,6 +668,9 @@ export default function Settings() {
   // 1786190000_salesperson_capture_toggle.sql. Off by default so it never
   // newly appears for a tenant that didn't ask for it.
   const [salespersonCaptureEnabled, setSalespersonCaptureEnabled] = useState(tenant?.salesperson_capture_enabled === true)
+  // Placeholder seam for a future health263.system integration -- no code
+  // reads or acts on this yet, see 1786290000_health263_stub.sql.
+  const [health263FacilityId, setHealth263FacilityId] = useState(tenant?.health263_facility_id || '')
   const [generalSaving, setGeneralSaving] = useState(false)
 
   useEffect(() => {
@@ -677,6 +680,7 @@ export default function Settings() {
       setVatEnabledLocal(tenant.vat_enabled !== false)
       setVatRate(tenant.vat_rate ?? 15.5)
       setSalespersonCaptureEnabled(tenant.salesperson_capture_enabled === true)
+      setHealth263FacilityId(tenant.health263_facility_id || '')
     }
   }, [tenant])
 
@@ -744,6 +748,7 @@ export default function Settings() {
           .update({
             name: businessName.trim(), currency, vat_enabled: vatEnabled, vat_rate: Number(vatRate) || 15.5,
             salesperson_capture_enabled: salespersonCaptureEnabled,
+            health263_facility_id: health263FacilityId.trim() || null,
           })
           .eq('id', tenant.id)
         if (error) throw error
@@ -1153,6 +1158,20 @@ export default function Settings() {
                     <p className="mt-2 text-xs text-slate-400">Owner-only setting.</p>
                   )}
                 </div>
+
+                {posMode === 'pharmacy' && (
+                  <div className="rounded-xl border border-slate-200 p-4 dark:border-slate-700">
+                    <span className="text-sm font-semibold text-slate-900 dark:text-white">Health263 Facility ID</span>
+                    <p className="mb-2 text-xs text-slate-500">Optional — reserved for a future health263.system integration. Nothing reads this yet.</p>
+                    <input
+                      type="text"
+                      value={health263FacilityId}
+                      disabled={isShopManager}
+                      onChange={(e) => !isShopManager && setHealth263FacilityId(e.target.value)}
+                      className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                    />
+                  </div>
+                )}
 
                 <Button onClick={handleSaveGeneral} disabled={generalSaving}>
                   {generalSaving ? 'Saving…' : 'Save Changes'}

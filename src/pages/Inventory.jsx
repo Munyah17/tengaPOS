@@ -30,6 +30,7 @@ const BLANK = {
   vatTreatment: 'standard', attributePairs: [], branchIds: [], categoryId: '',
   priceTiers: [], dispensingClass: 'otc', controlledSchedule: '', isService: false,
   ageRestricted: false, unit: 'each',
+  batchNo: '', expiryDate: '', storageLocation: '',
 }
 
 const BLANK_PRICE_TIER = { min_qty: '', price: '' }
@@ -351,6 +352,9 @@ export default function Inventory() {
       priceTiers: (p.price_tiers || []).map((t) => ({ min_qty: String(t.min_qty), price: String(t.price) })),
       dispensingClass: p.dispensing_class || 'otc',
       controlledSchedule: p.controlled_schedule || '',
+      batchNo: p.batch_no || '',
+      expiryDate: p.expiry_date || '',
+      storageLocation: p.storage_location || '',
       isService: p.is_service === true,
       ageRestricted: p.age_restricted === true,
       unit: p.unit || 'each',
@@ -1188,6 +1192,36 @@ export default function Inventory() {
                   className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
                 />
               )}
+              <div className="mt-3 grid grid-cols-2 gap-3">
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">Batch No.</label>
+                  <input
+                    type="text"
+                    value={form.batchNo}
+                    onChange={e => setForm({ ...form, batchNo: e.target.value })}
+                    className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">Expiry Date</label>
+                  <input
+                    type="date"
+                    value={form.expiryDate}
+                    onChange={e => setForm({ ...form, expiryDate: e.target.value })}
+                    className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                  />
+                </div>
+              </div>
+              <div className="mt-3">
+                <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">Storage Location</label>
+                <input
+                  type="text"
+                  value={form.storageLocation}
+                  onChange={e => setForm({ ...form, storageLocation: e.target.value })}
+                  placeholder="e.g. Shelf A3, Cold Storage"
+                  className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                />
+              </div>
             </div>
           )}
           {isBar && (

@@ -17,7 +17,7 @@ import { formatCurrency, formatUnitPrice, generateReceiptNumber, stripLeadingZer
 import { FRACTIONAL_UNITS, unitStep } from '@/lib/units'
 import { initiatePaynowCheckout } from '@/lib/paynow'
 import { fetchProducts, saveCheckout, fetchStaff, completeJobCard, recordPrescriptionDispense, recordAgeVerification } from '@/lib/dataLayer'
-import { authorizeDiscountOverride } from '@/lib/db'
+import { authorizeDiscountOverride, fetchPrescriptions } from '@/lib/db'
 import { isDemoRoute } from '@/lib/demoMode'
 import { getOfflineProducts, queueOfflineSale } from '@/lib/offlineSync'
 import { isNetworkError } from '@/lib/authRetry'
@@ -114,6 +114,18 @@ export default function POS() {
   // skippable just because the tenant's overall mode is something else.
   const [showPrescriptionModal, setShowPrescriptionModal] = useState(false)
   const [prescriptionForm, setPrescriptionForm] = useState({ customerName: '', prescriberName: '', prescriberLicenseNo: '' })
+  // Optional: pick a prescription already filed in the Prescriptions page
+  // instead of retyping the prescriber every time -- pre-fills the free-text
+  // fields above from the doctor record when one is selected, but never
+  // required (skip it and the existing free-text-only flow works unchanged).
+  // Skipped entirely on /demo, same as the discount-auth modal, since
+  // there's no real filed-prescription data to pick from there.
+  const [filedPrescriptions, setFiledPrescriptions] = useState([])
+  const [linkedPrescription, setLinkedPrescription] = useState(null)
+  useEffect(() => {
+    if (!showPrescriptionModal || isDemoRoute() || !tenant?.id) return
+    fetchPrescriptions(tenant.id).then((rows) => setFiledPrescriptions(rows.filter((p) => p.status === 'active'))).catch(() => {})
+  }, [showPrescriptionModal, tenant?.id])
   // Bar/Liquor Store Mode: same data-driven pattern as pharmacyItems above.
   const [showAgeVerifyModal, setShowAgeVerifyModal] = useState(false)
   const [ageVerifyForm, setAgeVerifyForm] = useState({ verified: false, idType: '', idLast4: '' })
@@ -511,17 +523,20 @@ export default function POS() {
           orderId: completedOrderId,
           productId: item.id,
           qty: item.quantity,
+          customerId: linkedPrescription?.customer_id || null,
           customerName: prescriptionForm.customerName.trim() || null,
           prescriberName: prescriptionForm.prescriberName.trim(),
           prescriberLicenseNo: prescriptionForm.prescriberLicenseNo.trim() || null,
           dispensingClass: item.dispensing_class,
           controlledSchedule: item.controlled_schedule || null,
           userId: user?.id || null,
+          prescriptionId: linkedPrescription?.id || null,
         }).catch((err) => {
           toast.error(`Sale completed, but couldn't log the dispensing record for ${item.name}: ${err.message || 'unknown error'} — record it manually.`, { duration: 8000 })
         })
       }
       setPrescriptionForm({ customerName: '', prescriberName: '', prescriberLicenseNo: '' })
+      setLinkedPrescription(null)
     }
 
     // Bar/Liquor Store Mode compliance log — same best-effort, never-silent
@@ -1147,6 +1162,31 @@ export default function POS() {
               This sale includes {pharmacyItems.length === 1 ? pharmacyItems[0].name : `${pharmacyItems.length} controlled/prescription items`} — capture the prescriber before completing the sale.
             </p>
             <div className="mt-4 space-y-3">
+              {!isDemoRoute() && filedPrescriptions.length > 0 && (
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">Link Filed Prescription (optional)</label>
+                  <select
+                    value={linkedPrescription?.id || ''}
+                    onChange={(e) => {
+                      const p = filedPrescriptions.find((x) => x.id === e.target.value)
+                      setLinkedPrescription(p || null)
+                      if (p) {
+                        setPrescriptionForm({
+                          customerName: p.customers?.name || p.patient_name || '',
+                          prescriberName: p.doctors?.name ? `Dr. ${p.doctors.name}` : (p.doctor_name || ''),
+                          prescriberLicenseNo: p.doctors?.license_no || '',
+                        })
+                      }
+                    }}
+                    className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                  >
+                    <option value="">— Type prescriber details below —</option>
+                    {filedPrescriptions.map((p) => (
+                      <option key={p.id} value={p.id}>{p.customers?.name || p.patient_name || 'Unnamed'} — {p.doctors?.name ? `Dr. ${p.doctors.name}` : (p.doctor_name || 'no doctor on file')}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
               <div>
                 <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">Prescriber Name *</label>
                 <input
@@ -1175,7 +1215,7 @@ export default function POS() {
             </div>
             <div className="mt-5 flex justify-end gap-2">
               <button
-                onClick={() => setShowPrescriptionModal(false)}
+                onClick={() => { setShowPrescriptionModal(false); setLinkedPrescription(null) }}
                 className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
               >
                 Cancel
