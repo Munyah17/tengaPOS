@@ -2383,9 +2383,15 @@ export async function voidInvoicePayment(paymentId) {
 }
 
 export async function fetchInvoicePayments(documentId) {
+  // invoice_payments has two FKs to users (created_by, voided_by), so a
+  // bare `users(name)` embed is ambiguous to PostgREST -- it returns a 300
+  // Multiple Choices instead of data, which surfaced live as "payments
+  // aren't loading" (the query failed outright, not silently missed a
+  // name). !created_by picks the one this list actually wants to show:
+  // who recorded the payment.
   const { data, error } = await supabase
     .from('invoice_payments')
-    .select('*, users(name)')
+    .select('*, users!created_by(name)')
     .eq('document_id', documentId)
     .order('paid_at', { ascending: false })
   if (error) throw error
@@ -2843,7 +2849,11 @@ export async function createCreditorBill(tenantId, userId, { supplierId, billNum
   return data
 }
 export async function fetchCreditorPayments(creditorBillId) {
-  const { data, error } = await supabase.from('creditor_payments').select('*, users(name)').eq('creditor_bill_id', creditorBillId).order('paid_at', { ascending: false })
+  // Same ambiguous-FK trap as fetchInvoicePayments -- creditor_payments
+  // also has both created_by and voided_by pointing at users, so a bare
+  // users(name) embed 300s instead of returning data. !created_by picks
+  // who recorded the payment, matching what this list shows.
+  const { data, error } = await supabase.from('creditor_payments').select('*, users!created_by(name)').eq('creditor_bill_id', creditorBillId).order('paid_at', { ascending: false })
   if (error) throw error
   return data
 }
