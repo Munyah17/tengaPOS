@@ -170,6 +170,17 @@ export async function generateDocumentPDF(doc, store, currency = 'USD', brandCol
 
   let finalY = pdf.lastAutoTable.finalY + 8
   const totalsX = 196
+  // The line-items table above reserves FOOTER_H + 8 from the bottom of
+  // *its own* page (via autoTable's margin.bottom), but that only
+  // guarantees the table itself won't cross the footer -- everything
+  // drawn after it (Subtotal/VAT/TOTAL box) is plain pdf.text/rect with
+  // no such guard. A table that fills most of the page left just enough
+  // room for the table but not for the totals that follow, so the total
+  // box could land partly under the footer band drawn at the very end.
+  // Reserve the totals block's own height up front, same pattern as the
+  // NOTES/bank-details/sign-off blocks below.
+  const totalsBlockH = (doc.vat_amount > 0 ? 6 : 0) + 6 + 15
+  if (finalY + totalsBlockH > 297 - FOOTER_H) { pdf.addPage(); finalY = MARGIN }
   pdf.setFontSize(9.5)
   pdf.setTextColor(90, 90, 90)
   pdf.text('Subtotal (ex VAT):', 140, finalY)
@@ -198,6 +209,15 @@ export async function generateDocumentPDF(doc, store, currency = 'USD', brandCol
   finalY += 15
 
   if (doc.notes) {
+    // Unlike the tables above (which pass autoTable a `margin.bottom` so it
+    // page-breaks itself) this is plain pdf.text -- nothing stops it from
+    // drawing straight into the footer band drawn later if finalY is
+    // already sitting close to the bottom. A long note (or a document
+    // where totals alone already used up most of the page) surfaced live
+    // as notes text overlapping the footer. Reserve the space first.
+    const notesLines = pdf.splitTextToSize(doc.notes, 182)
+    const notesBlockH = 5 + notesLines.length * 5 + 8
+    if (finalY + notesBlockH > 297 - FOOTER_H) { pdf.addPage(); finalY = MARGIN }
     pdf.setFontSize(9)
     pdf.setFont(undefined, 'bold')
     pdf.setTextColor(110, 110, 110)
@@ -205,7 +225,6 @@ export async function generateDocumentPDF(doc, store, currency = 'USD', brandCol
     pdf.setFont(undefined, 'normal')
     pdf.setTextColor(20, 20, 20)
     finalY += 5
-    const notesLines = pdf.splitTextToSize(doc.notes, 182)
     pdf.text(notesLines, MARGIN, finalY)
     finalY += notesLines.length * 5 + 8
   }
@@ -227,6 +246,12 @@ export async function generateDocumentPDF(doc, store, currency = 'USD', brandCol
     })
     finalY = pdf.lastAutoTable.finalY + 10
   } else if (store.bankDetails) {
+    // Same footer-overlap risk as NOTES above -- this plain-text fallback
+    // (used whenever bank details aren't in "Label: Value" lines) had no
+    // page-break check at all, unlike the table variant just above it.
+    const lines = pdf.splitTextToSize(store.bankDetails, 182)
+    const blockH = 5 + lines.length * 5 + 10
+    if (finalY + blockH > 297 - FOOTER_H) { pdf.addPage(); finalY = MARGIN }
     pdf.setFontSize(9)
     pdf.setFont(undefined, 'bold')
     pdf.setTextColor(110, 110, 110)
@@ -234,7 +259,6 @@ export async function generateDocumentPDF(doc, store, currency = 'USD', brandCol
     pdf.setFont(undefined, 'normal')
     pdf.setTextColor(20, 20, 20)
     finalY += 5
-    const lines = pdf.splitTextToSize(store.bankDetails, 182)
     pdf.text(lines, MARGIN, finalY)
     finalY += lines.length * 5 + 10
   }
