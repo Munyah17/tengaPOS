@@ -82,6 +82,20 @@ export default function PaymentReturn() {
       if (count < MAX_POLLS) {
         timer = setTimeout(poll, POLL_INTERVAL)
       } else {
+        // The passive loop above only ever sees what Paynow's webhook has
+        // already written to payment_sessions -- if that webhook was ever
+        // dropped in transit, this row would sit on "pending" forever with
+        // nothing to reconcile it, even though Paynow already knows the
+        // real outcome. One direct check via Paynow's own pollUrl before
+        // giving up closes that gap.
+        try {
+          const { data: pollResult } = await supabase.functions.invoke('paynow-poll-status', { body: { reference } })
+          if (pollResult?.status && pollResult.status !== 'pending') {
+            setStatus(pollResult.status)
+            setSession((s) => (s ? { ...s, status: pollResult.status } : s))
+            return
+          }
+        } catch { /* fall through -- still show the timed-out state below */ }
         setTimedOut(true)
       }
     }

@@ -99,7 +99,16 @@ serve(async (req) => {
     const params       = new URLSearchParams(responseText)
 
     if (params.get('status')?.toLowerCase() !== 'ok') {
-      return json({ error: `Paynow: ${params.get('error') || responseText}` }, 400)
+      // Paynow's own `error` field (when present) is human-readable and
+      // safe to relay as-is. Falling back to the raw response body was the
+      // bug here: if Paynow ever answers with something that isn't its
+      // usual key=value format (an outage page, a format change), that
+      // whole unparsed blob went straight into the checkout toast --
+      // confusing regardless of what it actually contained. Log it for
+      // real diagnosis (Supabase Edge Function Logs), show the customer
+      // something they can act on.
+      console.error('paynow-initiate: unexpected Paynow response:', responseText.slice(0, 1000))
+      return json({ error: params.get('error') || 'Paynow did not accept this transaction. Please try again, or contact support if this continues.' }, 400)
     }
 
     const browserUrl = params.get('browserurl') || ''
