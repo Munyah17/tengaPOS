@@ -248,10 +248,14 @@ export async function fetchVendorRequests() {
 }
 
 export async function fetchVendorNudges() {
-  // Demo has no cash_ups/real validated-return history to nudge about --
-  // both stay quiet so a visitor doesn't get told to review a "today" that
-  // doesn't correspond to anything they did in the sandbox.
-  return { cashUpMissingToday: false, refundsThisWeek: 0 }
+  // Demo has no cash_ups/real validated-return/discount-review/drawer-
+  // event history to nudge about -- all stay quiet so a visitor doesn't
+  // get told to review a "today" that doesn't correspond to anything
+  // they did in the sandbox.
+  return {
+    cashUpMissingToday: false, refundsThisWeek: 0,
+    pendingDiscountReviews: 0, pendingDrawerReviews: 0, openSosAlerts: 0,
+  }
 }
 
 export async function fetchDashboardMetrics() {

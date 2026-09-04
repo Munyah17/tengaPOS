@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import {
   Search, Barcode, Plus, Minus, Trash2, ShoppingCart,
   CreditCard, Banknote, Smartphone, Receipt, X, Car, Store, Package as PackageIcon,
-  RefreshCw, ExternalLink, Camera, Percent,
+  RefreshCw, ExternalLink, Camera, Percent, DoorOpen, ShieldAlert,
 } from 'lucide-react'
 import Button from '@/components/common/Button'
 import Modal from '@/components/common/Modal'
@@ -12,12 +12,14 @@ import ZimraReceipt from '@/components/common/ZimraReceipt'
 import { useCartStore } from '@/stores/cartStore'
 import { useThemeStore } from '@/stores/themeStore'
 import { useAuthStore } from '@/stores/authStore'
+import { useReceiptConfigStore } from '@/stores/receiptConfigStore'
 import { PAYMENT_METHODS } from '@/utils/constants'
 import { formatCurrency, formatUnitPrice, generateReceiptNumber, stripLeadingZero } from '@/utils/formatters'
 import { FRACTIONAL_UNITS, unitStep } from '@/lib/units'
 import { initiatePaynowCheckout } from '@/lib/paynow'
 import { fetchProducts, saveCheckout, fetchStaff, completeJobCard, recordPrescriptionDispense, recordAgeVerification } from '@/lib/dataLayer'
-import { authorizeDiscountOverride, fetchPrescriptions } from '@/lib/db'
+import { authorizeDiscountOverride, fetchPrescriptions, logDrawerOpen, triggerSosAlert } from '@/lib/db'
+import { kickCashDrawer } from '@/lib/posPrinter'
 import { isDemoRoute } from '@/lib/demoMode'
 import { getOfflineProducts, queueOfflineSale } from '@/lib/offlineSync'
 import { isNetworkError } from '@/lib/authRetry'
@@ -81,6 +83,7 @@ function CartQtyField({ item, onCommit }) {
 export default function POS() {
   const { posMode } = useThemeStore()
   const { tenant, user, branch, role } = useAuthStore()
+  const receiptConfig = useReceiptConfigStore()
   const isRestaurant = posMode === 'restaurant'
   // VAT only actually applies when it's both activated as a plan feature
   // (tenant.features.vat -- a Super Admin-approved add-on) AND not switched
@@ -136,6 +139,15 @@ export default function POS() {
   const [showDiscountAuthModal, setShowDiscountAuthModal] = useState(false)
   const [discountAuthForm, setDiscountAuthForm] = useState({ email: '', password: '' })
   const [authorizingDiscount, setAuthorizingDiscount] = useState(false)
+  // No-Sale — opening the drawer outside a completed sale (making change,
+  // a till float adjustment) used to leave zero trace. Never blocked on
+  // review (a cashier can't queue behind a manager mid-shift just to make
+  // change), but every open is logged with a reason and queued for one —
+  // see Security.jsx / 1786300000_drawer_events_and_sos.sql.
+  const [showNoSaleModal, setShowNoSaleModal] = useState(false)
+  const [noSaleReason, setNoSaleReason] = useState('change')
+  const [noSaleNote, setNoSaleNote] = useState('')
+  const [loggingNoSale, setLoggingNoSale] = useState(false)
   const videoRef = useRef(null)
   const scanStreamRef = useRef(null)
   const fmt = (n) => formatCurrency(n, tenant?.currency)
@@ -358,6 +370,37 @@ export default function POS() {
     }
   }
 
+  const handleNoSale = async () => {
+    if (!tenant?.id) { toast.error('Not signed in yet — wait a moment and try again'); return }
+    setLoggingNoSale(true)
+    try {
+      await logDrawerOpen(tenant.id, branch?.id || null, noSaleReason, noSaleNote.trim() || null)
+      // Best-effort -- not every till has a drawer wired up, and that's a
+      // completely normal setup, not an error. The log entry above is
+      // what actually matters for accountability either way.
+      kickCashDrawer(receiptConfig.printerConnection, receiptConfig.comPort).catch(() => {})
+      toast.success('Drawer opened — logged for review')
+      setShowNoSaleModal(false)
+      setNoSaleNote('')
+      setNoSaleReason('change')
+    } catch (err) {
+      toast.error(err.message || 'Failed to open drawer')
+    } finally {
+      setLoggingNoSale(false)
+    }
+  }
+
+  // Silent by design (see 1786300000_drawer_events_and_sos.sql / the
+  // sos-alert function's own comment) -- no loading state, no toast, no
+  // visible change on screen at all, so it's safe to press during an
+  // active threat without it being noticed. navigator.vibrate is the one
+  // acknowledgment: felt only by whoever's holding the device.
+  const handleSos = () => {
+    if (!tenant?.id) return
+    triggerSosAlert(branch?.id || null).catch(() => { /* best-effort, never surfaced */ })
+    try { navigator.vibrate?.(200) } catch { /* not supported on this device -- fine */ }
+  }
+
   const handleCheckout = async () => {
     if (cart.items.length === 0) {
       toast.error('Cart is empty')
@@ -434,6 +477,13 @@ export default function POS() {
             return line ? { ...p, stock: Math.max(0, (p.stock ?? 0) - line.quantity) } : p
           })
         )
+        // Cash sale, drawer needs to open -- best-effort, same reasoning
+        // as the No-Sale kick: plenty of tills have no drawer wired up at
+        // all, and that's completely normal, not something to surface as
+        // an error on an otherwise-successful sale.
+        if (cart.paymentMethod === 'cash') {
+          kickCashDrawer(receiptConfig.printerConnection, receiptConfig.comPort).catch(() => {})
+        }
       } catch (err) {
         const msg = err.message || 'unknown'
         if (msg.includes('Insufficient stock') || msg.includes('Stock check failed')) {
@@ -666,6 +716,29 @@ export default function POS() {
               <Camera className="h-4 w-4" />
               Scan
             </button>
+            {!isDemoRoute() && (
+              <button
+                onClick={() => setShowNoSaleModal(true)}
+                title="Open the drawer without a sale (making change, till float) — logged for review"
+                className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-medium text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300"
+              >
+                <DoorOpen className="h-4 w-4" />
+                <span className="hidden sm:inline">No Sale</span>
+              </button>
+            )}
+            {/* SOS — deliberately unobtrusive, not a big red alarm button:
+                a duress alert only works if pressing it doesn't visibly
+                announce itself either. See handleSos's own comment. */}
+            {!isDemoRoute() && (
+              <button
+                onClick={handleSos}
+                title="Silent alert"
+                aria-label="Silent alert"
+                className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-400 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-500"
+              >
+                <ShieldAlert className="h-4 w-4" />
+              </button>
+            )}
           </div>
           {/* Category pills */}
           <div className="mt-3 flex gap-2 overflow-x-auto">
@@ -1347,6 +1420,57 @@ export default function POS() {
                 className="rounded-xl bg-brand-600 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-700 disabled:opacity-60"
               >
                 {authorizingDiscount ? 'Authorizing…' : 'Authorize & Continue'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* No-Sale — opening the drawer outside a completed sale. Never
+          blocked on manager approval (see Security.jsx's own comment on
+          why), just a required reason and a log entry queued for review. */}
+      {showNoSaleModal && (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/70 px-4">
+          <div className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-2xl dark:bg-slate-900">
+            <h3 className="text-base font-bold text-slate-900 dark:text-white">Open Drawer — No Sale</h3>
+            <p className="mt-1 text-sm text-slate-500">This is logged and reviewed by a manager — a reason is required.</p>
+            <div className="mt-4 space-y-3">
+              <div>
+                <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">Reason</label>
+                <select
+                  autoFocus
+                  value={noSaleReason}
+                  onChange={(e) => setNoSaleReason(e.target.value)}
+                  className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                >
+                  <option value="change">Making change</option>
+                  <option value="till_float">Till float adjustment</option>
+                  <option value="other">Other</option>
+                </select>
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">Note (optional)</label>
+                <textarea
+                  value={noSaleNote}
+                  onChange={(e) => setNoSaleNote(e.target.value)}
+                  rows={2}
+                  className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                />
+              </div>
+            </div>
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                onClick={() => { setShowNoSaleModal(false); setNoSaleNote(''); setNoSaleReason('change') }}
+                className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleNoSale}
+                disabled={loggingNoSale}
+                className="flex items-center gap-1.5 rounded-xl bg-brand-600 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-700 disabled:opacity-60"
+              >
+                <DoorOpen className="h-4 w-4" /> {loggingNoSale ? 'Opening…' : 'Open Drawer'}
               </button>
             </div>
           </div>

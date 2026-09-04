@@ -94,6 +94,16 @@ function escPosCut() {
 function escPosFeed(lines = 3) {
   return Array(lines).fill(0x0a)
 }
+// ESC p m t1 t2 -- generates a pulse on the printer's drawer-kick pin.
+// Standard on virtually every ESC/POS thermal receipt printer: the cash
+// drawer wires into the printer itself (RJ11/RJ12), not the computer, so
+// this reuses the exact same connection already set up for receipts --
+// no separate drawer hardware/driver to configure. m=0 selects pin 2
+// (the far more common wiring than pin 5); t1/t2 (in 2ms units) are the
+// manufacturer-recommended ~50ms-on/~200ms-off timing most drawers expect.
+function escPosDrawerKick() {
+  return [ESC, 0x70, 0x00, 0x19, 0xfa]
+}
 
 // Cheap ESC/POS printer firmware expects single-byte text in whatever
 // codepage it's configured for (PC437/PC850/GB2312/etc, never UTF-8).
@@ -339,9 +349,11 @@ function printViaRawBT(bytes) {
  * abstracts those differences away, but neither works on Android, where
  * the agent error message steers the user to RawBT instead.
  */
-export async function printToPosPrinter(lines, connectionHint, comPort) {
-  const bytes = buildEscPosBytes(lines)
-
+// Shared by printToPosPrinter and kickCashDrawer -- both just need "these
+// raw bytes, over whichever transport is configured," so the transport
+// selection/fallback chain (Print Agent -> WebUSB, or straight to
+// Bluetooth/RawBT) only needs to exist once.
+async function sendRawBytes(bytes, connectionHint, comPort) {
   if (connectionHint === 'bluetooth') {
     await printViaBluetooth(bytes)
     return
@@ -371,6 +383,18 @@ export async function printToPosPrinter(lines, connectionHint, comPort) {
   } catch (usbErr) {
     throw new Error(`Print Agent not running, and direct USB printing failed: ${usbErr.message}`)
   }
+}
+
+export async function printToPosPrinter(lines, connectionHint, comPort) {
+  await sendRawBytes(buildEscPosBytes(lines), connectionHint, comPort)
+}
+
+/** Fires the connected printer's cash-drawer-kick pin -- same transport
+ *  as printToPosPrinter, just a 5-byte pulse instead of a full receipt.
+ *  Callers should treat this as best-effort: not every till has a drawer
+ *  wired up, and that's a completely normal setup, not an error. */
+export async function kickCashDrawer(connectionHint, comPort) {
+  await sendRawBytes(new Uint8Array(escPosDrawerKick()), connectionHint, comPort)
 }
 
 // Retained for any existing callers -- now just the WebUSB-only path.

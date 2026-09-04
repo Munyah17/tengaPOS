@@ -1013,29 +1013,146 @@ export async function closeCashUp(cashUpId, countedCash, notes) {
   return data
 }
 
-// The review-discipline gap: Cash-Up and Refund Auditing only help if the
-// vendor actually opens them. This is the two cheap counts a Dashboard
-// nudge needs to prompt that -- no new tables, just a same-day cash-up
-// check and a week's worth of validated returns/voids.
+// ─── Drawer events (No-Sale log) + SOS alerts ──────────────────────────────
+
+export async function logDrawerOpen(tenantId, branchId, reason, note) {
+  const { data, error } = await supabase.rpc('log_drawer_open', {
+    p_tenant_id: tenantId, p_branch_id: branchId || null, p_reason: reason, p_note: note || null,
+  })
+  if (error) throw error
+  return data
+}
+
+export async function fetchDrawerEvents(tenantId) {
+  const { data, error } = await supabase
+    .from('drawer_events')
+    .select('*, branches(name), opener:users!drawer_events_opened_by_fkey(name), reviewer:users!drawer_events_reviewed_by_fkey(name)')
+    .eq('tenant_id', tenantId)
+    .order('created_at', { ascending: false })
+    .limit(200)
+  if (error) throw error
+  return data
+}
+
+export async function reviewDrawerEvent(eventId, action, note) {
+  const { error } = await supabase.rpc('review_drawer_event', { p_event_id: eventId, p_action: action, p_note: note || null })
+  if (error) throw error
+}
+
+// Fire-and-forget by design -- POS.jsx never awaits the UI on this (see
+// the sos-alert edge function's own comment). Errors surface only in
+// Edge Function Logs, never to the person who pressed it.
+export async function triggerSosAlert(branchId) {
+  await supabase.functions.invoke('sos-alert', { body: { branch_id: branchId || null } })
+}
+
+export async function fetchSosAlerts(tenantId) {
+  const { data, error } = await supabase
+    .from('sos_alerts')
+    .select('*, branches(name), triggerer:users!sos_alerts_triggered_by_fkey(name), resolver:users!sos_alerts_resolved_by_fkey(name)')
+    .eq('tenant_id', tenantId)
+    .order('created_at', { ascending: false })
+    .limit(200)
+  if (error) throw error
+  return data
+}
+
+export async function resolveSosAlert(alertId, note) {
+  const { error } = await supabase.rpc('resolve_sos_alert', { p_alert_id: alertId, p_note: note || null })
+  if (error) throw error
+}
+
+// ─── Discount review (post-transaction sign-off on <=10% discounts) ───────
+// order_discount_reviews is its own table (not columns on orders) so it
+// never touches orders' one-and-only FK to users -- see
+// 1786310000_discount_review.sql for why that matters. That does mean
+// two queries instead of one embedded select ("aggregate in JS", the
+// same pattern fetchCustomerStatement already uses) rather than a single
+// join across two separate FK graphs.
+
+async function attachOrderInfo(reviews, tenantId) {
+  const orderIds = reviews.map((r) => r.order_id)
+  if (orderIds.length === 0) return []
+  const { data: orders, error } = await supabase
+    .from('orders')
+    .select('id, order_no, created_at, subtotal, discount_amount, total, branch_id, branches(name), users(name)')
+    .eq('tenant_id', tenantId)
+    .in('id', orderIds)
+  if (error) throw error
+  const byId = new Map((orders || []).map((o) => [o.id, o]))
+  return reviews.map((r) => ({ ...r, order: byId.get(r.order_id) || null }))
+}
+
+export async function fetchPendingDiscountReviews(tenantId) {
+  const { data, error } = await supabase
+    .from('order_discount_reviews')
+    .select('*')
+    .eq('tenant_id', tenantId)
+    .eq('status', 'pending')
+    .order('created_at', { ascending: false })
+    .limit(200)
+  if (error) throw error
+  return attachOrderInfo(data || [], tenantId)
+}
+
+// History alongside the pending queue, so a reviewer can see what they
+// (or a co-manager) already actioned -- not just an ever-shrinking list.
+export async function fetchDiscountReviewHistory(tenantId) {
+  const { data, error } = await supabase
+    .from('order_discount_reviews')
+    .select('*, reviewer:users!order_discount_reviews_reviewed_by_fkey(name)')
+    .eq('tenant_id', tenantId)
+    .in('status', ['approved', 'flagged'])
+    .order('reviewed_at', { ascending: false })
+    .limit(100)
+  if (error) throw error
+  return attachOrderInfo(data || [], tenantId)
+}
+
+export async function reviewDiscount(orderId, action, note) {
+  const { error } = await supabase.rpc('review_discount', { p_order_id: orderId, p_action: action, p_note: note || null })
+  if (error) throw error
+}
+
+// The review-discipline gap: Cash-Up, Refund Auditing, Discount Reviews,
+// and the Security log (drawer events + SOS) only help if the vendor
+// actually opens them. This is the cheap counts a Dashboard nudge needs
+// to prompt that -- a same-day cash-up check, a week's worth of
+// validated returns/voids, and every pending discount/drawer-event
+// review plus any unresolved SOS alert (those two never age out of the
+// nudge on their own -- an SOS in particular should stay impossible to
+// miss until someone marks it resolved).
 export async function fetchVendorNudges(tenantId) {
   const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0)
   const weekAgo = new Date(); weekAgo.setDate(weekAgo.getDate() - 7)
 
-  const [cashUpRes, returnsRes, voidsRes] = await Promise.all([
+  const [cashUpRes, returnsRes, voidsRes, discountReviewRes, drawerReviewRes, sosRes] = await Promise.all([
     supabase.from('cash_ups').select('id', { count: 'exact', head: true })
       .eq('tenant_id', tenantId).gte('opened_at', todayStart.toISOString()),
     supabase.from('returns').select('id', { count: 'exact', head: true })
       .eq('tenant_id', tenantId).eq('status', 'validated').gte('validated_at', weekAgo.toISOString()),
     supabase.from('voids').select('id', { count: 'exact', head: true })
       .eq('tenant_id', tenantId).eq('status', 'validated').gte('validated_at', weekAgo.toISOString()),
+    supabase.from('order_discount_reviews').select('order_id', { count: 'exact', head: true })
+      .eq('tenant_id', tenantId).eq('status', 'pending'),
+    supabase.from('drawer_events').select('id', { count: 'exact', head: true })
+      .eq('tenant_id', tenantId).eq('status', 'pending'),
+    supabase.from('sos_alerts').select('id', { count: 'exact', head: true })
+      .eq('tenant_id', tenantId).eq('resolved', false),
   ])
   if (cashUpRes.error) throw cashUpRes.error
   if (returnsRes.error) throw returnsRes.error
   if (voidsRes.error) throw voidsRes.error
+  if (discountReviewRes.error) throw discountReviewRes.error
+  if (drawerReviewRes.error) throw drawerReviewRes.error
+  if (sosRes.error) throw sosRes.error
 
   return {
     cashUpMissingToday: (cashUpRes.count || 0) === 0,
     refundsThisWeek: (returnsRes.count || 0) + (voidsRes.count || 0),
+    pendingDiscountReviews: discountReviewRes.count || 0,
+    pendingDrawerReviews: drawerReviewRes.count || 0,
+    openSosAlerts: sosRes.count || 0,
   }
 }
 

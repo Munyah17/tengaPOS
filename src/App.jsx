@@ -23,6 +23,8 @@ const StockTake = lazy(() => import('@/pages/StockTake'))
 const Reorder = lazy(() => import('@/pages/Reorder'))
 const CashUp = lazy(() => import('@/pages/CashUp'))
 const RefundAudit = lazy(() => import('@/pages/RefundAudit'))
+const Security = lazy(() => import('@/pages/Security'))
+const DiscountReviews = lazy(() => import('@/pages/DiscountReviews'))
 const Orders = lazy(() => import('@/pages/Orders'))
 const Prescriptions = lazy(() => import('@/pages/Prescriptions'))
 const Doctors = lazy(() => import('@/pages/Doctors'))
@@ -244,6 +246,8 @@ export default function App() {
             <Route path="equipment-rental" element={<RequireNav navKey="equipment_rental"><EquipmentRental /></RequireNav>} />
             <Route path="transactions" element={<RequireNav navKey="transactions"><Transactions /></RequireNav>} />
             <Route path="refund-audit" element={<RequireNav navKey="refund_audit"><RefundAudit /></RequireNav>} />
+            <Route path="security" element={<RequireNav navKey="security"><Security /></RequireNav>} />
+            <Route path="discount-reviews" element={<RequireNav navKey="discount_reviews"><DiscountReviews /></RequireNav>} />
             <Route path="reports" element={<RequireNav navKey="reports"><Reports /></RequireNav>} />
             <Route path="insights" element={<RequireNav navKey="insights"><Insights /></RequireNav>} />
             <Route path="payment/return" element={<PaymentReturn />} />

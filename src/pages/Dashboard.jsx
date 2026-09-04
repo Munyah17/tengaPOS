@@ -119,7 +119,7 @@ export default function Dashboard() {
     enabled: !!tenant?.id && role === 'vendor',
     staleTime: 60000,
   })
-  const nudgesNoticeId = `vendor-nudges-${vendorNudges?.cashUpMissingToday ? 1 : 0}-${vendorNudges?.refundsThisWeek || 0}`
+  const nudgesNoticeId = `vendor-nudges-${vendorNudges?.cashUpMissingToday ? 1 : 0}-${vendorNudges?.refundsThisWeek || 0}-${vendorNudges?.pendingDiscountReviews || 0}-${vendorNudges?.pendingDrawerReviews || 0}`
 
   const { data: announcements = [] } = useQuery({
     queryKey: ['announcements', user?.id],
@@ -232,10 +232,34 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* Cash-Up / Refund Auditing review nudge — the two review habits
-          only actually close the loopholes they're built for if the
-          vendor is prompted to open them, not left to remember. */}
-      {role === 'vendor' && (vendorNudges?.cashUpMissingToday || vendorNudges?.refundsThisWeek > 0) && !sessionDismissed.has(nudgesNoticeId) && (
+      {/* SOS alerts — deliberately its own banner, not folded into the
+          dismissible review nudge below: a duress/panic alert should
+          never be one accidental "x" away from being forgotten. Stays
+          up for every open alert until each one is actually resolved on
+          the Security page, not just dismissed for the session. */}
+      {role === 'vendor' && vendorNudges?.openSosAlerts > 0 && (
+        <div className="relative mb-6 flex items-start gap-3 rounded-2xl border border-red-400 bg-red-50 p-4 dark:border-red-700 dark:bg-red-950/30">
+          <ShieldAlert className="mt-0.5 h-5 w-5 flex-shrink-0 text-red-600 dark:text-red-400" />
+          <div className="flex-1">
+            <p className="font-bold text-red-900 dark:text-red-200">
+              {vendorNudges.openSosAlerts} unresolved SOS alert{vendorNudges.openSosAlerts !== 1 ? 's' : ''}
+            </p>
+            <p className="text-sm text-red-800 dark:text-red-300">Check on the branch, then mark it resolved once handled.</p>
+            <Link
+              to="/app/security"
+              className="mt-2 inline-flex items-center gap-1 rounded-xl bg-red-600 px-4 py-1.5 text-sm font-bold text-white hover:bg-red-700"
+            >
+              Open Security Log <ChevronRight className="h-3.5 w-3.5" />
+            </Link>
+          </div>
+        </div>
+      )}
+
+      {/* Cash-Up / Refund Auditing / Discount Reviews / Drawer Events
+          nudge — these habits only actually close the loopholes they're
+          built for if the vendor is prompted to open them, not left to
+          remember. */}
+      {role === 'vendor' && (vendorNudges?.cashUpMissingToday || vendorNudges?.refundsThisWeek > 0 || vendorNudges?.pendingDiscountReviews > 0 || vendorNudges?.pendingDrawerReviews > 0) && !sessionDismissed.has(nudgesNoticeId) && (
         <div className="relative mb-6 flex flex-col gap-3 rounded-2xl border border-amber-300 bg-amber-50 p-4 pr-10 dark:border-amber-700/60 dark:bg-amber-900/20 sm:flex-row sm:items-start">
           <ShieldAlert className="mt-0.5 h-5 w-5 flex-shrink-0 text-amber-600 dark:text-amber-400" />
           <div className="flex-1 space-y-2">
@@ -260,6 +284,32 @@ export default function Dashboard() {
                   className="mt-1 inline-flex items-center gap-1 rounded-xl bg-amber-600 px-3 py-1 text-xs font-bold text-white hover:bg-amber-700"
                 >
                   <ShieldAlert className="h-3.5 w-3.5" /> Review Refund Audit
+                </Link>
+              </div>
+            )}
+            {vendorNudges.pendingDiscountReviews > 0 && (
+              <div>
+                <p className="font-semibold text-amber-900 dark:text-amber-200">
+                  {vendorNudges.pendingDiscountReviews} discount{vendorNudges.pendingDiscountReviews !== 1 ? 's' : ''} awaiting sign-off
+                </p>
+                <Link
+                  to="/app/discount-reviews"
+                  className="mt-1 inline-flex items-center gap-1 rounded-xl bg-amber-600 px-3 py-1 text-xs font-bold text-white hover:bg-amber-700"
+                >
+                  <ShieldAlert className="h-3.5 w-3.5" /> Review Discounts
+                </Link>
+              </div>
+            )}
+            {vendorNudges.pendingDrawerReviews > 0 && (
+              <div>
+                <p className="font-semibold text-amber-900 dark:text-amber-200">
+                  {vendorNudges.pendingDrawerReviews} drawer open{vendorNudges.pendingDrawerReviews !== 1 ? 's' : ''} awaiting review
+                </p>
+                <Link
+                  to="/app/security"
+                  className="mt-1 inline-flex items-center gap-1 rounded-xl bg-amber-600 px-3 py-1 text-xs font-bold text-white hover:bg-amber-700"
+                >
+                  <ShieldAlert className="h-3.5 w-3.5" /> Review Drawer Log
                 </Link>
               </div>
             )}

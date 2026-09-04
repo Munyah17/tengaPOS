@@ -6,6 +6,7 @@ import {
   Store, Receipt, Cpu, X, Sparkles, CreditCard, BriefcaseBusiness, FileText, Inbox, Calculator,
   Wrench, Car, HardHat, FileSignature, Factory, Pill, ShieldCheck, FileBarChart, Landmark, Hammer,
   ClipboardCheck, Wallet, ShieldAlert, PackagePlus, Stethoscope, Building2, CalendarClock, Glasses,
+  DoorOpen, Percent,
 } from 'lucide-react'
 import { useState } from 'react'
 import { useThemeStore } from '@/stores/themeStore'
@@ -41,6 +42,8 @@ const ALL_NAV_ITEMS = [
   { key: 'age_verifications', icon: ShieldCheck, label: 'Age Verifications', path: '/app/age-verifications', barOnly: true },
   { key: 'transactions', icon: Receipt, label: 'Transactions', path: '/app/transactions' },
   { key: 'refund_audit', icon: ShieldAlert, label: 'Refund Auditing', path: '/app/refund-audit' },
+  { key: 'security', icon: DoorOpen, label: 'Security', path: '/app/security' },
+  { key: 'discount_reviews', icon: Percent, label: 'Discount Reviews', path: '/app/discount-reviews' },
   { key: 'reports', icon: BarChart3, label: 'Reports', path: '/app/reports' },
   { key: 'insights', icon: Sparkles, label: 'AI Insights', path: '/app/insights', addonFeature: 'ai_insights', addonTitle: 'AI Insights is an optional add-on — request it in Settings' },
   { key: 'staff', icon: Users, label: 'Staff Management', path: '/app/staff' },
