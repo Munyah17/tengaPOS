@@ -1,8 +1,9 @@
 import { useState, useEffect, useMemo } from 'react'
-import { Plus, RefreshCw, Trash2, Loader2 } from 'lucide-react'
+import { Plus, RefreshCw, Trash2, Loader2, X } from 'lucide-react'
 import Button from '@/components/common/Button'
 import Modal from '@/components/common/Modal'
 import ExportMenu from '@/components/common/ExportMenu'
+import DateInput from '@/components/common/DateInput'
 import { useAuthStore } from '@/stores/authStore'
 import { fetchExpenses, createExpense, deleteExpense, fetchSuppliers, fetchBranches } from '@/lib/db'
 import { formatCurrency, formatDate, toLocalDateStr, stripLeadingZero } from '@/utils/formatters'
@@ -22,6 +23,11 @@ export default function Expenses() {
   const [form, setForm] = useState(BLANK)
   const [saving, setSaving] = useState(false)
   const [deletingId, setDeletingId] = useState(null)
+  // Optional custom period. Both empty = show/export everything (the
+  // previous behaviour); either one set narrows the list, the total, and
+  // the export together.
+  const [dateFrom, setDateFrom] = useState('')
+  const [dateTo, setDateTo] = useState('')
 
   const load = () => {
     if (!tenant?.id) return
@@ -66,20 +72,48 @@ export default function Expenses() {
     }
   }
 
-  const total = useMemo(() => expenses.reduce((s, e) => s + Number(e.amount), 0), [expenses])
+  // expense_date is a plain date; slice guards against a timestamp form so
+  // the string compare against the yyyy-mm-dd picker values stays correct.
+  const filtered = useMemo(() => {
+    if (!dateFrom && !dateTo) return expenses
+    return expenses.filter((e) => {
+      const d = String(e.expense_date).slice(0, 10)
+      if (dateFrom && d < dateFrom) return false
+      if (dateTo && d > dateTo) return false
+      return true
+    })
+  }, [expenses, dateFrom, dateTo])
+  const rangeActive = !!(dateFrom || dateTo)
+
+  const total = useMemo(() => filtered.reduce((s, e) => s + Number(e.amount), 0), [filtered])
   const fmt = (n) => formatCurrency(n, tenant?.currency)
-  const exportRows = expenses.map((e) => ({ date: formatDate(e.expense_date), category: e.category, description: e.description || '', supplier: e.suppliers?.name || '', amount: e.amount, method: e.payment_method || '' }))
+  const exportRows = filtered.map((e) => ({ date: formatDate(e.expense_date), category: e.category, description: e.description || '', supplier: e.suppliers?.name || '', amount: e.amount, method: e.payment_method || '' }))
   const exportColumns = [{ header: 'Date', key: 'date' }, { header: 'Category', key: 'category' }, { header: 'Description', key: 'description' }, { header: 'Supplier', key: 'supplier' }, { header: 'Amount', key: 'amount' }, { header: 'Method', key: 'method' }]
+  const exportTitle = rangeActive ? `Expenses (${dateFrom || '…'} to ${dateTo || '…'})` : 'Expenses'
+  const exportFilename = rangeActive ? `tengapos_expenses_${dateFrom || 'start'}_${dateTo || 'end'}` : 'tengapos_expenses'
 
   return (
     <div>
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="text-lg font-bold text-slate-900 dark:text-white">Expenses</h2>
-          <p className="text-sm text-slate-500">Total: <span className="font-bold text-slate-900 dark:text-white">{fmt(total)}</span></p>
+          <p className="text-sm text-slate-500">
+            {rangeActive ? `${filtered.length} expense${filtered.length !== 1 ? 's' : ''} in period · ` : 'Total: '}
+            <span className="font-bold text-slate-900 dark:text-white">{fmt(total)}</span>
+          </p>
         </div>
-        <div className="flex gap-2">
-          <ExportMenu data={exportRows} columns={exportColumns} title="Expenses" filename="tengapos_expenses" />
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <DateInput value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} placeholder="From" className="w-36" max={dateTo || undefined} />
+            <span className="text-xs text-slate-400">—</span>
+            <DateInput value={dateTo} onChange={(e) => setDateTo(e.target.value)} placeholder="To" className="w-36" min={dateFrom || undefined} />
+            {rangeActive && (
+              <button onClick={() => { setDateFrom(''); setDateTo('') }} title="Clear period" className="text-slate-400 hover:text-red-500">
+                <X className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </div>
+          <ExportMenu data={exportRows} columns={exportColumns} title={exportTitle} filename={exportFilename} />
           <button onClick={load} className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300"><RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} /></button>
           <Button variant="primary" onClick={() => setShowAdd(true)}><Plus className="h-4 w-4" /> Add Expense</Button>
         </div>
@@ -97,9 +131,9 @@ export default function Expenses() {
                 </tr>
               </thead>
               <tbody>
-                {expenses.length === 0 ? (
-                  <tr><td colSpan={7} className="py-12 text-center text-sm text-slate-400">No expenses recorded yet.</td></tr>
-                ) : expenses.map((e) => (
+                {filtered.length === 0 ? (
+                  <tr><td colSpan={7} className="py-12 text-center text-sm text-slate-400">{rangeActive ? 'No expenses in this period.' : 'No expenses recorded yet.'}</td></tr>
+                ) : filtered.map((e) => (
                   <tr key={e.id} className="border-b border-slate-100 dark:border-slate-800">
                     <td className="px-4 py-3 text-sm text-slate-600 dark:text-slate-400">{formatDate(e.expense_date)}</td>
                     <td className="px-4 py-3 text-sm text-slate-700 dark:text-slate-300">{e.category}</td>
