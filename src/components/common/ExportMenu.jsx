@@ -4,15 +4,15 @@ import { Download, FileSpreadsheet, FileText, Database } from 'lucide-react'
 import { exportToCSV, exportToExcel, exportToPDF, exportToAccess } from '@/utils/exportUtils'
 import { useAuthStore } from '@/stores/authStore'
 
-export default function ExportMenu({ data, columns, title, filename }) {
+export default function ExportMenu({ data, columns, title, filename, summaryRows }) {
   const [open, setOpen] = useState(false)
   const { tenant } = useAuthStore()
   const brandColor = tenant?.whitelabel?.enabled ? tenant.whitelabel.primary_color : null
 
   const options = [
-    { label: 'CSV', icon: FileText, action: () => exportToCSV(data, filename, columns) },
-    { label: 'Excel', icon: FileSpreadsheet, action: () => exportToExcel(data, filename, columns) },
-    { label: 'PDF', icon: FileText, action: () => exportToPDF(data, columns, title, filename, brandColor) },
+    { label: 'CSV', icon: FileText, action: () => exportToCSV(data, filename, columns, summaryRows) },
+    { label: 'Excel', icon: FileSpreadsheet, action: () => exportToExcel(data, filename, columns, summaryRows) },
+    { label: 'PDF', icon: FileText, action: () => exportToPDF(data, columns, title, filename, brandColor, summaryRows) },
     { label: 'Access', icon: Database, action: () => exportToAccess(data, filename, columns) },
   ]
 

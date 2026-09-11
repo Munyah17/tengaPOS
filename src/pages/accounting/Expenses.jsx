@@ -91,6 +91,13 @@ export default function Expenses() {
   const exportColumns = [{ header: 'Date', key: 'date' }, { header: 'Category', key: 'category' }, { header: 'Description', key: 'description' }, { header: 'Supplier', key: 'supplier' }, { header: 'Amount', key: 'amount' }, { header: 'Method', key: 'method' }]
   const exportTitle = rangeActive ? `Expenses (${dateFrom || '…'} to ${dateTo || '…'})` : 'Expenses'
   const exportFilename = rangeActive ? `tengapos_expenses_${dateFrom || 'start'}_${dateTo || 'end'}` : 'tengapos_expenses'
+  // Bake the period total into the export file itself (a blank-separated
+  // summary block, same convention as the Sales Report) so it survives
+  // outside the app instead of only showing on screen.
+  const exportSummaryRows = [
+    { label: 'Expenses', value: filtered.length },
+    { label: 'Total', value: fmt(total) },
+  ]
 
   return (
     <div>
@@ -113,7 +120,7 @@ export default function Expenses() {
               </button>
             )}
           </div>
-          <ExportMenu data={exportRows} columns={exportColumns} title={exportTitle} filename={exportFilename} />
+          <ExportMenu data={exportRows} columns={exportColumns} title={exportTitle} filename={exportFilename} summaryRows={exportSummaryRows} />
           <button onClick={load} className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300"><RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} /></button>
           <Button variant="primary" onClick={() => setShowAdd(true)}><Plus className="h-4 w-4" /> Add Expense</Button>
         </div>
