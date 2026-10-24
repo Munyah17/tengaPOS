@@ -1,3 +1,4 @@
+import { canCaptureReceiptCustomer, normalizeReceiptCustomer } from '@/utils/receiptCustomer'
 import { useState, useMemo, useEffect, useRef } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -84,6 +85,9 @@ export default function POS() {
   const { posMode } = useThemeStore()
   const { tenant, user, branch, role } = useAuthStore()
   const receiptConfig = useReceiptConfigStore()
+  const captureReceiptCustomer = canCaptureReceiptCustomer(tenant)
+  const [customerDraft, setCustomerDraft] = useState({})
+  const customerDetails = customerDraft.tenantId === tenant?.id ? customerDraft.details : null
   const isRestaurant = posMode === 'restaurant'
   // VAT only actually applies when it's both activated as a plan feature
   // (tenant.features.vat -- a Super Admin-approved add-on) AND not switched
@@ -455,6 +459,7 @@ export default function POS() {
         salespersonName: salespersonName || null,
         salespersonEmployeeNo: salespersonEmployeeNo || null,
         discountAuthId: cart.discountAuthId || null,
+        customerDetails: captureReceiptCustomer ? normalizeReceiptCustomer(customerDetails) : null,
       }
 
       // navigator.onLine is only a hint, not ground truth — it's well known
@@ -611,6 +616,7 @@ export default function POS() {
     const grossTotal = cart.items.reduce((s, i) => s + i.price * i.quantity, 0)
     const receipt = {
       receiptNumber,
+      customerDetails: captureReceiptCustomer ? normalizeReceiptCustomer(customerDetails) : null,
       items: cart.items,
       subtotal,
       tax,
@@ -629,6 +635,7 @@ export default function POS() {
       salespersonEmployeeNo: salespersonEmployeeNo || null,
     }
     setReceiptData(receipt)
+    setCustomerDraft({})
     setShowReceipt(true)
     setShowMobileCart(false)
     cart.clearCart()
@@ -645,6 +652,11 @@ export default function POS() {
   const handlePaynowCheckout = async () => {
     if (cart.items.length === 0) { toast.error('Cart is empty'); return }
     if (!tenant?.id) { toast.error('Not authenticated'); return }
+
+    if (captureReceiptCustomer && normalizeReceiptCustomer(customerDetails)) {
+      toast.error('Use cash or card to include customer details on the receipt. Paynow receipts are not supported yet.')
+      return
+    }
 
     setPaynowLoading(true)
     try {
@@ -1132,6 +1144,21 @@ export default function POS() {
               )}
             </div>
           ))}
+
+          {captureReceiptCustomer && (
+            <fieldset className="mt-3 space-y-2 rounded-xl border border-slate-200 p-3 dark:border-slate-700" disabled={checkingOut}>
+              <legend className="px-1 text-sm font-semibold text-slate-700 dark:text-slate-200">Customer details (optional)</legend>
+              <p className="text-xs text-slate-500">Saved with this sale and shown on the receipt.</p>
+              {[['name', 'Customer name', 'text', 120], ['phone', 'Customer phone', 'tel', 40], ['email', 'Customer email', 'email', 254]].map(([key, label, type, maxLength]) => (
+                <label key={key} className="block text-xs text-slate-600 dark:text-slate-300">
+                  {label}
+                  <input type={type} maxLength={maxLength} value={customerDetails?.[key] || ''}
+                    onChange={(event) => setCustomerDraft({ tenantId: tenant.id, details: { ...customerDetails, [key]: event.target.value } })}
+                    className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white" />
+                </label>
+              ))}
+            </fieldset>
+          )}
 
           <div className="mt-3 space-y-1">
             {cart.discount > 0 && (

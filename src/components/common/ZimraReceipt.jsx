@@ -1,3 +1,4 @@
+import { receiptCustomerLines } from '@/utils/receiptCustomer'
 import { useRef, useState } from 'react'
 import { Printer, X, CheckCircle, Usb, MessageCircle } from 'lucide-react'
 import { useFiscalStore } from '@/stores/fiscalStore'
@@ -196,6 +197,7 @@ export default function ZimraReceipt({ receipt, onClose }) {
         ${row('Date:', dateStr)}
         ${row('Time:', timeStr)}
         ${row('Cashier:', receipt.cashier)}
+        ${receiptCustomerLines(receipt.customerDetails).map(([label, value]) => `<div style="overflow-wrap:anywhere">${esc(label)}: ${esc(value)}</div>`).join('')}
         ${receipt.salespersonName ? row('Salesperson:', receipt.salespersonEmployeeNo ? `${receipt.salespersonName} (${receipt.salespersonEmployeeNo})` : receipt.salespersonName) : ''}
         <div class="sep"></div>
         <div class="bold upper">Items</div>
@@ -273,6 +275,9 @@ export default function ZimraReceipt({ receipt, onClose }) {
       rowLine('Date:', dateStr)
       rowLine('Time:', timeStr)
       rowLine('Cashier:', receipt.cashier)
+      for (const [label, value] of receiptCustomerLines(receipt.customerDetails)) {
+        lines.push({ text: `${label}: ${value}` })
+      }
       if (receipt.salespersonName) {
         rowLine('Salesperson:', receipt.salespersonEmployeeNo ? `${receipt.salespersonName} (${receipt.salespersonEmployeeNo})` : receipt.salespersonName)
       }
@@ -425,6 +430,9 @@ export default function ZimraReceipt({ receipt, onClose }) {
               <span>Cashier:</span>
               <span>{receipt.cashier}</span>
             </div>
+            {receiptCustomerLines(receipt.customerDetails).map(([label, value]) => (
+              <div key={label} className="break-words [overflow-wrap:anywhere]">{label}: {value}</div>
+            ))}
             {receipt.salespersonName && (
               <div className="flex justify-between">
                 <span>Salesperson:</span>

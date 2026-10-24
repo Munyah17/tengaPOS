@@ -276,7 +276,7 @@ export async function deleteProduct(id) {
 
 // ─── Checkout / POS ──────────────────────────────────────────────────────────
 
-export async function saveCheckout({ tenantId, branchId, userId, cartItems, paymentMethod, subtotal, tax, total, posMode, orderType, receiptNo: receiptNoIn, clientRef: clientRefIn, salespersonName, salespersonEmployeeNo, discountAuthId }, _retried = false) {
+export async function saveCheckout({ tenantId, branchId, userId, cartItems, paymentMethod, subtotal, tax, total, posMode, orderType, receiptNo: receiptNoIn, clientRef: clientRefIn, salespersonName, salespersonEmployeeNo, discountAuthId, customerDetails }, _retried = false) {
   // clientRef is the real idempotency key — a UUID with no meaningful
   // collision risk, generated once by the caller and reused on every retry
   // (a live retry queued after a network blip, or an offline-sync replay).
@@ -308,7 +308,8 @@ export async function saveCheckout({ tenantId, branchId, userId, cartItems, paym
     total: item.price * item.quantity * (1 - (item.itemDiscount || 0) / 100),
   }))
 
-  const { data, error } = await supabase.rpc('process_checkout', {
+  const { data, error } = await supabase.rpc(customerDetails ? 'process_checkout_with_customer' : 'process_checkout', {
+    ...(customerDetails ? { p_customer_details: customerDetails } : {}),
     p_tenant_id: tenantId,
     p_branch_id: branchId || null,
     p_user_id: userId || null,
@@ -338,7 +339,7 @@ export async function saveCheckout({ tenantId, branchId, userId, cartItems, paym
     if (!_retried && isStaleJwtError(error.message) && await refreshSessionOnce(supabase)) {
       return saveCheckout({
         tenantId, branchId, userId, cartItems, paymentMethod, subtotal, tax, total, posMode, orderType,
-        receiptNo, clientRef, salespersonName, salespersonEmployeeNo, discountAuthId,
+        receiptNo, clientRef, salespersonName, salespersonEmployeeNo, discountAuthId, customerDetails,
       }, true)
     }
     // Only ever show the cashier a message that's actually theirs to act

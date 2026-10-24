@@ -222,6 +222,7 @@ export default function Orders() {
       vatEnabled: Number(raw.tax_amount) > 0,
       vatRate: tenant?.vat_rate ?? 15.5,
       currency: tenant?.currency,
+      customerDetails: raw.customer_details || null,
       salespersonName: raw.salesperson_name || null,
       salespersonEmployeeNo: raw.salesperson_employee_no || null,
       fdmsQrUrl: null,

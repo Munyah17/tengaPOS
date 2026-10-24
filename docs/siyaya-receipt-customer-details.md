@@ -1,0 +1,11 @@
+# Siyaya FitActive customer details on receipts
+
+Only tenant slug `siyaya-fit-271e5024` receives the optional customer name, phone and email inputs in POS. No plan, email address, display name or subscription date is used as an entitlement. Other tenant checkouts continue using the existing RPC.
+
+Apply `supabase/migrations/1786320000_siyaya_receipt_customer.sql` to the existing Supabase project **before deploying the frontend**. It adds an optional JSON snapshot to orders and a dedicated RPC that checks the caller's tenant, active/unlocked account and the exact tenant slug. It delegates pricing, stock handling, discount authorization and sale idempotency to the existing checkout RPC, then stores the snapshot in the same database transaction. Replays preserve the first saved snapshot. The migration is repeatable and does not change existing receipt records.
+
+Customer details are optional, bounded, trimmed and stripped of printer control characters. Empty details produce an ordinary walk-in sale. They appear on the initial receipt, browser printing, thermal printing, downloaded/shared PDF and order reprints. Completed sales clear the inputs; drafts are scoped to the current tenant. Offline sale payloads retain the snapshot for synchronization through the same RPC. This stores a historical receipt snapshot, not a separate CRM customer record.
+
+The existing Paynow flow does not create POS orders or printable POS receipts. A checkout with captured customer details therefore asks the cashier to use cash or card rather than silently dropping the details on redirect. Addressing Paynow order finalization is a separate existing issue described in the security review.
+
+Validation: 38 Vitest tests pass, including account gating, blank/partial details, length/control handling, checkout RPC selection, authentication retry preservation and PDF output. A Chromium demo checkout verified account gating, input capture and escaped display of a name containing HTML characters. The migration was executed twice in local PostgreSQL WASM with an existing-checkout stub and checked for authorization, input validation, retry preservation and atomic rollback. Live Supabase deployment, real account checkout and physical printer output remain unverified because no Supabase settings or hardware are connected in this environment.
