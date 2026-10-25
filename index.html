@@ -80,7 +80,25 @@
             }).then(done, done)
           } catch (e) { done() }
         }
-        function showFatalError(message) {
+        // One silent reload before showing anything at all: the most common
+        // cause of "nothing mounted" is a transient stall (first hit while
+        // the dev server is still optimizing, a cold CDN edge, a service
+        // worker mid-update) that a plain refresh clears. Showing a customer
+        // an error for something a single reload fixes is a needless support
+        // call -- retry once, invisibly, and only surface a message if the
+        // retry didn't work either.
+        var BOOT_RELOAD_KEY = 'tengapos_boot_reload_attempted'
+        function trySilentReload() {
+          try {
+            if (!sessionStorage.getItem(BOOT_RELOAD_KEY)) {
+              sessionStorage.setItem(BOOT_RELOAD_KEY, '1')
+              window.location.reload()
+              return true
+            }
+          } catch (e) { /* sessionStorage unavailable -- fall through to the message */ }
+          return false
+        }
+        function showFatalError(message, allowSilentRetry) {
           if (shown) return
           var root = document.getElementById('root')
           if (!root || root.childElementCount > 0) return // React already mounted something — not fatal
@@ -93,22 +111,24 @@
               }
             } catch (e) { /* sessionStorage unavailable — fall through to the message below */ }
           }
+          if (allowSilentRetry && trySilentReload()) return
           shown = true
-          // Include the browser's own UA string in the on-screen report --
-          // this is exactly the class of device (an OEM tablet browser with
-          // no visible "About" version) where asking "which browser is
-          // this?" otherwise has no answer at all without the person
-          // reading it off a settings screen that may not exist.
-          var ua = (navigator && navigator.userAgent) || 'unknown'
+          // The technical detail goes to the console for support staff with
+          // devtools -- the person standing at the till sees only a calm,
+          // actionable message with a way to retry, never raw errors.
+          if (window.console && console.error) {
+            console.error('[tengaPOS boot]', message, (navigator && navigator.userAgent) || 'unknown ua')
+          }
           root.innerHTML =
             '<div style="min-height:100vh;display:flex;align-items:center;justify-content:center;' +
             'padding:24px;font-family:-apple-system,Segoe UI,Arial,sans-serif;background:#f8fafc;">' +
-            '<div style="max-width:480px;text-align:center;">' +
-            '<div style="font-size:15px;font-weight:700;color:#0f172a;margin-bottom:8px;">tengaPOS couldn\'t load on this browser</div>' +
-            '<div style="font-size:13px;color:#64748b;margin-bottom:16px;">Please try a different browser (Chrome or Firefox), or share this message with support:</div>' +
-            '<div style="font-size:12px;color:#b91c1c;background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:10px 12px;word-break:break-word;text-align:left;">' +
-            (message || 'Unknown error') + '</div>' +
-            '<div style="font-size:11px;color:#94a3b8;margin-top:12px;word-break:break-word;">' + ua + '</div>' +
+            '<div style="max-width:420px;text-align:center;">' +
+            '<div style="font-size:17px;font-weight:700;color:#0f172a;margin-bottom:8px;">tengaPOS couldn\'t start</div>' +
+            '<div style="font-size:13px;color:#64748b;margin-bottom:20px;">Something went wrong while loading. ' +
+            'Please check your internet connection and try again.</div>' +
+            '<button onclick="window.location.reload()" style="font-size:14px;font-weight:600;color:#ffffff;' +
+            'background:#1e40af;border:none;border-radius:8px;padding:10px 28px;cursor:pointer;">Try again</button>' +
+            '<div style="font-size:12px;color:#94a3b8;margin-top:16px;">If this keeps happening, please contact support.</div>' +
             '</div></div>'
         }
         window.addEventListener('error', function (e) {
@@ -118,12 +138,13 @@
           showFatalError('Unhandled promise rejection: ' + ((e.reason && (e.reason.message || e.reason)) || 'unknown'))
         })
         // If nothing rendered within a few seconds and no error fired either
-        // (e.g. the module script itself silently failed to load), say so
-        // rather than staying blank forever with zero explanation.
+        // (e.g. the module script itself silently failed to load, or a cold
+        // dev server/CDN edge stalled the first request), retry once
+        // invisibly and only then say something -- never stay blank forever.
         setTimeout(function () {
           var root = document.getElementById('root')
           if (root && root.childElementCount === 0) {
-            showFatalError('The app did not start (no error was reported — this browser may not support a required feature).')
+            showFatalError('The app did not start (no error was reported).', true)
           }
         }, 8000)
       })()
