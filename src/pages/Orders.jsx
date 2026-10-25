@@ -25,6 +25,7 @@ const ORDER_STATUS = {
 const exportColumns = [
   { header: 'Order ID', key: 'id' },
   { header: 'Date', key: 'date' },
+  { header: 'Customer', key: 'customer' },
   { header: 'Products', key: 'itemNames' },
   { header: 'Type', key: 'categoryList' },
   { header: 'Items', key: 'items' },
@@ -224,6 +225,7 @@ export default function Orders() {
       currency: tenant?.currency,
       salespersonName: raw.salesperson_name || null,
       salespersonEmployeeNo: raw.salesperson_employee_no || null,
+      customerDetails: raw.customer_details || null,
       fdmsQrUrl: null,
       isReprint: true,
     })
@@ -252,7 +254,9 @@ export default function Orders() {
     return {
       id: o.order_no || o.id,
       date: o.created_at,
-      customer: 'Walk-in',
+      // Real captured customer (features.customer_details add-on) beats the
+      // generic label -- the name is the whole point of capturing it.
+      customer: o.customer_details?.name || o.customer_details?.companyName || 'Walk-in',
       items: items.reduce((s, i) => s + i.qty, 0),
       itemNames: items.map(i => `${i.name}${i.qty > 1 ? ` x${i.qty}` : ''}`).join(', '),
       categories,

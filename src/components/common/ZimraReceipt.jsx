@@ -3,7 +3,7 @@ import { Printer, X, CheckCircle, Usb, MessageCircle } from 'lucide-react'
 import { useFiscalStore } from '@/stores/fiscalStore'
 import { useReceiptConfigStore } from '@/stores/receiptConfigStore'
 import { useAuthStore } from '@/stores/authStore'
-import { formatCurrency, formatUnitPrice } from '@/utils/formatters'
+import { formatCurrency, formatUnitPrice, customerReceiptRows } from '@/utils/formatters'
 import { printToPosPrinter, paperWidthToChars } from '@/lib/posPrinter'
 import { generateReceiptPdfBlob } from '@/utils/receiptPdf'
 import { sendReceiptViaWhatsApp } from '@/lib/db'
@@ -99,6 +99,11 @@ export default function ZimraReceipt({ receipt, onClose }) {
           : []),
       ]
     : ['Developed & Powered By Global Space Web', 'info@globalspaceweb.co.zw | +263773909307']
+
+  // Customer block (features.customer_details add-on — Siyaya Fit). Shared
+  // row shape with receiptPdf.js so every receipt surface prints the same
+  // thing; [] for walk-ins, so the block is simply absent, never blank.
+  const customerRows = customerReceiptRows(receipt.customerDetails)
 
   const zimraPaymentType = ZIMRA_PAYMENT_MAP[receipt.paymentMethod] || 'Cash'
 
@@ -197,6 +202,7 @@ export default function ZimraReceipt({ receipt, onClose }) {
         ${row('Time:', timeStr)}
         ${row('Cashier:', receipt.cashier)}
         ${receipt.salespersonName ? row('Salesperson:', receipt.salespersonEmployeeNo ? `${receipt.salespersonName} (${receipt.salespersonEmployeeNo})` : receipt.salespersonName) : ''}
+        ${customerRows.length ? `<div class="sep"></div>` + customerRows.map(([l, v]) => row(l, v)).join('') : ''}
         <div class="sep"></div>
         <div class="bold upper">Items</div>
         ${itemsHtml}
@@ -275,6 +281,10 @@ export default function ZimraReceipt({ receipt, onClose }) {
       rowLine('Cashier:', receipt.cashier)
       if (receipt.salespersonName) {
         rowLine('Salesperson:', receipt.salespersonEmployeeNo ? `${receipt.salespersonName} (${receipt.salespersonEmployeeNo})` : receipt.salespersonName)
+      }
+      if (customerRows.length) {
+        dash()
+        for (const [l, v] of customerRows) rowLine(l, v)
       }
       dash()
       lines.push({ text: 'ITEMS', bold: true })
@@ -430,6 +440,18 @@ export default function ZimraReceipt({ receipt, onClose }) {
                 <span>Salesperson:</span>
                 <span>{receipt.salespersonEmployeeNo ? `${receipt.salespersonName} (${receipt.salespersonEmployeeNo})` : receipt.salespersonName}</span>
               </div>
+            )}
+
+            {customerRows.length > 0 && (
+              <>
+                <div className="my-2 border-t border-dashed border-black" />
+                {customerRows.map(([l, v]) => (
+                  <div key={l} className="flex justify-between gap-2">
+                    <span className="flex-shrink-0">{l}</span>
+                    <span className="text-right break-all">{v}</span>
+                  </div>
+                ))}
+              </>
             )}
 
             <div className="my-2 border-t border-dashed border-black" />

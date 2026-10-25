@@ -128,6 +128,26 @@ export function generateReceiptNumber(businessName, productName) {
   return `${biz}${prod}${rand}`
 }
 
+// Turns a saved order's customer_details JSONB (see
+// 1786400000_customer_details_receipt.sql) into [label, value] rows every
+// receipt surface (on-screen, browser print, ESC/POS, WhatsApp PDF)
+// renders identically — one definition, no drifting layouts. Returns []
+// for walk-in sales so the customer block simply doesn't print.
+export function customerReceiptRows(cust) {
+  if (!cust || typeof cust !== 'object') return []
+  const rows = []
+  if (cust.name) {
+    const tag = cust.accountType === 'company' ? ' (Company)' : cust.accountType === 'individual' ? ' (Individual)' : ''
+    rows.push(['Customer:', `${cust.name}${tag}`])
+  }
+  if (cust.companyName) rows.push(['Company:', cust.companyName])
+  if (cust.phone) rows.push(['Phone:', cust.phone])
+  if (cust.email) rows.push(['Email:', cust.email])
+  if (cust.vehicle || cust.regNumber) rows.push(['Car:', [cust.vehicle, cust.regNumber].filter(Boolean).join(' · ')])
+  if (cust.jobDone) rows.push(['Job:', cust.jobDone])
+  return rows
+}
+
 // prefix is 'QUO' for quotations, 'INV' for invoices
 export function generateDocNumber(prefix) {
   const now = new Date()

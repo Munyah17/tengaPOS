@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import {
   Search, Barcode, Plus, Minus, Trash2, ShoppingCart,
   CreditCard, Banknote, Smartphone, Receipt, X, Car, Store, Package as PackageIcon,
-  RefreshCw, ExternalLink, Camera, Percent, DoorOpen, ShieldAlert,
+  RefreshCw, ExternalLink, Camera, Percent, DoorOpen, ShieldAlert, UserPlus,
 } from 'lucide-react'
 import Button from '@/components/common/Button'
 import Modal from '@/components/common/Modal'
@@ -18,7 +18,7 @@ import { formatCurrency, formatUnitPrice, generateReceiptNumber, stripLeadingZer
 import { FRACTIONAL_UNITS, unitStep } from '@/lib/units'
 import { initiatePaynowCheckout } from '@/lib/paynow'
 import { fetchProducts, saveCheckout, fetchStaff, completeJobCard, recordPrescriptionDispense, recordAgeVerification } from '@/lib/dataLayer'
-import { authorizeDiscountOverride, fetchPrescriptions, logDrawerOpen, triggerSosAlert } from '@/lib/db'
+import { authorizeDiscountOverride, fetchPrescriptions, logDrawerOpen, triggerSosAlert, findOrCreateCustomer, createVehicle } from '@/lib/db'
 import { kickCashDrawer } from '@/lib/posPrinter'
 import { isDemoRoute } from '@/lib/demoMode'
 import { getOfflineProducts, queueOfflineSale } from '@/lib/offlineSync'
@@ -110,6 +110,17 @@ export default function POS() {
   const [salespersonStaffId, setSalespersonStaffId] = useState('')
   const [salespersonManualName, setSalespersonManualName] = useState('')
   const [salespersonManualEmpNo, setSalespersonManualEmpNo] = useState('')
+  // Customer Details capture (features.customer_details add-on -- currently
+  // Siyaya Fit only). Optional, collapsible like Salesperson: closed it
+  // costs one line, opened it asks for who the sale is for so the vendor
+  // can actually contact them again afterwards. jobDone is deliberately a
+  // single short line -- the receipt has no room for a paragraph.
+  const customerDetailsEnabled = tenant?.features?.customer_details === true
+  const [showCustomer, setShowCustomer] = useState(false)
+  const [customerForm, setCustomerForm] = useState({
+    name: '', phone: '', email: '', vehicle: '', regNumber: '',
+    accountType: 'individual', companyName: '', jobDone: '',
+  })
   // Pharmacy Mode: prescription/controlled-substance capture. Data-driven
   // (checks each cart line's own dispensing_class) rather than gated on
   // posMode === 'pharmacy' -- a non-pharmacy tenant could still stock a
@@ -318,6 +329,38 @@ export default function POS() {
     setSalespersonManualEmpNo('')
   }
 
+  const resetCustomer = () => {
+    setShowCustomer(false)
+    setCustomerForm({
+      name: '', phone: '', email: '', vehicle: '', regNumber: '',
+      accountType: 'individual', companyName: '', jobDone: '',
+    })
+  }
+
+  // Only ever a real object when the section is open AND something was
+  // actually typed -- an opened-but-empty form must not print a bare
+  // "Customer:" line or store an empty JSON blob on the order.
+  const customerDetails = (() => {
+    if (!showCustomer) return null
+    const f = customerForm
+    const details = {
+      name: f.name.trim() || null,
+      phone: f.phone.trim() || null,
+      email: f.email.trim() || null,
+      vehicle: f.vehicle.trim() || null,
+      regNumber: f.regNumber.trim() || null,
+      accountType: f.accountType,
+      companyName: f.accountType === 'company' ? f.companyName.trim() || null : null,
+      jobDone: f.jobDone.trim() || null,
+    }
+    // accountType alone doesn't count -- only actual typed data makes this
+    // a real customer, otherwise an opened-then-untouched form prints a
+    // meaningless "Individual" line on every receipt.
+    return ['name', 'phone', 'email', 'vehicle', 'regNumber', 'companyName', 'jobDone'].some((k) => details[k])
+      ? details
+      : null
+  })()
+
   // Gate on the prescriber/ID capture before actually charging anything —
   // never take payment for a prescription/controlled or age-restricted
   // item without the compliance details already in hand.
@@ -455,6 +498,7 @@ export default function POS() {
         salespersonName: salespersonName || null,
         salespersonEmployeeNo: salespersonEmployeeNo || null,
         discountAuthId: cart.discountAuthId || null,
+        customerDetails,
       }
 
       // navigator.onLine is only a hint, not ground truth — it's well known
@@ -545,6 +589,27 @@ export default function POS() {
       }
     }
 
+    // Customer retention (Siyaya Fit's whole reason for this feature):
+    // the captured name/phone/email feed the customers table so a real
+    // contact list builds up over time, matched by phone then name --
+    // repeat customers deepen one record instead of duplicating. Purely
+    // best-effort like the compliance logs below: the sale itself already
+    // succeeded, so a failure here is never a checkout error.
+    if (customerDetails?.name && tenant?.id) {
+      findOrCreateCustomer(tenant.id, {
+        name: customerDetails.name,
+        phone: customerDetails.phone,
+        email: customerDetails.email,
+      }).then((customerId) => {
+        if (customerId && (customerDetails.vehicle || customerDetails.regNumber)) {
+          return createVehicle(tenant.id, customerId, {
+            make: customerDetails.vehicle,
+            regNumber: customerDetails.regNumber,
+          }).catch(() => {})
+        }
+      }).catch(() => {})
+    }
+
     // Job card -> POS checkout loop: this sale came from "Complete & Issue
     // Receipt" on a job card (JobCards.jsx), so stamp that job card
     // completed and link it to the order that was just created.
@@ -627,6 +692,7 @@ export default function POS() {
       changeDue: cart.paymentMethod === 'cash' && tenderedAmount > 0 ? changeDue : null,
       salespersonName: salespersonName || null,
       salespersonEmployeeNo: salespersonEmployeeNo || null,
+      customerDetails,
     }
     setReceiptData(receipt)
     setShowReceipt(true)
@@ -638,6 +704,7 @@ export default function POS() {
     if (tenant) cart.setVatConfig(vatActive, tenant.vat_rate)
     setAmountTendered('')
     resetSalesperson()
+    resetCustomer()
     setCheckingOut(false)
     toast.success(isRestaurant ? 'Order sent to kitchen!' : 'Transaction completed!')
   }
@@ -971,6 +1038,103 @@ export default function POS() {
             separately-padded sections) so the cart items area above keeps
             as much of the sidebar's height as possible. */}
         <div className="max-h-[52%] flex-shrink-0 overflow-y-auto border-t border-slate-200 p-3 dark:border-slate-800">
+          {/* Customer Details — optional, goes on the receipt and feeds the
+              customers table (retention: the vendor can contact customers
+              again afterwards). Gated tenant-wide by the
+              features.customer_details add-on -- the whole section (button
+              included) must not render for tenants without it, same rule
+              as Salesperson below. Job done stays a single short line --
+              an 80mm receipt has no room for a paragraph. */}
+          {customerDetailsEnabled && (!showCustomer ? (
+            <button
+              onClick={() => setShowCustomer(true)}
+              className="mb-2 flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-brand-600 dark:hover:text-brand-400"
+            >
+              <UserPlus className="h-3.5 w-3.5" /> Add Customer Details
+            </button>
+          ) : (
+            <div className="mb-2 rounded-xl border border-slate-200 p-2.5 dark:border-slate-700">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-xs font-semibold uppercase text-slate-500">Customer</span>
+                <button onClick={resetCustomer} className="text-xs font-semibold text-red-500 hover:underline">
+                  Remove
+                </button>
+              </div>
+              <div className="mt-1.5 space-y-1.5">
+                <input
+                  type="text"
+                  value={customerForm.name}
+                  onChange={(e) => setCustomerForm((f) => ({ ...f, name: e.target.value }))}
+                  placeholder="Customer name"
+                  className="w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                />
+                <div className="grid grid-cols-2 gap-1.5">
+                  <input
+                    type="tel"
+                    value={customerForm.phone}
+                    onChange={(e) => setCustomerForm((f) => ({ ...f, phone: e.target.value }))}
+                    placeholder="Phone"
+                    className="w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                  />
+                  <input
+                    type="email"
+                    value={customerForm.email}
+                    onChange={(e) => setCustomerForm((f) => ({ ...f, email: e.target.value }))}
+                    placeholder="Email"
+                    className="w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-1.5">
+                  <input
+                    type="text"
+                    value={customerForm.vehicle}
+                    onChange={(e) => setCustomerForm((f) => ({ ...f, vehicle: e.target.value }))}
+                    placeholder="Car (e.g. Honda Fit)"
+                    className="w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                  />
+                  <input
+                    type="text"
+                    value={customerForm.regNumber}
+                    onChange={(e) => setCustomerForm((f) => ({ ...f, regNumber: e.target.value }))}
+                    placeholder="Reg no."
+                    className="w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                  />
+                </div>
+                <div className="flex gap-1.5">
+                  <button
+                    onClick={() => setCustomerForm((f) => ({ ...f, accountType: 'individual' }))}
+                    className={`flex-1 rounded-lg border py-1 text-xs font-medium ${customerForm.accountType === 'individual' ? 'border-brand-500 bg-brand-50 text-brand-700 dark:bg-brand-950 dark:text-brand-400' : 'border-slate-200 text-slate-600 dark:border-slate-700 dark:text-slate-400'}`}
+                  >
+                    Individual
+                  </button>
+                  <button
+                    onClick={() => setCustomerForm((f) => ({ ...f, accountType: 'company' }))}
+                    className={`flex-1 rounded-lg border py-1 text-xs font-medium ${customerForm.accountType === 'company' ? 'border-brand-500 bg-brand-50 text-brand-700 dark:bg-brand-950 dark:text-brand-400' : 'border-slate-200 text-slate-600 dark:border-slate-700 dark:text-slate-400'}`}
+                  >
+                    Company
+                  </button>
+                </div>
+                {customerForm.accountType === 'company' && (
+                  <input
+                    type="text"
+                    value={customerForm.companyName}
+                    onChange={(e) => setCustomerForm((f) => ({ ...f, companyName: e.target.value }))}
+                    placeholder="Company name"
+                    className="w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                  />
+                )}
+                <input
+                  type="text"
+                  value={customerForm.jobDone}
+                  onChange={(e) => setCustomerForm((f) => ({ ...f, jobDone: e.target.value }))}
+                  placeholder="Job done (short, e.g. 4x tyre fit)"
+                  maxLength={60}
+                  className="w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                />
+              </div>
+            </div>
+          ))}
+
           <h4 className="mb-1.5 text-xs font-semibold uppercase text-slate-500">Payment Method</h4>
           <div className="grid grid-cols-3 gap-1.5">
             {PAYMENT_METHODS.slice(0, 6).map((method) => (

@@ -78,8 +78,8 @@ export async function sendReceiptViaWhatsApp() {
   return { ok: true, simulated: true }
 }
 
-export async function saveCheckout({ branchId, userId, cartItems, paymentMethod, subtotal, tax, total, posMode, orderType, salespersonName, salespersonEmployeeNo }) {
-  return store().checkout({ branchId, userId, cartItems, paymentMethod, subtotal, tax, total, posMode, orderType, salespersonName, salespersonEmployeeNo })
+export async function saveCheckout({ branchId, userId, cartItems, paymentMethod, subtotal, tax, total, posMode, orderType, salespersonName, salespersonEmployeeNo, customerDetails }) {
+  return store().checkout({ branchId, userId, cartItems, paymentMethod, subtotal, tax, total, posMode, orderType, salespersonName, salespersonEmployeeNo, customerDetails })
 }
 
 export async function fetchOrders(_tenantId, filters = {}) {

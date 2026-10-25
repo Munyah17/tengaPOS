@@ -276,7 +276,7 @@ export async function deleteProduct(id) {
 
 // ─── Checkout / POS ──────────────────────────────────────────────────────────
 
-export async function saveCheckout({ tenantId, branchId, userId, cartItems, paymentMethod, subtotal, tax, total, posMode, orderType, receiptNo: receiptNoIn, clientRef: clientRefIn, salespersonName, salespersonEmployeeNo, discountAuthId }, _retried = false) {
+export async function saveCheckout({ tenantId, branchId, userId, cartItems, paymentMethod, subtotal, tax, total, posMode, orderType, receiptNo: receiptNoIn, clientRef: clientRefIn, salespersonName, salespersonEmployeeNo, discountAuthId, customerDetails }, _retried = false) {
   // clientRef is the real idempotency key — a UUID with no meaningful
   // collision risk, generated once by the caller and reused on every retry
   // (a live retry queued after a network blip, or an offline-sync replay).
@@ -326,6 +326,7 @@ export async function saveCheckout({ tenantId, branchId, userId, cartItems, paym
     p_salesperson_employee_no: salespersonEmployeeNo || null,
     p_client_ref: clientRef,
     p_discount_auth_id: discountAuthId || null,
+    p_customer_details: customerDetails || null,
   })
   if (error) {
     // A session token minted before a JWT signing-key rotation fails
@@ -338,7 +339,7 @@ export async function saveCheckout({ tenantId, branchId, userId, cartItems, paym
     if (!_retried && isStaleJwtError(error.message) && await refreshSessionOnce(supabase)) {
       return saveCheckout({
         tenantId, branchId, userId, cartItems, paymentMethod, subtotal, tax, total, posMode, orderType,
-        receiptNo, clientRef, salespersonName, salespersonEmployeeNo, discountAuthId,
+        receiptNo, clientRef, salespersonName, salespersonEmployeeNo, discountAuthId, customerDetails,
       }, true)
     }
     // Only ever show the cashier a message that's actually theirs to act

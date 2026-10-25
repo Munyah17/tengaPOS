@@ -110,7 +110,7 @@ export const useDemoStore = create((set, get) => ({
     return transfer
   },
 
-  checkout: ({ branchId, userId, cartItems, paymentMethod, subtotal, tax, total, posMode, orderType, salespersonName, salespersonEmployeeNo }) => {
+  checkout: ({ branchId, userId, cartItems, paymentMethod, subtotal, tax, total, posMode, orderType, salespersonName, salespersonEmployeeNo, customerDetails }) => {
     const state = get()
     const orderId = generateUUID()
     const items = cartItems.map((item) => ({
@@ -126,6 +126,7 @@ export const useDemoStore = create((set, get) => ({
       subtotal, tax_amount: tax, discount_amount: 0, total,
       payment_method: paymentMethod || 'cash', created_at: now,
       salesperson_name: salespersonName || null, salesperson_employee_no: salespersonEmployeeNo || null,
+      customer_details: customerDetails || null,
       order_items: items,
       users: { name: state.staff.find((u) => u.id === userId)?.name || null },
     }

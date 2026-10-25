@@ -1,4 +1,5 @@
 import jsPDF from 'jspdf'
+import { customerReceiptRows } from '@/utils/formatters'
 
 const WIDTH_MM = 80
 const MARGIN = 4
@@ -30,7 +31,7 @@ export function generateReceiptPdfBlob(receipt, meta) {
   // Height is estimated generously up front (one long page, no page
   // breaks) -- simpler and always correct for a receipt-length document,
   // unlike trying to paginate a continuous thermal-style layout.
-  const estimatedLines = 40 + receipt.items.length * 3 + (customLines?.length || 0) + (headerMessage ? 4 : 0)
+  const estimatedLines = 40 + receipt.items.length * 3 + (customLines?.length || 0) + (headerMessage ? 4 : 0) + (receipt.customerDetails ? 8 : 0)
   const height = Math.max(120, estimatedLines * LINE_H + 20)
 
   const doc = new jsPDF({ unit: 'mm', format: [WIDTH_MM, height] })
@@ -80,6 +81,11 @@ export function generateReceiptPdfBlob(receipt, meta) {
   row('Cashier:', receipt.cashier)
   if (receipt.salespersonName) {
     row('Salesperson:', receipt.salespersonEmployeeNo ? `${receipt.salespersonName} (${receipt.salespersonEmployeeNo})` : receipt.salespersonName)
+  }
+  const customerRows = customerReceiptRows(receipt.customerDetails)
+  if (customerRows.length) {
+    dash()
+    for (const [l, v] of customerRows) row(l, v)
   }
   dash()
 
