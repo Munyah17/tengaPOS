@@ -245,7 +245,13 @@ export default function Orders() {
     }
   }
 
-  const dbOrders = useMemo(() => rawOrders.map(o => {
+  // Defensive re-sort newest-first: fetchOrders already returns created_at
+  // desc, but realtime INSERTs prepend onto whatever's in state and the
+  // offline cache can hand us an older ordering -- one comparator here
+  // guarantees the list always reads latest-at-top regardless of source.
+  const dbOrders = useMemo(() => [...rawOrders]
+    .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+    .map(o => {
     const items = o.order_items || []
     // Distinct category names across the order's line items -- a quick
     // "what kind of sale was this" signal (Groceries, Hardware, ...)
@@ -268,7 +274,8 @@ export default function Orders() {
     }
   }), [rawOrders])
 
-  const restaurantOrders = useMemo(() => rawOrders
+  const restaurantOrders = useMemo(() => [...rawOrders]
+    .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
     .filter(o => o.pos_mode === 'restaurant' && !['completed', 'cancelled'].includes(o.status))
     .map(o => ({
       id: o.order_no || `#${o.id.slice(0, 6)}`,

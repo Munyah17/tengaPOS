@@ -112,20 +112,27 @@ function twoLetterInitials(name) {
   return initials
 }
 
-// Business initials (2) + product initials (2) + 6 random digits, e.g.
-// "MIHS354876" for "Metros Investments" selling "Hullets Sugar 2kg". No
-// date component -- receipts are already sorted/filtered by their real
-// created_at timestamp everywhere in the app, this string is purely the
-// printed/human-facing number. productName is whatever the receipt should
-// represent for its 2 letters -- the sale's first/primary line item.
-export function generateReceiptNumber(businessName, productName) {
+// Business initials (2) + product initials (2) + date-time + 2 random
+// digits, e.g. "SFWA-271027-0804-37" for a Siyaya Fit sale at 08:04 on
+// 27 Oct 2026. Replaces the old 6-random-digit format ("SFWA789112"):
+// those numbers bore no relationship to when the sale happened, so the
+// Orders list (which sorts newest-first by created_at) looked scrambled
+// -- an 08:04 sale sat above a 07:25 one with a "lower"-looking number.
+// Embedding the date+time makes receipt numbers read in the same order
+// the list shows them. The 2 random digits still disambiguate two sales
+// within the same minute; the real dedup key is process_checkout's
+// client_ref, so a rare same-minute same-digit collision just gets the
+// order_no "-xxxx" suffix it already applies on unique_violation.
+export function generateReceiptNumber(businessName, productName, date = new Date()) {
   const biz = twoLetterInitials(businessName)
   const prod = twoLetterInitials(productName)
-  // 6 digits (1,000,000 slots/tenant) -- this is only the printed number
-  // now, not the checkout dedup key (see process_checkout's client_ref), so
-  // it just needs to be collision-rare, not collision-proof.
-  const rand = Math.floor(Math.random() * 1000000).toString().padStart(6, '0')
-  return `${biz}${prod}${rand}`
+  const y = date.getFullYear().toString().slice(-2)
+  const m = (date.getMonth() + 1).toString().padStart(2, '0')
+  const d = date.getDate().toString().padStart(2, '0')
+  const hh = date.getHours().toString().padStart(2, '0')
+  const mm = date.getMinutes().toString().padStart(2, '0')
+  const rand = Math.floor(Math.random() * 100).toString().padStart(2, '0')
+  return `${biz}${prod}-${y}${m}${d}-${hh}${mm}-${rand}`
 }
 
 // Turns a saved order's customer_details JSONB (see
