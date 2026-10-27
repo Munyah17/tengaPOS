@@ -142,7 +142,10 @@ const STATUS_COLORS = {
   cancelled: 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300',
 }
 
-const BLANK_ITEM = { description: '', qty: 1, unit_price: 0, discount_pct: 0, is_service: false }
+// Empty strings (not 0) for price/discount: a literal 0 in the field forces
+// whoever's typing to position the cursor around it, and it can never be
+// cleared -- Number() below turns '' back into 0 at save/calc time anyway.
+const BLANK_ITEM = { description: '', qty: 1, unit_price: '', discount_pct: '', is_service: false }
 const BLANK_FORM = {
   customerName: '', customerEmail: '', customerPhone: '', customerAddress: '',
   items: [{ ...BLANK_ITEM }], notes: '', validUntil: '', dueDate: '', vatEnabled: true,
@@ -243,7 +246,10 @@ export default function Invoicing({ standalone = false } = {}) {
       customerEmail: doc.customer_email || '',
       customerPhone: doc.customer_phone || '',
       customerAddress: doc.customer_address || '',
-      items: doc.items?.length ? doc.items : [{ ...BLANK_ITEM }],
+      // Same no-prefilled-0 rule for editing: a saved 0 shows as an empty
+      // field, not a '0' the user has to type around. Round-trips back to
+      // 0 on save via the Number() normalization in handleSave.
+      items: doc.items?.length ? doc.items.map((it) => ({ ...it, unit_price: it.unit_price === 0 ? '' : it.unit_price, discount_pct: it.discount_pct === 0 ? '' : it.discount_pct })) : [{ ...BLANK_ITEM }],
       notes: doc.notes || '',
       validUntil: doc.valid_until || '',
       dueDate: doc.due_date || '',
@@ -301,7 +307,9 @@ export default function Invoicing({ standalone = false } = {}) {
   const handleSave = async (e) => {
     e.preventDefault()
     if (!form.customerName.trim()) { toast.error('Customer name is required'); return }
-    const validItems = form.items.filter((i) => i.description.trim() && i.qty > 0)
+    const validItems = form.items
+      .filter((i) => i.description.trim() && Number(i.qty) > 0)
+      .map((i) => ({ ...i, qty: Number(i.qty) || 0, unit_price: Number(i.unit_price) || 0, discount_pct: Number(i.discount_pct) || 0 }))
     if (validItems.length === 0) { toast.error('Add at least one line item'); return }
     setSaving(true)
     try {
@@ -595,9 +603,9 @@ export default function Invoicing({ standalone = false } = {}) {
               <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Line Items</label>
               <button type="button" onClick={addItem} className="text-xs font-semibold text-brand-600 hover:underline">+ Add Item</button>
             </div>
-            <div className="mb-1 hidden grid-cols-12 gap-1.5 px-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-400 sm:grid">
-              <span className="col-span-4">Description</span>
-              <span className="col-span-1">Qty</span>
+            <div className="mb-1 hidden grid-cols-12 gap-2 px-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-400 sm:grid">
+              <span className="col-span-3">Description</span>
+              <span className="col-span-2">Qty</span>
               <span className="col-span-2">Unit Price</span>
               <span className="col-span-2">Disc %</span>
               <span className="col-span-2">Total</span>
@@ -606,8 +614,8 @@ export default function Invoicing({ standalone = false } = {}) {
               {form.items.map((item, i) => {
                 const lineTotal = (Number(item.qty) || 0) * (Number(item.unit_price) || 0) * (1 - (item.discount_pct || 0) / 100)
                 return (
-                <div key={i} className="grid grid-cols-2 gap-1.5 sm:grid-cols-12">
-                  <div className="relative col-span-2 sm:col-span-4">
+                <div key={i} className="grid grid-cols-2 gap-2 sm:grid-cols-12 sm:items-start">
+                  <div className="relative col-span-2 sm:col-span-3">
                     <input
                       type="text" placeholder="Description — type an SKU or product name" value={item.description}
                       onChange={(e) => { updateItem(i, 'description', e.target.value); setAutocompleteRow(i) }}
@@ -631,29 +639,33 @@ export default function Invoicing({ standalone = false } = {}) {
                       </div>
                     )}
                   </div>
-                  <div className="col-span-1 flex flex-col items-center gap-0.5">
+                  <div className="col-span-1 flex flex-col gap-0.5 sm:col-span-2">
                     {item.is_service ? (
-                      <span className="flex h-[30px] items-center text-[10px] font-semibold uppercase text-slate-400" title="Service line — quantity doesn't apply">Service</span>
+                      <span className="flex h-[38px] items-center justify-center text-[10px] font-semibold uppercase text-slate-400" title="Service line — quantity doesn't apply">Service</span>
                     ) : (
+                      // type="text" + inputMode="decimal": type="number"
+                      // renders up/down spinner arrows (which also fight
+                      // manual typing in cramped fields); the numeric
+                      // keyboard still appears on phones/tablets.
                       <input
-                        type="number" placeholder="Qty" min="0" value={item.qty}
-                        onChange={(e) => updateItem(i, 'qty', Number(e.target.value) || 0)}
-                        className="w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                        type="text" inputMode="decimal" placeholder="Qty" value={item.qty}
+                        onChange={(e) => { const v = e.target.value; if (/^\d*\.?\d*$/.test(v)) updateItem(i, 'qty', v) }}
+                        className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
                       />
                     )}
-                    <label className="flex items-center gap-1 text-[9px] text-slate-400">
+                    <label className="flex items-center justify-center gap-1 text-[9px] text-slate-400">
                       <input type="checkbox" checked={item.is_service} onChange={() => toggleService(i)} className="h-3 w-3 rounded border-slate-300" /> Service
                     </label>
                   </div>
                   <input
-                    type="number" placeholder="Price" min="0" step="0.01" value={item.unit_price}
-                    onChange={(e) => updateItem(i, 'unit_price', Number(e.target.value) || 0)}
-                    className="col-span-1 rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white sm:col-span-2"
+                    type="text" inputMode="decimal" placeholder="Price" value={item.unit_price}
+                    onChange={(e) => { const v = e.target.value; if (/^\d*\.?\d*$/.test(v)) updateItem(i, 'unit_price', v) }}
+                    className="col-span-1 rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white sm:col-span-2"
                   />
                   <input
-                    type="number" placeholder="Disc %" min="0" max="100" value={item.discount_pct}
-                    onChange={(e) => updateItem(i, 'discount_pct', Number(e.target.value) || 0)}
-                    className="col-span-1 rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white sm:col-span-2"
+                    type="text" inputMode="decimal" placeholder="Disc %" value={item.discount_pct}
+                    onChange={(e) => { const v = e.target.value; if (/^\d*\.?\d*$/.test(v) && Number(v) <= 100) updateItem(i, 'discount_pct', v) }}
+                    className="col-span-1 rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white sm:col-span-2"
                   />
                   <div className="col-span-1 flex items-center rounded-lg bg-slate-50 px-2 py-1.5 text-sm font-semibold text-slate-700 dark:bg-slate-800/60 dark:text-slate-300 sm:col-span-2">
                     {fmt(lineTotal)}
