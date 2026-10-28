@@ -422,8 +422,8 @@ export default function Invoicing({ standalone = false } = {}) {
     <div className="p-4 sm:p-6">
       <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-extrabold text-slate-900 dark:text-white">{standalone ? 'Quotations' : 'Invoicing'}</h1>
-          <p className="text-sm text-slate-500">{standalone ? 'Estimate a job for the customer before you start work' : 'Quotations and invoices for your customers'}</p>
+          <h1 className="text-2xl font-extrabold text-slate-900 dark:text-white">{standalone ? 'Quotations & Invoices' : 'Invoicing'}</h1>
+          <p className="text-sm text-slate-500">{standalone ? 'Estimate a job before work, then invoice it when it\'s done' : 'Quotations and invoices for your customers'}</p>
         </div>
         <div className="flex gap-2">
           <button onClick={loadDocuments} className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
@@ -450,24 +450,23 @@ export default function Invoicing({ standalone = false } = {}) {
         </div>
       )}
 
-      {/* Type tabs — Quotations-only in standalone (Workshop) mode, since
-          invoices stay part of the paid Accounting & ERP add-on */}
-      {!standalone && (
-        <div className="mb-4 inline-flex overflow-hidden rounded-xl border border-slate-200 dark:border-slate-700">
-          <button
-            onClick={() => setDocType('quotation')}
-            className={`flex items-center gap-1.5 px-4 py-2 text-sm font-semibold transition-colors ${docType === 'quotation' ? 'bg-brand-600 text-white' : 'text-slate-600 hover:bg-slate-50 dark:text-slate-400 dark:hover:bg-slate-800'}`}
-          >
-            <FileText className="h-4 w-4" /> Quotations
-          </button>
-          <button
-            onClick={() => setDocType('invoice')}
-            className={`flex items-center gap-1.5 px-4 py-2 text-sm font-semibold transition-colors ${docType === 'invoice' ? 'bg-brand-600 text-white' : 'text-slate-600 hover:bg-slate-50 dark:text-slate-400 dark:hover:bg-slate-800'}`}
-          >
-            <Receipt className="h-4 w-4" /> Invoices
-          </button>
-        </div>
-      )}
+      {/* Type tabs — standalone (Workshop) mode shows these too: job cards
+          can now produce real invoices (JobCards.jsx -> "Invoice"), which
+          need somewhere to be viewed/printed/paid. */}
+      <div className="mb-4 inline-flex overflow-hidden rounded-xl border border-slate-200 dark:border-slate-700">
+        <button
+          onClick={() => setDocType('quotation')}
+          className={`flex items-center gap-1.5 px-4 py-2 text-sm font-semibold transition-colors ${docType === 'quotation' ? 'bg-brand-600 text-white' : 'text-slate-600 hover:bg-slate-50 dark:text-slate-400 dark:hover:bg-slate-800'}`}
+        >
+          <FileText className="h-4 w-4" /> Quotations
+        </button>
+        <button
+          onClick={() => setDocType('invoice')}
+          className={`flex items-center gap-1.5 px-4 py-2 text-sm font-semibold transition-colors ${docType === 'invoice' ? 'bg-brand-600 text-white' : 'text-slate-600 hover:bg-slate-50 dark:text-slate-400 dark:hover:bg-slate-800'}`}
+        >
+          <Receipt className="h-4 w-4" /> Invoices
+        </button>
+      </div>
 
       <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
         {loading ? (

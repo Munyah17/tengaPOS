@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
-import { Plus, Wrench, Trash2, Car, User, Receipt, Edit3, AlertTriangle, Loader2 } from 'lucide-react'
+import { Plus, Wrench, Trash2, Car, User, Receipt, Edit3, AlertTriangle, Loader2, FileText } from 'lucide-react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import Modal from '@/components/common/Modal'
 import Button from '@/components/common/Button'
@@ -9,7 +9,7 @@ import { useAuthStore } from '@/stores/authStore'
 import { useCartStore } from '@/stores/cartStore'
 import {
   fetchJobCards, fetchCustomers, createCustomer, createVehicle, createJobCard, updateJobCard, deleteJobCard,
-  fetchTechnicians, fetchProducts, findDuplicateCustomer, findDuplicateVehicle, createQuotationFromJobCard,
+  fetchTechnicians, fetchProducts, findDuplicateCustomer, findDuplicateVehicle, createQuotationFromJobCard, createInvoiceFromJobCard,
 } from '@/lib/db'
 import { loadWithOfflineCache } from '@/lib/offlineCache'
 import toast from 'react-hot-toast'
@@ -344,7 +344,7 @@ function JobCardModal({ tenant, branch, customers, technicians, products, existi
 }
 
 export default function JobCards() {
-  const { tenant, branch, role } = useAuthStore()
+  const { tenant, branch, role, user } = useAuthStore()
   const cart = useCartStore()
   const navigate = useNavigate()
   const location = useLocation()
@@ -356,6 +356,7 @@ export default function JobCards() {
   const [editingCard, setEditingCard] = useState(null)
   const [filter, setFilter] = useState('active')
   const [deletingId, setDeletingId] = useState(null)
+  const [invoicingId, setInvoicingId] = useState(null)
 
   // Arrived here via "Create Job Card" on an accepted quotation
   // (Quotations.jsx / Invoicing.jsx) -- pre-fill the new job card with the
@@ -451,6 +452,32 @@ export default function JobCards() {
     navigate('/app/pos')
   }
 
+  // "Invoice" -- for customers who'll pay later (company fleet accounts,
+  // insurers) rather than at the till. Creates a real invoice doc from the
+  // card's billable lines; it then lives in Quotations & Invoices where it
+  // can be printed, sent and marked paid. Doesn't take payment or close
+  // the card -- that's still the POS "Issue Receipt" path or a manual
+  // status advance.
+  const createInvoice = async (jc) => {
+    const billable = (jc.items || []).filter((it) => it.description?.trim())
+    if (billable.length === 0) { toast.error('This job card has no billable items — add Parts & Labor first'); return }
+    setInvoicingId(jc.id)
+    try {
+      const doc = await createInvoiceFromJobCard(tenant.id, branch?.id, user?.id, {
+        ...jc,
+        items: billable,
+      }, {
+        // Same VAT gate as POS.jsx's vatActive and the modal's createQuote.
+        vatEnabled: tenant?.features?.vat === true && tenant?.vat_enabled !== false, vatRate: tenant?.vat_rate ?? 15.5,
+      })
+      toast.success(`Invoice ${doc.doc_number} created — find it under Quotations & Invoices`)
+    } catch (err) {
+      toast.error(err.message || 'Failed to create invoice')
+    } finally {
+      setInvoicingId(null)
+    }
+  }
+
   return (
     <div className="p-4 sm:p-6">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
@@ -524,6 +551,16 @@ export default function JobCards() {
                   {(jc.status === 'open' || jc.status === 'in_progress') && (
                     <button onClick={() => issueReceipt(jc)} className="flex items-center gap-1 rounded-lg bg-green-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-green-700">
                       <Receipt className="h-3 w-3" /> {jc.status === 'in_progress' ? 'Complete & Issue Receipt' : 'Issue Receipt'}
+                    </button>
+                  )}
+                  {jc.status !== 'cancelled' && (
+                    <button
+                      onClick={() => createInvoice(jc)}
+                      disabled={invoicingId === jc.id}
+                      className="flex items-center gap-1 rounded-lg bg-white px-2.5 py-1 text-xs font-semibold text-slate-700 shadow-sm hover:bg-slate-50 disabled:opacity-50 dark:bg-slate-800 dark:text-slate-300"
+                      title="Create an invoice from this job card"
+                    >
+                      {invoicingId === jc.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <FileText className="h-3 w-3" />} Invoice
                     </button>
                   )}
                   {jc.status === 'completed' && jc.linked_order_id && (

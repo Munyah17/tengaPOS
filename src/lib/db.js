@@ -2451,6 +2451,33 @@ export async function createQuotationFromJobCard(tenantId, branchId, userId, job
   return doc
 }
 
+// Same shape as the quotation version above, but the job is DONE and being
+// billed now rather than estimated -- doc_type 'invoice', issued as 'sent'
+// so it lands ready to record a payment against in Invoicing. If the job
+// card itself came from a quotation, converted_from_id chains the invoice
+// back to it so the document trail reads quote -> job card -> invoice.
+export async function createInvoiceFromJobCard(tenantId, branchId, userId, jobCard, { vatEnabled = true, vatRate = 15.5 } = {}) {
+  const items = (jobCard.items || []).map((i) => ({ description: i.description, qty: i.qty, unit_price: i.unit_price, discount_pct: 0 }))
+  const grossTotal = items.reduce((s, i) => s + i.qty * i.unit_price, 0)
+  const vatAmount = vatEnabled ? grossTotal * (vatRate / (100 + vatRate)) : 0
+  const doc = await insertDocument(tenantId, branchId, userId, {
+    docType: 'invoice',
+    docNumber: generateDocNumber('INV'),
+    status: 'sent',
+    customerId: jobCard.customer_id || null,
+    customerName: jobCard.customers?.name || 'Customer',
+    customerPhone: jobCard.customers?.phone || null,
+    items,
+    subtotal: grossTotal - vatAmount,
+    vatAmount,
+    vatEnabled,
+    total: grossTotal,
+    notes: [`Job card ${jobCard.job_card_no}`, jobCard.diagnosis].filter(Boolean).join(' — ') || null,
+    convertedFromId: jobCard.quotation_id || null,
+  })
+  return doc
+}
+
 export async function updateDocument(id, updates) {
   const { data, error } = await supabase
     .from('documents')
