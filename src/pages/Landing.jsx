@@ -134,13 +134,13 @@ export default function Landing() {
 
               <div className="mt-9 flex flex-wrap items-center gap-4">
                 {desktopDl?.url ? (
-                  <a
-                    href={desktopDl.url}
+                  <Link
+                    to="/download"
                     className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-6 py-3 text-sm font-bold text-white transition-colors hover:bg-slate-800 dark:bg-brand-600 dark:hover:bg-brand-700"
                   >
                     <Download className="h-4 w-4" />
                     Download for Windows{desktopDl.version ? ` — v${desktopDl.version}` : ''}
-                  </a>
+                  </Link>
                 ) : (
                   <Link
                     to="/register"

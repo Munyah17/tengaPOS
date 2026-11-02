@@ -1,0 +1,132 @@
+# ─────────────────────────────────────────────────────────────
+# tengaPOS Desktop — release pipeline (TEMPLATE)
+#
+# The Electron source lives in the desktop repository, NOT this
+# web repo. Copy this file into the desktop repo's
+# .github/workflows/ and adjust the TODO markers. It is parked
+# here so the whole release process is versioned next to the
+# licensing backend it publishes into.
+#
+# Trigger: push a git tag like v1.4.0 — or run manually.
+# Result: installer built → validated → sha256'd → uploaded to the
+# private `desktop-releases` Supabase bucket, then the release row
+# is created through POST /v1/releases (super-admin JWT) which
+# signs the manifest. Nothing on the public site changes until
+# this succeeds — drafts/test builds never reach /download.
+# ─────────────────────────────────────────────────────────────
+
+name: Desktop Release
+
+on:
+  push:
+    tags: ['v*.*.*']
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version (semver, e.g. 1.4.0)'
+        required: true
+      notes_url:
+        description: 'Release notes URL (optional)'
+        required: false
+        default: ''
+
+env:
+  OS_KEY: win32-x64
+  BUCKET: desktop-releases
+
+jobs:
+  build-publish:
+    runs-on: windows-latest           # NSIS installer needs Windows
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Resolve version
+        id: ver
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "push" ]; then
+            echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+          else
+            echo "version=${{ inputs.version }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Verify production config baked in
+        run: |
+          # FAIL the build unless the installer is being produced with the
+          # production licensing API + embedded public verification key.
+          # TODO(desktop-repo): point these at the actual config files.
+          grep -q "ajxephsnqdepupxkvlji.supabase.co" src/licensing/config.ts || (echo "::error::Non-prod licensing API in build" && exit 1)
+          grep -q "/f/sYjfoRuA3sX8upBhhkQii2zB3MMwApftRPHgArZw=" src/licensing/config.ts || (echo "::error::Wrong public key in build" && exit 1)
+
+      - name: Install + test + build installer
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          npm ci
+          npm run lint
+          npm test
+          npm run desktop:dist        # outputs release/tengaPOS Setup <v>.exe
+
+      - name: Locate installer + compute SHA-256
+        id: art
+        shell: pwsh
+        run: |
+          $f = Get-ChildItem release -Filter "tengaPOS Setup *.exe" | Sort-Object LastWriteTime -Desc | Select-Object -First 1
+          if (-not $f) { Write-Error "Installer not found in release/"; exit 1 }
+          $sha = (Get-FileHash $f.FullName -Algorithm SHA256).Hash.ToLower()
+          echo "path=$($f.FullName)" >> $env:GITHUB_OUTPUT
+          echo "name=$($f.Name)" >> $env:GITHUB_OUTPUT
+          echo "sha256=$sha" >> $env:GITHUB_OUTPUT
+          echo "size=$($f.Length)" >> $env:GITHUB_OUTPUT
+
+      - name: Upload installer to private bucket
+        shell: pwsh
+        run: |
+          $storagePath = "win32-x64/v${{ steps.ver.outputs.version }}/${{ steps.art.outputs.name }}"
+          $uri = "${{ secrets.SUPABASE_URL }}/storage/v1/object/$env:BUCKET/$storagePath"
+          $bytes = [IO.File]::ReadAllBytes("${{ steps.art.outputs.path }}")
+          Invoke-RestMethod -Method Post -Uri $uri `
+            -Headers @{ Authorization = "Bearer ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}"; "x-upsert" = "true" } `
+            -ContentType "application/octet-stream" -Body $bytes
+          echo "storage_path=$storagePath" >> $env:GITHUB_ENV
+
+      - name: Publish release via license API (signs manifest server-side)
+        shell: pwsh
+        run: |
+          $body = @{
+            version           = "${{ steps.ver.outputs.version }}"
+            channel           = "stable"
+            release_notes_url = "${{ inputs.notes_url }}"
+            artifacts         = @(@{
+              os           = $env:OS_KEY
+              storage_path = $env:storage_path
+              sha256       = "${{ steps.art.outputs.sha256 }}"
+              size_bytes   = [int64]"${{ steps.art.outputs.size }}"
+            })
+          } | ConvertTo-Json -Depth 5
+          Invoke-RestMethod -Method Post `
+            -Uri "${{ secrets.SUPABASE_URL }}/functions/v1/desktop-license/v1/releases" `
+            -Headers @{ Authorization = "Bearer ${{ secrets.SUPABASE_ADMIN_JWT }}"; "Content-Type" = "application/json" } `
+            -Body $body
+
+      - name: Verify /download/info now serves this version
+        shell: pwsh
+        run: |
+          $info = Invoke-RestMethod "${{ secrets.SUPABASE_URL }}/functions/v1/desktop-license/v1/download/info?os=$env:OS_KEY&channel=stable"
+          if ($info.version -ne "${{ steps.ver.outputs.version }}") {
+            Write-Error "Download feed still on $($info.version), expected ${{ steps.ver.outputs.version }}"
+            exit 1
+          }
+          echo "Published ${{ steps.ver.outputs.version }} — live on https://www.tengapos.co.zw/download"
+
+# Required secrets (desktop repo):
+#   SUPABASE_URL                  https://ajxephsnqdepupxkvlji.supabase.co
+#   SUPABASE_SERVICE_ROLE_KEY     service key — storage upload only
+#   SUPABASE_ADMIN_JWT            long-lived super-admin token — POST /v1/releases

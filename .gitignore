@@ -29,3 +29,5 @@ dist-ssr
 .claude/
 supabase/.temp/
 .env*
+
+DESKTOP-LICENSE-KEY-LOCAL.txt

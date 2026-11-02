@@ -11,6 +11,7 @@ import AdminLayout from '@/components/admin/AdminLayout'
 // one ~2.5MB bundle everyone downloads before anything renders, regardless
 // of which single page they actually landed on.
 const Landing = lazy(() => import('@/pages/Landing'))
+const Download = lazy(() => import('@/pages/Download'))
 const Demo = lazy(() => import('@/pages/Demo'))
 const Login = lazy(() => import('@/pages/Login'))
 const StaffLogin = lazy(() => import('@/pages/StaffLogin'))
@@ -207,6 +208,7 @@ export default function App() {
         <Suspense fallback={<RouteLoading />}>
         <Routes>
           <Route path="/" element={<Landing />} />
+<Route path="/download" element={<Download />} />
           <Route path="/demo" element={<Demo />} />
           <Route path="/login" element={<Login />} />
           {/* Staff sign-in — separate from client /login. /super-admin is

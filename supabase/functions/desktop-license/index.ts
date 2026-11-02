@@ -389,7 +389,7 @@ serve(async (req) => {
       const channel = url.searchParams.get('channel') || 'stable'
       const { data: rel } = await admin
         .from('desktop_releases')
-        .select('id, version, desktop_release_artifacts(os, storage_path, sha256, size_bytes)')
+        .select('id, version, release_notes_url, desktop_release_artifacts(os, storage_path, sha256, size_bytes)')
         .eq('channel', channel)
         .is('withdrawn_at', null)
         .order('published_at', { ascending: false })
@@ -408,7 +408,7 @@ serve(async (req) => {
         })
       } catch { /* download logging must never break the redirect */ }
       if (path.endsWith('/info')) {
-        return json({ version: latest.version, os, sha256: art.sha256, size_bytes: art.size_bytes, url: signed.signedUrl, expires_in: SIGNED_URL_TTL })
+        return json({ version: latest.version, os, sha256: art.sha256, size_bytes: art.size_bytes, release_notes_url: latest.release_notes_url || null, url: signed.signedUrl, expires_in: SIGNED_URL_TTL })
       }
       return new Response(null, { status: 302, headers: { Location: signed.signedUrl, ...CORS } })
     }
