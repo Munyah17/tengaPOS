@@ -59,6 +59,17 @@ export const createRelease = (payload) => call('/v1/releases', { method: 'POST',
 export const patchRelease = (releaseId, patch) =>
   call(`/v1/releases/${releaseId}`, { method: 'PATCH', body: patch })
 
+// ─── Super admin: distributors / volume licenses ───
+export const adminListDistributors = () => call('/v1/admin/distributors')
+export const adminCreateDistributor = (payload) =>
+  call('/v1/admin/distributors', { method: 'POST', body: payload })
+export const adminPatchDistributor = (distributorId, patch) =>
+  call(`/v1/admin/distributors/${distributorId}`, { method: 'PATCH', body: patch })
+export const adminListDistributorDevices = (distributorId) =>
+  call(`/v1/admin/distributors/${distributorId}/devices`)
+export const adminCreateVolumeLicense = (payload) =>
+  call('/v1/admin/volume-licenses', { method: 'POST', body: payload })
+
 // ─── Super admin: fleet + security (contract §2.9) ───
 export const adminIssueLicense = ({ tenantId, deviceLabel, ttlMinutes }) =>
   call('/v1/admin/licenses', {

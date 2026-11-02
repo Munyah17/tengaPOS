@@ -230,8 +230,19 @@ async function issueLease(
   reason: 'activation' | 'renewal' | 'reissue',
 ) {
   const now = new Date()
-  const expires = new Date(now.getTime() + LEASE_DAYS * 86400e3)
-  const grace = new Date(expires.getTime() + GRACE_DAYS * 86400e3)
+  let expires = new Date(now.getTime() + LEASE_DAYS * 86400e3)
+  let grace = new Date(expires.getTime() + GRACE_DAYS * 86400e3)
+  // Volume licenses carry a licence period (valid_until on the code) —
+  // leases and grace can never extend past it, incl. renewals.
+  if (device.activation_code_id) {
+    const { data: code } = await admin
+      .from('desktop_activation_codes').select('valid_until')
+      .eq('id', device.activation_code_id as string).maybeSingle()
+    if (code?.valid_until) {
+      const cap = new Date(code.valid_until)
+      if (cap < expires) { expires = cap; if (cap < grace) grace = cap }
+    }
+  }
   const unsigned = {
     lease_version: 1,
     lease_id: crypto.randomUUID(),
@@ -315,18 +326,26 @@ serve(async (req) => {
       if (!tenant || ['suspended', 'deleted', 'rejected'].includes(tenant.status)) {
         return err('tenant_inactive', 'This business account is not active', 403)
       }
-      // D1 (revised): a started paid plan OR a paid once-off license purchase
-      if (!(await hasDesktopLicense(admin, tenant))) {
-        return err('license_required', 'Desktop requires a paid plan or a purchased desktop license', 403)
+      // Distributor volume codes are pre-paid seats: they bypass the
+      // tenant's own plan/purchase checks — the seat cap is the code's
+      // max_uses, enforced atomically by consume_activation_code.
+      const isDistributorCode = !!codeRow.distributor_id
+      if (!isDistributorCode) {
+        // D1 (revised): a started paid plan OR a paid once-off license purchase
+        if (!(await hasDesktopLicense(admin, tenant))) {
+          return err('license_required', 'Desktop requires a paid plan or a purchased desktop license', 403)
+        }
       }
       const ents = await entitlementsFor(admin, tenant)
-      const { count: deviceCount } = await admin
-        .from('desktop_devices')
-        .select('id', { count: 'exact', head: true })
-        .eq('tenant_id', tenant.id)
-        .eq('status', 'active')
-      if ((deviceCount || 0) >= ents.max_devices) {
-        return err('device_limit_reached', `Your license allows ${ents.max_devices} desktop terminal(s)`, 409)
+      if (!isDistributorCode) {
+        const { count: deviceCount } = await admin
+          .from('desktop_devices')
+          .select('id', { count: 'exact', head: true })
+          .eq('tenant_id', tenant.id)
+          .eq('status', 'active')
+        if ((deviceCount || 0) >= ents.max_devices) {
+          return err('device_limit_reached', `Your license allows ${ents.max_devices} desktop terminal(s)`, 409)
+        }
       }
 
       const fp = (await sha256hex(device_public_key)).slice(0, 16)
@@ -341,6 +360,7 @@ serve(async (req) => {
           app_version: app_version || null,
           os: os || null,
           activation_code_id: codeRow.id,
+          distributor_id: codeRow.distributor_id || null,
         })
         .select()
         .single()
@@ -502,7 +522,9 @@ serve(async (req) => {
       // D1: plan lapsed (or never started) → no more renewals; the device
       // flags it and dies naturally at grace_until — remote revocation
       // can't reach a machine that stays offline anyway.
-      const licensed = await hasDesktopLicense(admin, tenant)
+      // Dealer terminals: the distributor pre-paid the seats, so a
+      // lapsed/absent tenant plan must not starve renewals.
+      const licensed = device.distributor_id ? true : await hasDesktopLicense(admin, tenant)
       const resp: Record<string, unknown> = {
         server_time: now,
         device_status: isSuspended ? 'suspended' : 'active',
@@ -927,7 +949,7 @@ serve(async (req) => {
         .select('*, tenants(name), desktop_activation_codes(code_hint, label, status, consumed_at)')
         .order('created_at', { ascending: false }).limit(500)
       const { data: codes } = await admin.from('desktop_activation_codes')
-        .select('id, tenant_id, code_hint, label, status, expires_at, consumed_at, created_at, tenants(name)')
+        .select('id, tenant_id, code_hint, label, status, expires_at, consumed_at, created_at, distributor_id, uses, max_uses, valid_until, tenants(name), desktop_distributors(name)')
         .order('created_at', { ascending: false }).limit(500)
       return json({ purchases: purchases || [], codes: codes || [] })
     }
@@ -949,7 +971,7 @@ serve(async (req) => {
     if (path === '/v1/admin/devices' && req.method === 'GET') {
       if (!(await isSuperAdmin(req, admin))) return err('forbidden', 'Super Admin only', 403)
       let q = admin.from('desktop_devices')
-        .select('id, tenant_id, name, public_key_fingerprint, status, flags, app_version, os, last_ip, activated_at, last_checkin_at, lease_expires_at, grace_until, revoked_at, tenants(name)')
+        .select('id, tenant_id, name, public_key_fingerprint, status, flags, app_version, os, last_ip, activated_at, last_checkin_at, lease_expires_at, grace_until, revoked_at, distributor_id, tenants(name), desktop_distributors(name)')
         .order('last_checkin_at', { ascending: false, nullsFirst: false })
         .limit(500)
       const status = url.searchParams.get('status')
@@ -1002,6 +1024,94 @@ serve(async (req) => {
         return json({ ok: true, device_id: deviceId, status: 'deleted' })
       }
       return err('bad_request', 'Unsupported device action', 400)
+    }
+
+    // ══════════ SUPER ADMIN — distributors / volume licenses ══════════
+
+    if (path === '/v1/admin/distributors' && req.method === 'GET') {
+      if (!(await isSuperAdmin(req, admin))) return err('forbidden', 'Super Admin only', 403)
+      const { data, error: qErr } = await admin
+        .from('desktop_distributors')
+        .select('*, desktop_activation_codes(id, code_hint, label, status, uses, max_uses, valid_until, expires_at, tenant_id, tenants(name))')
+        .order('created_at', { ascending: false })
+      if (qErr) return err('query_failed', qErr.message, 500)
+      return json({ distributors: data || [] })
+    }
+
+    if (path === '/v1/admin/distributors' && req.method === 'POST') {
+      if (!(await isSuperAdmin(req, admin))) return err('forbidden', 'Super Admin only', 403)
+      if (!body.name?.trim()) return err('bad_request', 'name required', 400)
+      const { data: row, error: insErr } = await admin
+        .from('desktop_distributors')
+        .insert({
+          name: body.name.trim(),
+          contact_email: body.contact_email || null,
+          contact_phone: body.contact_phone || null,
+          seat_price_usd: body.seat_price_usd != null ? Number(body.seat_price_usd) : 150,
+          notes: body.notes || null,
+        })
+        .select().single()
+      if (insErr) return err('create_failed', insErr.message, 500)
+      return json({ distributor: row }, 201)
+    }
+
+    const distMatch = path.match(/^\/v1\/admin\/distributors\/([\w-]+)(\/devices)?$/)
+    if (distMatch && req.method === 'PATCH' && !distMatch[2]) {
+      if (!(await isSuperAdmin(req, admin))) return err('forbidden', 'Super Admin only', 403)
+      const patch: Record<string, unknown> = { updated_at: now }
+      for (const k of ['name', 'contact_email', 'contact_phone', 'seat_price_usd', 'notes', 'is_active']) {
+        if (body[k] !== undefined) patch[k] = body[k]
+      }
+      const { data: row, error: uErr } = await admin
+        .from('desktop_distributors').update(patch).eq('id', distMatch[1]).select().single()
+      if (uErr) return err('update_failed', uErr.message, 500)
+      return json({ distributor: row })
+    }
+
+    if (distMatch && distMatch[2] === '/devices' && req.method === 'GET') {
+      if (!(await isSuperAdmin(req, admin))) return err('forbidden', 'Super Admin only', 403)
+      const { data, error: qErr } = await admin
+        .from('desktop_devices')
+        .select('id, tenant_id, name, status, app_version, os, last_ip, activated_at, last_checkin_at, lease_expires_at, activation_code_id, tenants(name)')
+        .eq('distributor_id', distMatch[1])
+        .order('activated_at', { ascending: false }).limit(500)
+      if (qErr) return err('query_failed', qErr.message, 500)
+      return json({ devices: data || [] })
+    }
+
+    if (path === '/v1/admin/volume-licenses' && req.method === 'POST') {
+      if (!(await isSuperAdmin(req, admin))) return err('forbidden', 'Super Admin only', 403)
+      const { distributor_id, tenant_id, max_devices, valid_until, label } = body
+      if (!distributor_id || !tenant_id) return err('bad_request', 'distributor_id and tenant_id required', 400)
+      const seats = Number(max_devices)
+      if (!seats || seats < 1 || seats > 10000) return err('bad_request', 'max_devices must be 1-10000', 400)
+      if (!valid_until || !Date.parse(valid_until)) return err('bad_request', 'valid_until (licence period end) required', 400)
+      const { data: dist } = await admin.from('desktop_distributors')
+        .select('id, is_active').eq('id', distributor_id).maybeSingle()
+      if (!dist) return err('not_found', 'Distributor not found', 404)
+      if (!dist.is_active) return err('distributor_inactive', 'Distributor is inactive', 409)
+      const code = generateCode()
+      const { data: row, error: insErr } = await admin
+        .from('desktop_activation_codes')
+        .insert({
+          tenant_id,
+          distributor_id,
+          code_hash: await sha256hex(code),
+          code_hint: code.slice(-4),
+          label: label || '',
+          status: 'pending',
+          max_uses: seats,
+          valid_until: new Date(valid_until).toISOString(),
+          expires_at: new Date(valid_until).toISOString(), // redeemable until licence end
+          created_by: null,
+        })
+        .select('id').single()
+      if (insErr) return err('create_failed', insErr.message, 500)
+      await logEvent(admin, {
+        type: 'license_issued', tenant_id,
+        detail: { kind: 'volume', distributor_id, max_devices: seats, valid_until, code_id: row.id },
+      })
+      return json({ code, code_id: row.id, expires_at: new Date(valid_until).toISOString() }, 201)
     }
 
     if (path === '/v1/admin/events' && req.method === 'GET') {

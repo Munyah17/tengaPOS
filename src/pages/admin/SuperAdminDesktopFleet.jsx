@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   Monitor, RefreshCw, ShieldAlert, Ban, Trash2, PauseCircle, Eye,
   AlertTriangle, FileText, Plus, Copy, Check, Scale, Download,
-  KeyRound, X, Package, Upload,
+  KeyRound, X, Package, Upload, Store,
 } from 'lucide-react'
 import Modal from '@/components/common/Modal'
 import {
@@ -11,6 +11,8 @@ import {
   adminListInfringements, adminCreateInfringement, adminPatchInfringement,
   adminIssueLicense, adminListLicenses, adminMarkPurchasePaid,
   listReleases, uploadInstaller, createRelease, patchRelease,
+  adminListDistributors, adminCreateDistributor, adminPatchDistributor,
+  adminListDistributorDevices, adminCreateVolumeLicense,
 } from '@/lib/desktopLicense'
 import { supabase } from '@/lib/supabase'
 import toast from 'react-hot-toast'
@@ -99,11 +101,18 @@ export default function SuperAdminDesktopFleet() {
   const [publishing, setPublishing] = useState(false)
   const [publishFile, setPublishFile] = useState(null)
   const [publishForm, setPublishForm] = useState({ version: '', channel: 'stable', rollout_pct: 100, release_notes_url: '' })
+  const [distributors, setDistributors] = useState([])
+  const [dealerModal, setDealerModal] = useState(null) // 'new' | distributor object
+  const [dealerForm, setDealerForm] = useState({})
+  const [volModal, setVolModal] = useState(null) // distributor object the license is for
+  const [volForm, setVolForm] = useState({ tenant_id: '', max_devices: 10, valid_until: '', label: '' })
+  const [expandedDealer, setExpandedDealer] = useState(null)
+  const [dealerDevices, setDealerDevices] = useState([])
 
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      const [s, d, e, c, dl, li, rel] = await Promise.allSettled([
+      const [s, d, e, c, dl, li, rel, distr] = await Promise.allSettled([
         adminGetStats(),
         adminListDevices(statusFilter ? { status: statusFilter } : {}),
         adminListEvents(eventTypeFilter ? { type: eventTypeFilter } : {}),
@@ -111,6 +120,7 @@ export default function SuperAdminDesktopFleet() {
         adminListDownloads(),
         adminListLicenses(),
         listReleases(),
+        adminListDistributors(),
       ])
       if (s.status === 'fulfilled') setStats(s.value)
       if (d.status === 'fulfilled') setDevices(d.value.devices || [])
@@ -119,6 +129,7 @@ export default function SuperAdminDesktopFleet() {
       if (c.status === 'fulfilled') setCases(c.value.cases || [])
       if (dl.status === 'fulfilled') setDownloads(dl.value.downloads || [])
       if (rel.status === 'fulfilled') setReleases(rel.value.releases || [])
+      if (distr.status === 'fulfilled') setDistributors(distr.value.distributors || [])
     } finally {
       setLoading(false)
     }
@@ -131,10 +142,10 @@ export default function SuperAdminDesktopFleet() {
 
   // Load tenant list once for the staff-issue dropdown
   useEffect(() => {
-    if (!issueModal || tenants.length) return
+    if ((!issueModal && !volModal) || tenants.length) return
     supabase.from('tenants').select('id, name').eq('status', 'active').order('name').limit(500)
       .then(({ data }) => setTenants(data || []))
-  }, [issueModal, tenants.length])
+  }, [issueModal, volModal, tenants.length])
 
   const openDetail = async (device) => {
     try { setDetail(await adminGetDevice(device.id)) }
@@ -189,6 +200,52 @@ export default function SuperAdminDesktopFleet() {
       toast.success(release.withdrawn_at ? `v${release.version} reinstated` : `v${release.version} withdrawn`)
       load()
     } catch (err) { toast.error(err.message) }
+  }
+
+  const saveDealer = async (e) => {
+    e.preventDefault()
+    try {
+      const payload = {
+        name: dealerForm.name,
+        contact_email: dealerForm.contact_email || null,
+        contact_phone: dealerForm.contact_phone || null,
+        seat_price_usd: Number(dealerForm.seat_price_usd) || 150,
+        notes: dealerForm.notes || null,
+      }
+      if (dealerModal === 'new') {
+        await adminCreateDistributor(payload)
+        toast.success(`Dealer "${payload.name}" created`)
+      } else {
+        await adminPatchDistributor(dealerModal.id, { ...payload, is_active: dealerForm.is_active })
+        toast.success('Dealer updated')
+      }
+      setDealerModal(null)
+      load()
+    } catch (err) { toast.error(err.message) }
+  }
+
+  const issueVolumeLicense = async (e) => {
+    e.preventDefault()
+    try {
+      const res = await adminCreateVolumeLicense({
+        distributor_id: volModal.id,
+        tenant_id: volForm.tenant_id,
+        max_devices: Number(volForm.max_devices),
+        valid_until: volForm.valid_until,
+        label: volForm.label,
+      })
+      setNewCode(res)
+      setVolModal(null)
+      load()
+    } catch (err) { toast.error(err.message) }
+  }
+
+  const toggleDealerDevices = async (dist) => {
+    if (expandedDealer === dist.id) { setExpandedDealer(null); return }
+    setExpandedDealer(dist.id)
+    setDealerDevices([])
+    try { setDealerDevices((await adminListDistributorDevices(dist.id)).devices || []) }
+    catch (err) { toast.error(err.message) }
   }
 
   const issueCode = async (e) => {
@@ -327,6 +384,11 @@ export default function SuperAdminDesktopFleet() {
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="font-bold text-slate-900 dark:text-white">{d.name}</span>
                       <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${STATUS_STYLES[d.status]}`}>{d.status}</span>
+                      {d.desktop_distributors?.name && (
+                        <span className="rounded-full bg-purple-50 px-2 py-0.5 text-[10px] font-bold text-purple-700 dark:bg-purple-900/30 dark:text-purple-300">
+                          {d.desktop_distributors.name}
+                        </span>
+                      )}
                       {flagBadges(d.flags)}
                     </div>
                     <div className="mt-0.5 flex flex-wrap gap-x-4 text-xs text-slate-500">
@@ -370,6 +432,101 @@ export default function SuperAdminDesktopFleet() {
       {/* ─── LICENSES ─── */}
       {tab === 'licenses' && (
         <div className="space-y-4">
+          {/* Distributors / volume licenses */}
+          <div className="rounded-2xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
+            <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4 dark:border-slate-800">
+              <div>
+                <h2 className="font-bold text-slate-900 dark:text-white">Distributors</h2>
+                <p className="text-xs text-slate-500">Dealers with volume licenses — custom seat price, device cap and licence period</p>
+              </div>
+              <button onClick={() => { setDealerForm({ name: '', seat_price_usd: 150, contact_email: '', contact_phone: '', notes: '' }); setDealerModal('new') }}
+                className="flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2 text-sm font-bold text-white hover:bg-slate-800 dark:bg-brand-600 dark:hover:bg-brand-700">
+                <Plus className="h-4 w-4" /> Add Dealer
+              </button>
+            </div>
+            {distributors.length === 0 ? (
+              <p className="px-5 py-10 text-center text-sm text-slate-500">No distributors yet — add a dealer to issue volume licenses</p>
+            ) : (
+              <ul className="divide-y divide-slate-100 dark:divide-slate-800">
+                {distributors.map((dist) => {
+                  const codes = dist.desktop_activation_codes || []
+                  const seatsTotal = codes.reduce((n, c) => n + (c.max_uses || 0), 0)
+                  const seatsUsed = codes.reduce((n, c) => n + (c.uses || 0), 0)
+                  const liveDevices = devices.filter((dv) => dv.distributor_id === dist.id && dv.status === 'active').length
+                  return (
+                    <li key={dist.id} className="px-5 py-3.5">
+                      <div className="flex flex-wrap items-center gap-4">
+                        <div className="rounded-xl bg-slate-100 p-2.5 dark:bg-slate-800">
+                          <Store className="h-4 w-4 text-slate-500 dark:text-slate-400" />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="font-bold text-slate-900 dark:text-white">{dist.name}</span>
+                            {!dist.is_active && <span className="rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-bold uppercase text-red-700 dark:bg-red-900/40 dark:text-red-400">inactive</span>}
+                            <span className="rounded-full bg-brand-50 px-2 py-0.5 text-[10px] font-bold text-brand-700 dark:bg-brand-900/30 dark:text-brand-300">${Number(dist.seat_price_usd).toFixed(0)}/seat</span>
+                          </div>
+                          <div className="mt-0.5 flex flex-wrap gap-x-4 text-xs text-slate-500">
+                            <span className="font-semibold">{seatsUsed}/{seatsTotal} seats redeemed · {liveDevices} active terminals</span>
+                            {dist.contact_email && <span>{dist.contact_email}</span>}
+                            {dist.contact_phone && <span>{dist.contact_phone}</span>}
+                          </div>
+                        </div>
+                        <button onClick={() => { setVolForm({ tenant_id: '', max_devices: 10, valid_until: '', label: '' }); setVolModal(dist) }}
+                          className="rounded-xl border border-brand-200 px-3 py-1.5 text-xs font-bold text-brand-700 hover:bg-brand-50 dark:border-brand-800 dark:text-brand-400 dark:hover:bg-brand-950/30">
+                          Issue License
+                        </button>
+                        <button onClick={() => { setDealerForm({ ...dist }); setDealerModal(dist) }}
+                          className="rounded-lg border border-slate-200 p-2 text-slate-500 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-800">
+                          <FileText className="h-3.5 w-3.5" />
+                        </button>
+                        <button onClick={() => toggleDealerDevices(dist)}
+                          className="rounded-lg border border-slate-200 p-2 text-slate-500 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-800">
+                          <Eye className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                      {/* Per-license seat usage */}
+                      {codes.length > 0 && (
+                        <div className="mt-3 space-y-1.5">
+                          {codes.map((c) => (
+                            <div key={c.id} className="flex items-center gap-3 text-xs">
+                              <span className="w-24 shrink-0 font-mono text-slate-400">TGA-••••-{c.code_hint}</span>
+                              <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
+                                <div className={`h-full rounded-full ${c.uses >= c.max_uses ? 'bg-red-500' : 'bg-brand-500'}`}
+                                  style={{ width: `${Math.min(100, (c.uses / c.max_uses) * 100)}%` }} />
+                              </div>
+                              <span className="w-14 shrink-0 font-semibold text-slate-600 dark:text-slate-300">{c.uses}/{c.max_uses}</span>
+                              <span className="shrink-0 text-slate-400">{c.tenants?.name} · until {c.valid_until ? new Date(c.valid_until).toLocaleDateString() : '—'}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      {/* Expanded: dealer terminals */}
+                      {expandedDealer === dist.id && (
+                        <div className="mt-3 rounded-xl border border-slate-100 dark:border-slate-800">
+                          {dealerDevices.length === 0 ? (
+                            <p className="px-4 py-3 text-xs text-slate-400">No terminals activated under this dealer</p>
+                          ) : (
+                            <ul className="divide-y divide-slate-100 dark:divide-slate-800">
+                              {dealerDevices.map((dv) => (
+                                <li key={dv.id} className="flex flex-wrap items-center gap-3 px-4 py-2 text-xs text-slate-500">
+                                  <Monitor className="h-3.5 w-3.5 text-slate-400" />
+                                  <span className="font-bold text-slate-700 dark:text-slate-300">{dv.name}</span>
+                                  <span>{dv.tenants?.name}</span>
+                                  <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${STATUS_STYLES[dv.status] || 'bg-slate-100 text-slate-500'}`}>{dv.status}</span>
+                                  <span className="ml-auto">check-in {fmt(dv.last_checkin_at)}</span>
+                                </li>
+                              ))}
+                            </ul>
+                          )}
+                        </div>
+                      )}
+                    </li>
+                  )
+                })}
+              </ul>
+            )}
+          </div>
+
           <div className="rounded-2xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
             <div className="border-b border-slate-200 px-5 py-4 dark:border-slate-800">
               <h2 className="font-bold text-slate-900 dark:text-white">License Purchases</h2>
@@ -422,6 +579,11 @@ export default function SuperAdminDesktopFleet() {
                   <li key={c.id} className="flex flex-wrap items-center gap-4 px-5 py-2.5 text-xs">
                     <span className="font-mono font-bold text-slate-800 dark:text-slate-200">TGA-••••-{c.code_hint}</span>
                     <span className="font-semibold text-slate-600 dark:text-slate-400">{c.tenants?.name || '—'}</span>
+                    {c.desktop_distributors?.name && (
+                      <span className="rounded-full bg-brand-50 px-2 py-0.5 text-[10px] font-bold text-brand-700 dark:bg-brand-900/30 dark:text-brand-300">
+                        {c.desktop_distributors.name} · {c.uses}/{c.max_uses}
+                      </span>
+                    )}
                     <span className="text-slate-500">{c.label}</span>
                     <span className={`ml-auto rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${STATUS_STYLES[c.status] || 'bg-slate-100 text-slate-500'}`}>{c.status}</span>
                     <span className="text-slate-400">{fmt(c.created_at)}</span>
@@ -631,6 +793,96 @@ export default function SuperAdminDesktopFleet() {
             className="w-full rounded-xl bg-slate-900 px-4 py-3 text-sm font-bold text-white hover:bg-slate-800 disabled:opacity-50 dark:bg-brand-600 dark:hover:bg-brand-700">
             {publishing ? 'Uploading & registering…' : 'Publish'}
           </button>
+        </form>
+      </Modal>
+
+      {/* Dealer create/edit */}
+      <Modal isOpen={!!dealerModal} onClose={() => setDealerModal(null)} title={dealerModal === 'new' ? 'New Distributor' : `Dealer — ${dealerModal?.name}`}>
+        <form onSubmit={saveDealer} className="space-y-4">
+          <div>
+            <label className="mb-1.5 block text-sm font-semibold text-slate-700 dark:text-slate-300">Dealer name *</label>
+            <input required value={dealerForm.name || ''} onChange={(e) => setDealerForm({ ...dealerForm, name: e.target.value })}
+              placeholder="e.g. Harare Tech Resellers"
+              className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white" />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="mb-1.5 block text-sm font-semibold text-slate-700 dark:text-slate-300">Seat price (USD) *</label>
+              <input type="number" min="0" step="0.01" required value={dealerForm.seat_price_usd ?? 150}
+                onChange={(e) => setDealerForm({ ...dealerForm, seat_price_usd: e.target.value })}
+                className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white" />
+            </div>
+            <div>
+              <label className="mb-1.5 block text-sm font-semibold text-slate-700 dark:text-slate-300">Contact phone</label>
+              <input value={dealerForm.contact_phone || ''} onChange={(e) => setDealerForm({ ...dealerForm, contact_phone: e.target.value })}
+                className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white" />
+            </div>
+          </div>
+          <div>
+            <label className="mb-1.5 block text-sm font-semibold text-slate-700 dark:text-slate-300">Contact email</label>
+            <input type="email" value={dealerForm.contact_email || ''} onChange={(e) => setDealerForm({ ...dealerForm, contact_email: e.target.value })}
+              className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white" />
+          </div>
+          <div>
+            <label className="mb-1.5 block text-sm font-semibold text-slate-700 dark:text-slate-300">Notes</label>
+            <input value={dealerForm.notes || ''} onChange={(e) => setDealerForm({ ...dealerForm, notes: e.target.value })}
+              className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white" />
+          </div>
+          {dealerModal !== 'new' && (
+            <label className="flex items-center gap-2 text-sm font-semibold text-slate-700 dark:text-slate-300">
+              <input type="checkbox" checked={dealerForm.is_active !== false}
+                onChange={(e) => setDealerForm({ ...dealerForm, is_active: e.target.checked })} />
+              Active — inactive dealers cannot receive new licenses
+            </label>
+          )}
+          <div className="flex gap-3">
+            <button type="button" onClick={() => setDealerModal(null)} className="flex-1 rounded-xl border border-slate-200 py-2.5 text-sm font-semibold dark:border-slate-700 dark:text-white">Cancel</button>
+            <button type="submit" className="flex-1 rounded-xl bg-brand-600 py-2.5 text-sm font-bold text-white hover:bg-brand-700">
+              {dealerModal === 'new' ? 'Create Dealer' : 'Save'}
+            </button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* Issue volume license */}
+      <Modal isOpen={!!volModal} onClose={() => setVolModal(null)} title={`Volume License — ${volModal?.name || ''}`}>
+        <form onSubmit={issueVolumeLicense} className="space-y-4">
+          <p className="rounded-xl bg-brand-50 px-4 py-3 text-xs text-brand-800 dark:bg-brand-900/30 dark:text-brand-200">
+            One shared activation code for <strong>{volModal?.name}</strong> — every terminal that redeems it counts against the seat cap below. Dealer rate: ${Number(volModal?.seat_price_usd || 0).toFixed(0)}/seat.
+          </p>
+          <div>
+            <label className="mb-1.5 block text-sm font-semibold text-slate-700 dark:text-slate-300">Customer (tenant) *</label>
+            <select required value={volForm.tenant_id} onChange={(e) => setVolForm({ ...volForm, tenant_id: e.target.value })}
+              className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white">
+              <option value="">Select tenant…</option>
+              {tenants.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+            </select>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="mb-1.5 block text-sm font-semibold text-slate-700 dark:text-slate-300">Max devices *</label>
+              <input type="number" min="1" max="10000" required value={volForm.max_devices}
+                onChange={(e) => setVolForm({ ...volForm, max_devices: e.target.value })}
+                className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white" />
+              {volModal && <p className="mt-1 text-xs text-slate-400">Value: ${(Number(volForm.max_devices || 0) * Number(volModal.seat_price_usd || 0)).toFixed(2)}</p>}
+            </div>
+            <div>
+              <label className="mb-1.5 block text-sm font-semibold text-slate-700 dark:text-slate-300">License valid until *</label>
+              <input type="date" required value={volForm.valid_until}
+                onChange={(e) => setVolForm({ ...volForm, valid_until: e.target.value })}
+                className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white" />
+            </div>
+          </div>
+          <div>
+            <label className="mb-1.5 block text-sm font-semibold text-slate-700 dark:text-slate-300">Label</label>
+            <input value={volForm.label} onChange={(e) => setVolForm({ ...volForm, label: e.target.value })}
+              placeholder="e.g. 50-seat 2026 bundle"
+              className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white" />
+          </div>
+          <div className="flex gap-3">
+            <button type="button" onClick={() => setVolModal(null)} className="flex-1 rounded-xl border border-slate-200 py-2.5 text-sm font-semibold dark:border-slate-700 dark:text-white">Cancel</button>
+            <button type="submit" className="flex-1 rounded-xl bg-brand-600 py-2.5 text-sm font-bold text-white hover:bg-brand-700">Issue License</button>
+          </div>
         </form>
       </Modal>
 
