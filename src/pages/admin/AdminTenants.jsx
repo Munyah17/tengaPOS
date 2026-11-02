@@ -466,6 +466,25 @@ export function TenantModal({ tenant, technicians, onClose, onSaved }) {
       updates.approved_by = user?.id
     }
 
+    // Manual add-on grants vs the hourly lock_expired_* crons: each paid
+    // add-on pairs a features flag with an *_expires_at column, and the cron
+    // flips the flag back off whenever that expiry is past. If the admin
+    // turns a flag ON while a stale expiry is still sitting on the tenant,
+    // the feature "turns itself off" within the hour. Clearing the stale
+    // expiry marks it an indefinite manual grant — a future paid expiry is
+    // left untouched so paid periods still auto-lock at expiry + grace.
+    const ADDON_EXPIRY_COL = {
+      accounting_erp: 'accounting_erp_expires_at',
+      ai_insights: 'ai_insights_expires_at',
+      whatsapp_receipts: 'whatsapp_receipts_expires_at',
+      fiscalisation: 'fiscal_expires_at',
+    }
+    for (const [flag, col] of Object.entries(ADDON_EXPIRY_COL)) {
+      if (features[flag] === true && tenant[col] && new Date(tenant[col]) < now) {
+        updates[col] = null
+      }
+    }
+
     const { data: updated, error } = await supabase
       .from('tenants')
       .update(updates)
