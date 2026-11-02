@@ -150,9 +150,15 @@ export default function Landing() {
                     Get the Desktop App
                   </Link>
                 )}
-                <span className="text-sm text-slate-500 dark:text-slate-400">
-                  Activate once with a product code · $150 once-off
-                </span>
+                <div>
+                  <div className="flex items-baseline gap-2">
+                    <span className="text-5xl font-extrabold tracking-tight text-slate-900 dark:text-white">$150</span>
+                    <span className="text-sm font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">once-off</span>
+                  </div>
+                  <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                    Activate once with a product code · no monthly subscription
+                  </p>
+                </div>
               </div>
             </motion.div>
 
