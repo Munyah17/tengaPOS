@@ -22,34 +22,32 @@ export default function Navbar() {
           <img src={posLogo} alt="tengaPOS" className="h-10 w-auto dark:brightness-0 dark:invert" />
         </Link>
 
-        {/* Desktop nav links */}
-        <div className="hidden items-center gap-8 md:flex">
-          {navLinks.map((link) =>
-            link.external ? (
-              <a
-                key={link.label}
-                href={link.href}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center gap-1 text-sm font-medium text-slate-600 transition-colors hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
-              >
-                {link.label}
-                <ExternalLink className="h-3 w-3" />
-              </a>
-            ) : (
-              <a
-                key={link.label}
-                href={link.href}
-                className="text-sm font-medium text-slate-600 transition-colors hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
-              >
-                {link.label}
-              </a>
-            )
-          )}
-        </div>
-
-        {/* Desktop actions */}
+        {/* Desktop nav links + actions */}
         <div className="hidden items-center gap-3 md:flex">
+          <div className="mr-3 flex items-center gap-8">
+            {navLinks.map((link) =>
+              link.external ? (
+                <a
+                  key={link.label}
+                  href={link.href}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-1 text-sm font-medium text-slate-600 transition-colors hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
+                >
+                  {link.label}
+                  <ExternalLink className="h-3 w-3" />
+                </a>
+              ) : (
+                <a
+                  key={link.label}
+                  href={link.href}
+                  className="text-sm font-medium text-slate-600 transition-colors hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
+                >
+                  {link.label}
+                </a>
+              )
+            )}
+          </div>
           <ThemeToggle />
           <Link
             to="/login"

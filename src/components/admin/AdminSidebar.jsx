@@ -4,7 +4,7 @@ import {
   LayoutDashboard, Building2, Users, LifeBuoy, BarChart3,
   Settings, LogOut, Shield, X, ChevronLeft, ChevronRight, Bell,
   DollarSign, Tag, Database, Activity, Mail, Lock, Eye, Megaphone, Phone, Rocket, Percent,
-  Calculator, Sparkles,
+  Calculator, Sparkles, KeyRound, MonitorDown,
 } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import { useAuthStore } from '@/stores/authStore'
@@ -119,6 +119,13 @@ const NAV_BY_ROLE = {
 
     // SUPPORT
     { icon: LifeBuoy, label: 'Support Tickets', path: '/admin/super/support', group: 'SUPPORT' },
+
+    // DESKTOP
+    { icon: MonitorDown, label: 'Fleet & Security', path: '/admin/super/desktop-fleet', group: 'DESKTOP' },
+    { icon: MonitorDown, label: 'Releases', path: '/admin/super/desktop-releases', group: 'DESKTOP' },
+
+    // DEVELOPERS
+    { icon: KeyRound, label: 'API Keys', path: '/admin/super/api-keys', group: 'DEVELOPERS' },
 
     // COMPLIANCE
     { icon: Shield, label: 'Audit Logs', path: '/admin/super/audit-logs', group: 'COMPLIANCE' },

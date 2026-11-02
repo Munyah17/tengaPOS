@@ -84,6 +84,11 @@ const AdminFiscalRequests = lazy(() => import('@/pages/admin/AdminFiscalRequests
 const AdminAccountingErpRequests = lazy(() => import('@/pages/admin/AdminAccountingErpRequests'))
 const AdminVatRequests = lazy(() => import('@/pages/admin/AdminVatRequests'))
 const AdminAiInsightsRequests = lazy(() => import('@/pages/admin/AdminAiInsightsRequests'))
+const SuperAdminApiKeys = lazy(() => import('@/pages/admin/SuperAdminApiKeys'))
+const SuperAdminDesktopReleases = lazy(() => import('@/pages/admin/SuperAdminDesktopReleases'))
+const SuperAdminDesktopFleet = lazy(() => import('@/pages/admin/SuperAdminDesktopFleet'))
+const ApiDocs = lazy(() => import('@/pages/ApiDocs'))
+const DesktopApp = lazy(() => import('@/pages/DesktopApp'))
 const Checkout = lazy(() => import('@/pages/Checkout'))
 
 function RouteLoading() {
@@ -212,6 +217,8 @@ export default function App() {
           <Route path="/dining" element={<Dining />} />
           <Route path="/pending" element={<PendingApproval />} />
           <Route path="/checkout" element={<Checkout />} />
+          {/* Public developer docs for the Public API — no auth required */}
+          <Route path="/developers" element={<ApiDocs />} />
 
           {/* Tenant app routes */}
           <Route
@@ -263,6 +270,7 @@ export default function App() {
             <Route path="accounting" element={<RequireNav navKey="accounting"><Accounting /></RequireNav>} />
             <Route path="notifications" element={<Notifications />} />
             <Route path="requests" element={<RequireNav navKey="requests"><Requests /></RequireNav>} />
+            <Route path="desktop" element={<RequireNav navKey="desktop"><DesktopApp /></RequireNav>} />
             <Route path="settings" element={<RequireNav navKey="settings"><Settings /></RequireNav>} />
           </Route>
 
@@ -295,6 +303,9 @@ export default function App() {
             <Route path="broadcasts" element={<SuperAdminBroadcasts />} />
             <Route path="versions" element={<SuperAdminVersions />} />
             <Route path="audit-logs" element={<SuperAdminAudit />} />
+            <Route path="api-keys" element={<SuperAdminApiKeys />} />
+            <Route path="desktop-releases" element={<SuperAdminDesktopReleases />} />
+            <Route path="desktop-fleet" element={<SuperAdminDesktopFleet />} />
             <Route path="compliance" element={<SuperAdminCompliance />} />
             <Route path="backups" element={<SuperAdminBackups />} />
             <Route path="settings" element={<AdminSettings />} />

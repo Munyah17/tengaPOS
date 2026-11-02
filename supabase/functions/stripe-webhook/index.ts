@@ -64,6 +64,30 @@ serve(async (req) => {
 
     const now = new Date()
 
+    if (kind === 'desktop_license') {
+      const purchaseId = session.metadata?.purchase_id
+      if (!purchaseId) return new Response('Missing purchase_id', { status: 400 })
+      // Idempotent: retried webhook deliveries are no-ops — only a pending
+      // purchase flips here.
+      const { data: purchase } = await admin
+        .from('desktop_license_purchases')
+        .update({ status: 'paid', paid_at: now.toISOString() })
+        .eq('id', purchaseId)
+        .eq('status', 'pending')
+        .select('id, tenant_id, amount')
+        .maybeSingle()
+      if (purchase) {
+        await admin.from('audit_logs').insert({
+          action: 'desktop_license_paid',
+          actor_email: 'stripe-webhook',
+          target_type: 'desktop_license_purchase',
+          target_id: purchase.id,
+          details: { provider: 'stripe', reference, tenant_id: purchase.tenant_id, amount: purchase.amount },
+        })
+      }
+      return new Response(JSON.stringify({ received: true, purchase_id: purchaseId }), { status: 200 })
+    }
+
     if (kind === 'platform_invoice') {
       const invoiceId = session.metadata?.platform_invoice_id
       if (!invoiceId) return new Response('Missing platform_invoice_id', { status: 400 })

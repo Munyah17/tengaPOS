@@ -1,6 +1,11 @@
+import { useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
-import { ArrowRight, ShoppingBag, SlidersHorizontal, TrendingUp, ExternalLink } from 'lucide-react'
+import {
+  ArrowRight, ShoppingBag, SlidersHorizontal, TrendingUp,
+  Monitor, Download, WifiOff, HardDrive, BadgeDollarSign,
+} from 'lucide-react'
 import { Link } from 'react-router-dom'
+import { getDownloadInfo } from '@/lib/desktopLicense'
 import Navbar from '@/components/landing/Navbar'
 import Hero from '@/components/landing/Hero'
 import AnnouncementPopup from '@/components/landing/AnnouncementPopup'
@@ -51,7 +56,19 @@ const stats = [
   { value: '24/7', label: 'Support access' },
 ]
 
+const desktopPoints = [
+  { icon: WifiOff, text: '100% offline — sell for weeks with no connection at all' },
+  { icon: HardDrive, text: 'Your data stays on your computer — no hosting fees' },
+  { icon: BadgeDollarSign, text: 'Once-off $150 license — no monthly subscription' },
+  { icon: Monitor, text: 'Runs on any Windows 10/11 PC or till' },
+]
+
 export default function Landing() {
+  const [desktopDl, setDesktopDl] = useState(null)
+  useEffect(() => {
+    getDownloadInfo().then(setDesktopDl).catch(() => {})
+  }, [])
+
   return (
     <div className="min-h-screen bg-white dark:bg-slate-950">
       <AnnouncementPopup />
@@ -79,6 +96,116 @@ export default function Landing() {
       </section>
 
       <Features />
+
+      {/* Desktop App */}
+      <section className="border-y border-slate-100 bg-gradient-to-b from-white to-slate-50 py-24 dark:border-slate-800 dark:from-slate-950 dark:to-slate-900">
+        <div className="mx-auto max-w-7xl px-6">
+          <div className="grid items-center gap-14 lg:grid-cols-2">
+            <motion.div
+              initial={{ opacity: 0, y: 24 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+            >
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-brand-200 bg-brand-50 px-3 py-1 text-xs font-bold uppercase tracking-widest text-brand-700 dark:border-brand-800 dark:bg-brand-900/30 dark:text-brand-400">
+                <Monitor className="h-3.5 w-3.5" /> New — Desktop App
+              </span>
+              <h2 className="mt-5 text-4xl font-extrabold text-slate-900 dark:text-white">
+                Sell anywhere — even with{' '}
+                <span className="bg-gradient-to-r from-brand-500 to-cyan-500 bg-clip-text text-transparent">
+                  zero internet
+                </span>
+              </h2>
+              <p className="mt-4 text-lg text-slate-500 dark:text-slate-400">
+                tengaPOS Desktop puts the entire till on a Windows PC. Sales, inventory,
+                receipts and reports live on the machine — it keeps working through
+                load-shedding, dead zones and dead Wi-Fi. Syncs nothing it doesn't need to.
+              </p>
+
+              <ul className="mt-8 space-y-3">
+                {desktopPoints.map((p) => (
+                  <li key={p.text} className="flex items-center gap-3 text-sm font-medium text-slate-700 dark:text-slate-300">
+                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-brand-100 text-brand-600 dark:bg-brand-900/40 dark:text-brand-400">
+                      <p.icon className="h-4 w-4" />
+                    </span>
+                    {p.text}
+                  </li>
+                ))}
+              </ul>
+
+              <div className="mt-9 flex flex-wrap items-center gap-4">
+                {desktopDl?.url ? (
+                  <a
+                    href={desktopDl.url}
+                    className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-6 py-3 text-sm font-bold text-white transition-colors hover:bg-slate-800 dark:bg-brand-600 dark:hover:bg-brand-700"
+                  >
+                    <Download className="h-4 w-4" />
+                    Download for Windows{desktopDl.version ? ` — v${desktopDl.version}` : ''}
+                  </a>
+                ) : (
+                  <Link
+                    to="/register"
+                    className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-6 py-3 text-sm font-bold text-white transition-colors hover:bg-slate-800 dark:bg-brand-600 dark:hover:bg-brand-700"
+                  >
+                    <Download className="h-4 w-4" />
+                    Get the Desktop App
+                  </Link>
+                )}
+                <span className="text-sm text-slate-500 dark:text-slate-400">
+                  Activate once with a product code · $150 once-off
+                </span>
+              </div>
+            </motion.div>
+
+            {/* Stylized app window */}
+            <motion.div
+              initial={{ opacity: 0, y: 24 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ delay: 0.15 }}
+              className="relative"
+            >
+              <div className="absolute -inset-6 rounded-[2rem] bg-gradient-to-br from-brand-500/15 via-transparent to-cyan-500/15 blur-2xl" />
+              <div className="relative overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-900">
+                <div className="flex items-center gap-1.5 border-b border-slate-100 px-4 py-3 dark:border-slate-800">
+                  <span className="h-2.5 w-2.5 rounded-full bg-red-400" />
+                  <span className="h-2.5 w-2.5 rounded-full bg-amber-400" />
+                  <span className="h-2.5 w-2.5 rounded-full bg-green-400" />
+                  <span className="ml-3 text-xs font-semibold text-slate-400">tengaPOS Desktop — Offline Mode</span>
+                  <span className="ml-auto flex items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-[10px] font-bold text-green-700 dark:bg-green-900/40 dark:text-green-400">
+                    <WifiOff className="h-3 w-3" /> OFFLINE
+                  </span>
+                </div>
+                <div className="grid grid-cols-[56px_1fr]">
+                  <div className="space-y-2 border-r border-slate-100 bg-slate-50 p-2 dark:border-slate-800 dark:bg-slate-950">
+                    {['bg-brand-500', 'bg-slate-300 dark:bg-slate-700', 'bg-slate-300 dark:bg-slate-700', 'bg-slate-300 dark:bg-slate-700'].map((c, i) => (
+                      <div key={i} className={`h-8 w-full rounded-lg ${c}`} />
+                    ))}
+                  </div>
+                  <div className="p-4">
+                    {[
+                      ['Chicken Meal x2', '$12.00'],
+                      ['Coca-Cola 500ml x3', '$4.50'],
+                      ['Bread x1', '$1.20'],
+                    ].map(([n, p]) => (
+                      <div key={n} className="flex justify-between border-b border-dashed border-slate-100 py-2 text-xs dark:border-slate-800">
+                        <span className="font-medium text-slate-600 dark:text-slate-300">{n}</span>
+                        <span className="font-bold text-slate-800 dark:text-white">{p}</span>
+                      </div>
+                    ))}
+                    <div className="mt-3 flex items-center justify-between">
+                      <span className="text-xs font-bold uppercase tracking-widest text-slate-400">Total</span>
+                      <span className="text-xl font-extrabold text-slate-900 dark:text-white">$17.70</span>
+                    </div>
+                    <div className="mt-3 rounded-xl bg-brand-600 py-2.5 text-center text-xs font-bold text-white">
+                      Complete Sale — works with no internet
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        </div>
+      </section>
 
       {/* How it works */}
       <section className="bg-slate-950 py-24">

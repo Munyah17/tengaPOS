@@ -6,7 +6,7 @@ import {
   Store, Receipt, Cpu, X, Sparkles, CreditCard, BriefcaseBusiness, FileText, Inbox, Calculator,
   Wrench, Car, HardHat, FileSignature, Factory, Pill, ShieldCheck, FileBarChart, Landmark, Hammer,
   ClipboardCheck, Wallet, ShieldAlert, PackagePlus, Stethoscope, Building2, CalendarClock, Glasses,
-  DoorOpen, Percent,
+  DoorOpen, Percent, Monitor,
 } from 'lucide-react'
 import { useState } from 'react'
 import { useThemeStore } from '@/stores/themeStore'
@@ -61,6 +61,7 @@ const ALL_NAV_ITEMS = [
       { key: 'accounting', icon: Landmark, label: 'Accounting', path: '/app/accounting' },
     ],
   },
+  { key: 'desktop', icon: Monitor, label: 'Desktop App', path: '/app/desktop' },
   { key: 'settings', icon: Settings, label: 'Settings', path: '/app/settings' },
 ]
 
