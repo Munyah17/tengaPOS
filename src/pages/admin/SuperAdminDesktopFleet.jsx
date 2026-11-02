@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   Monitor, RefreshCw, ShieldAlert, Ban, Trash2, PauseCircle, Eye,
   AlertTriangle, FileText, Plus, Copy, Check, Scale, Download,
-  KeyRound, X,
+  KeyRound, X, Package, Upload,
 } from 'lucide-react'
 import Modal from '@/components/common/Modal'
 import {
@@ -10,6 +10,7 @@ import {
   adminDeleteDevice, adminListEvents, adminGetStats, adminListDownloads,
   adminListInfringements, adminCreateInfringement, adminPatchInfringement,
   adminIssueLicense, adminListLicenses, adminMarkPurchasePaid,
+  listReleases, uploadInstaller, createRelease, patchRelease,
 } from '@/lib/desktopLicense'
 import { supabase } from '@/lib/supabase'
 import toast from 'react-hot-toast'
@@ -19,6 +20,7 @@ const TABS = [
   { key: 'licenses', label: 'Licenses', icon: KeyRound },
   { key: 'events', label: 'Security Events', icon: ShieldAlert },
   { key: 'piracy', label: 'Piracy Cases', icon: Scale },
+  { key: 'releases', label: 'Releases', icon: Package },
 ]
 
 const PURCHASE_STYLES = {
@@ -92,17 +94,23 @@ export default function SuperAdminDesktopFleet() {
   const [copied, setCopied] = useState(false)
   const [caseModal, setCaseModal] = useState(null) // 'new' | case object
   const [caseForm, setCaseForm] = useState({})
+  const [releases, setReleases] = useState([])
+  const [publishOpen, setPublishOpen] = useState(false)
+  const [publishing, setPublishing] = useState(false)
+  const [publishFile, setPublishFile] = useState(null)
+  const [publishForm, setPublishForm] = useState({ version: '', channel: 'stable', rollout_pct: 100, release_notes_url: '' })
 
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      const [s, d, e, c, dl, li] = await Promise.allSettled([
+      const [s, d, e, c, dl, li, rel] = await Promise.allSettled([
         adminGetStats(),
         adminListDevices(statusFilter ? { status: statusFilter } : {}),
         adminListEvents(eventTypeFilter ? { type: eventTypeFilter } : {}),
         adminListInfringements(),
         adminListDownloads(),
         adminListLicenses(),
+        listReleases(),
       ])
       if (s.status === 'fulfilled') setStats(s.value)
       if (d.status === 'fulfilled') setDevices(d.value.devices || [])
@@ -110,6 +118,7 @@ export default function SuperAdminDesktopFleet() {
       if (e.status === 'fulfilled') setEvents(e.value.events || [])
       if (c.status === 'fulfilled') setCases(c.value.cases || [])
       if (dl.status === 'fulfilled') setDownloads(dl.value.downloads || [])
+      if (rel.status === 'fulfilled') setReleases(rel.value.releases || [])
     } finally {
       setLoading(false)
     }
@@ -149,6 +158,35 @@ export default function SuperAdminDesktopFleet() {
     try {
       await adminMarkPurchasePaid(purchaseId)
       toast.success('Marked paid — the linked code now activates')
+      load()
+    } catch (err) { toast.error(err.message) }
+  }
+
+  const publishRelease = async (e) => {
+    e.preventDefault()
+    if (!publishFile) { toast.error('Choose the installer .exe first'); return }
+    if (!publishForm.version.trim()) { toast.error('Version is required'); return }
+    setPublishing(true)
+    try {
+      const artifact = await uploadInstaller(publishFile, publishForm.version.trim())
+      await createRelease({
+        version: publishForm.version.trim(),
+        channel: publishForm.channel,
+        rollout_pct: Number(publishForm.rollout_pct) || 100,
+        release_notes_url: publishForm.release_notes_url.trim() || null,
+        artifacts: [artifact],
+      })
+      toast.success(`v${publishForm.version.trim()} published to ${publishForm.channel}`)
+      setPublishOpen(false)
+      setPublishFile(null)
+      load()
+    } catch (err) { toast.error(err.message) } finally { setPublishing(false) }
+  }
+
+  const toggleWithdraw = async (release) => {
+    try {
+      await patchRelease(release.id, { withdraw: !release.withdrawn_at })
+      toast.success(release.withdrawn_at ? `v${release.version} reinstated` : `v${release.version} withdrawn`)
       load()
     } catch (err) { toast.error(err.message) }
   }
@@ -512,6 +550,89 @@ export default function SuperAdminDesktopFleet() {
           )}
         </div>
       )}
+
+      {/* ─── RELEASES ─── */}
+      {tab === 'releases' && (
+        <div className="rounded-2xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
+          <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4 dark:border-slate-800">
+            <h2 className="font-bold text-slate-900 dark:text-white">Published Releases</h2>
+            <button onClick={() => { setPublishForm({ version: '', channel: 'stable', rollout_pct: 100, release_notes_url: '' }); setPublishFile(null); setPublishOpen(true) }}
+              className="flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2 text-sm font-bold text-white hover:bg-slate-800 dark:bg-brand-600 dark:hover:bg-brand-700">
+              <Upload className="h-4 w-4" /> Publish Release
+            </button>
+          </div>
+          {releases.length === 0 ? (
+            <p className="px-5 py-14 text-center text-sm text-slate-500">No releases published yet</p>
+          ) : (
+            <ul className="divide-y divide-slate-100 dark:divide-slate-800">
+              {releases.map((r) => (
+                <li key={r.id} className="flex flex-wrap items-center gap-4 px-5 py-3.5">
+                  <div className="rounded-xl bg-slate-100 p-2.5 dark:bg-slate-800">
+                    <Package className="h-4 w-4 text-slate-500 dark:text-slate-400" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="font-mono font-bold text-slate-900 dark:text-white">v{r.version}</span>
+                      <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${r.channel === 'stable' ? 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400' : 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400'}`}>{r.channel}</span>
+                      {r.withdrawn_at && <span className="rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-bold uppercase text-red-700 dark:bg-red-900/40 dark:text-red-400">withdrawn</span>}
+                    </div>
+                    <div className="mt-0.5 flex flex-wrap gap-x-4 text-xs text-slate-500">
+                      <span>rollout {r.rollout_pct}%</span>
+                      <span>{(r.desktop_release_artifacts || []).map((a) => `${a.os} · ${(a.size_bytes / 1048576).toFixed(1)}MB`).join(', ') || 'no artifacts'}</span>
+                      <span>{fmt(r.published_at)}</span>
+                    </div>
+                  </div>
+                  <button onClick={() => toggleWithdraw(r)}
+                    className={`rounded-lg border px-3 py-1.5 text-xs font-bold ${r.withdrawn_at ? 'border-green-200 text-green-700 hover:bg-green-50 dark:border-green-800 dark:text-green-400' : 'border-red-200 text-red-600 hover:bg-red-50 dark:border-red-800 dark:text-red-400'}`}>
+                    {r.withdrawn_at ? 'Reinstate' : 'Withdraw'}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+
+      {/* Publish release modal */}
+      <Modal isOpen={publishOpen} onClose={() => setPublishOpen(false)} title="Publish Desktop Release">
+        <form onSubmit={publishRelease} className="space-y-4">
+          <div>
+            <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-slate-500">Installer (.exe)</label>
+            <input type="file" accept=".exe" required onChange={(e) => setPublishFile(e.target.files?.[0] || null)}
+              className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm file:mr-3 file:rounded-lg file:border-0 file:bg-slate-900 file:px-3 file:py-1.5 file:text-xs file:font-bold file:text-white dark:border-slate-700 dark:bg-slate-800 dark:text-white" />
+            {publishFile && <p className="mt-1 text-xs text-slate-500">{publishFile.name} · {(publishFile.size / 1048576).toFixed(1)} MB — uploads to the private desktop-releases bucket</p>}
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-slate-500">Version</label>
+              <input value={publishForm.version} onChange={(e) => setPublishForm({ ...publishForm, version: e.target.value })} required placeholder="1.0.0"
+                className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white" />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-slate-500">Channel</label>
+              <select value={publishForm.channel} onChange={(e) => setPublishForm({ ...publishForm, channel: e.target.value })}
+                className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white">
+                <option value="stable">stable</option>
+                <option value="beta">beta</option>
+              </select>
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-slate-500">Rollout %</label>
+              <input type="number" min="1" max="100" value={publishForm.rollout_pct} onChange={(e) => setPublishForm({ ...publishForm, rollout_pct: e.target.value })}
+                className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white" />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-slate-500">Notes URL (optional)</label>
+              <input type="url" value={publishForm.release_notes_url} onChange={(e) => setPublishForm({ ...publishForm, release_notes_url: e.target.value })} placeholder="https://…"
+                className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white" />
+            </div>
+          </div>
+          <button type="submit" disabled={publishing}
+            className="w-full rounded-xl bg-slate-900 px-4 py-3 text-sm font-bold text-white hover:bg-slate-800 disabled:opacity-50 dark:bg-brand-600 dark:hover:bg-brand-700">
+            {publishing ? 'Uploading & registering…' : 'Publish'}
+          </button>
+        </form>
+      </Modal>
 
       {/* Device detail modal */}
       <Modal isOpen={!!detail} onClose={() => setDetail(null)} title={detail?.device?.name || 'Device'}>
