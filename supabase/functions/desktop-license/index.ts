@@ -264,7 +264,9 @@ serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS })
   const admin = adminClient()
   const url = new URL(req.url)
-  const path = url.pathname.replace(/^\/functions\/v1\/desktop-license/, '') || '/'
+  const path = url.pathname
+    .replace(/^\/functions\/v1/, '')
+    .replace(/^\/desktop-license/, '') || '/'
   const bodyText = req.method === 'GET' || req.method === 'DELETE' ? '' : await req.text()
   const body = bodyText ? JSON.parse(bodyText) : {}
   const now = new Date().toISOString()
