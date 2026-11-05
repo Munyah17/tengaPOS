@@ -20,6 +20,7 @@ import { supabase } from '@/lib/supabase'
 import { withOfflineCache, seedFromOfflineCache } from '@/lib/offlineCache'
 import { useTenantNotifications } from '@/hooks/useTenantNotifications'
 import OnboardingChecklist from '@/components/common/OnboardingChecklist'
+import Modal from '@/components/common/Modal'
 
 // Closing with 'x' only hides an announcement for this browser session —
 // it comes back next time. "Don't show again" persists the dismissal in the
@@ -87,14 +88,17 @@ export default function Dashboard() {
   // Cached instead of a hard fetch on every mount — revisiting the
   // dashboard within a minute reuses what's already loaded. Also falls back
   // to the last-known numbers when offline instead of a blank dashboard.
+  // 'receipts' in the key busts caches that predate todayTransactions, so
+  // Verify-by-receipt never opens against a total with an empty list.
+  const dashboardMetricsKey = ['dashboardMetrics', tenant?.id, 'receipts']
   useEffect(() => {
     if (!tenant?.id) return
-    seedFromOfflineCache(queryClient, ['dashboardMetrics', tenant.id])
+    seedFromOfflineCache(queryClient, dashboardMetricsKey)
   }, [tenant?.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const { data: metrics = null } = useQuery({
-    queryKey: ['dashboardMetrics', tenant?.id],
-    queryFn: withOfflineCache(['dashboardMetrics', tenant?.id], () => fetchDashboardMetrics(tenant.id)),
+    queryKey: dashboardMetricsKey,
+    queryFn: withOfflineCache(dashboardMetricsKey, () => fetchDashboardMetrics(tenant.id)),
     enabled: !!tenant?.id,
     staleTime: 60000,
   })
@@ -145,10 +149,45 @@ export default function Dashboard() {
   const trialDaysLeft = onTrial
     ? Math.max(0, Math.ceil((new Date(tenant.trial_ends_at) - Date.now()) / 86400000))
     : null
+  // End-of-day verification: tapping a figure shows exactly which records
+  // make it up — receipts by receipt number for Orders/Revenue, job cards
+  // by job card number for the workshop summary (client request).
+  const [verifyModal, setVerifyModal] = useState(null) // 'receipts' | 'jobs' | null
+
+  // Workshop end-of-day summary — computed once here so the stat block and
+  // the jobs verification modal share the same numbers.
+  const todayStr = new Date().toDateString()
+  const completedToday = isWorkshop
+    ? jobCards
+        .filter((j) => j.status === 'completed' && j.completed_at && new Date(j.completed_at).toDateString() === todayStr)
+        .sort((a, b) => new Date(b.completed_at) - new Date(a.completed_at))
+    : []
+  const workshopRevenueToday = completedToday.reduce((s, j) => s + (Number(j.total) || 0), 0)
+  const workshopPartsTotal = completedToday.reduce((s, j) => s + (j.items || []).filter((i) => i.product_id).reduce((s2, i) => s2 + i.unit_price * i.qty, 0), 0)
+  const workshopLaborTotal = Math.max(0, workshopRevenueToday - workshopPartsTotal)
+  const byTech = {}
+  for (const j of completedToday) {
+    const name = j.technicians?.name || 'Unassigned'
+    byTech[name] = (byTech[name] || 0) + (Number(j.total) || 0)
+  }
+  const topTech = Object.entries(byTech).sort((a, b) => b[1] - a[1])[0]
+
+  // order_id -> job card, so a receipt can be labelled with the job card it
+  // billed (workshop mode). Walk-in/counter sales simply have no entry here.
+  const orderToJobCard = {}
+  if (isWorkshop) {
+    for (const j of jobCards) {
+      if (j.linked_order_id) orderToJobCard[j.linked_order_id] = j
+    }
+  }
+
+  const todayReceipts = [...(metrics?.todayTransactions || [])]
+    .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+  const jobCardReceiptCount = todayReceipts.filter((t) => orderToJobCard[t.order_id]).length
 
   const statCards = metrics ? [
-    { label: "Today's Revenue", value: formatCurrency(metrics.todayRevenue), change: null, up: null, icon: DollarSign, color: 'brand' },
-    { label: "Today's Orders", value: String(metrics.todayOrders), change: null, up: null, icon: ShoppingCart, color: 'green' },
+    { label: "Today's Revenue", value: formatCurrency(metrics.todayRevenue), change: null, up: null, icon: DollarSign, color: 'brand', onVerify: () => setVerifyModal('receipts') },
+    { label: "Today's Orders", value: String(metrics.todayOrders), change: null, up: null, icon: ShoppingCart, color: 'green', onVerify: () => setVerifyModal('receipts') },
     { label: 'Total Products', value: String(metrics.totalProducts), change: null, up: null, icon: Package, color: 'purple' },
     { label: 'Active Staff', value: String(metrics.activeStaff), change: null, up: null, icon: Users, color: 'orange' },
   ] : EMPTY_STAT_CARDS
@@ -376,54 +415,51 @@ export default function Dashboard() {
 
       {/* Workshop Mode: lightweight end-of-day summary -- today's completed
           jobs, revenue, parts-vs-labor split, and today's top technician.
-          Not a general ledger, just what a service advisor checks at close. */}
-      {isWorkshop && (() => {
-        const todayStr = new Date().toDateString()
-        const completedToday = jobCards.filter((j) => j.status === 'completed' && j.completed_at && new Date(j.completed_at).toDateString() === todayStr)
-        const revenueToday = completedToday.reduce((s, j) => s + (Number(j.total) || 0), 0)
-        const partsTotal = completedToday.reduce((s, j) => s + (j.items || []).filter((i) => i.product_id).reduce((s2, i) => s2 + i.unit_price * i.qty, 0), 0)
-        const laborTotal = Math.max(0, revenueToday - partsTotal)
-        const byTech = {}
-        for (const j of completedToday) {
-          const name = j.technicians?.name || 'Unassigned'
-          byTech[name] = (byTech[name] || 0) + (Number(j.total) || 0)
-        }
-        const topTech = Object.entries(byTech).sort((a, b) => b[1] - a[1])[0]
-
-        return (
-          <div className="mb-6 rounded-2xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900">
-            <h3 className="mb-3 text-sm font-bold uppercase tracking-wide text-slate-500">Today at the Workshop</h3>
-            <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-              <div>
-                <p className="text-xs text-slate-500">Jobs Completed</p>
-                <p className="text-2xl font-extrabold text-slate-900 dark:text-white">{completedToday.length}</p>
-              </div>
-              <div>
-                <p className="text-xs text-slate-500">Revenue</p>
-                <p className="text-2xl font-extrabold text-slate-900 dark:text-white">{formatCurrency(revenueToday)}</p>
-              </div>
-              <div>
-                <p className="text-xs text-slate-500">Parts / Labor Split</p>
-                <p className="text-sm font-semibold text-slate-700 dark:text-slate-300">{formatCurrency(partsTotal)} / {formatCurrency(laborTotal)}</p>
-              </div>
-              <div>
-                <p className="text-xs text-slate-500">Top Technician</p>
-                <p className="text-sm font-semibold text-slate-700 dark:text-slate-300">{topTech ? `${topTech[0]} (${formatCurrency(topTech[1])})` : '—'}</p>
-              </div>
+          Not a general ledger, just what a service advisor checks at close.
+          Tap Jobs Completed / Revenue to see the exact job cards behind them. */}
+      {isWorkshop && (
+        <div className="mb-6 rounded-2xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900">
+          <h3 className="mb-3 text-sm font-bold uppercase tracking-wide text-slate-500">Today at the Workshop</h3>
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+            <button type="button" onClick={() => setVerifyModal('jobs')} className="text-left">
+              <p className="text-xs text-slate-500">Jobs Completed</p>
+              <p className="text-2xl font-extrabold text-slate-900 dark:text-white">{completedToday.length}</p>
+              <p className="mt-0.5 flex items-center gap-0.5 text-[11px] font-semibold text-brand-600 dark:text-brand-400">
+                Verify by job card <ChevronRight className="h-3 w-3" />
+              </p>
+            </button>
+            <button type="button" onClick={() => setVerifyModal('jobs')} className="text-left">
+              <p className="text-xs text-slate-500">Revenue</p>
+              <p className="text-2xl font-extrabold text-slate-900 dark:text-white">{formatCurrency(workshopRevenueToday)}</p>
+              <p className="mt-0.5 flex items-center gap-0.5 text-[11px] font-semibold text-brand-600 dark:text-brand-400">
+                Verify by job card <ChevronRight className="h-3 w-3" />
+              </p>
+            </button>
+            <div>
+              <p className="text-xs text-slate-500">Parts / Labor Split</p>
+              <p className="text-sm font-semibold text-slate-700 dark:text-slate-300">{formatCurrency(workshopPartsTotal)} / {formatCurrency(workshopLaborTotal)}</p>
+            </div>
+            <div>
+              <p className="text-xs text-slate-500">Top Technician</p>
+              <p className="text-sm font-semibold text-slate-700 dark:text-slate-300">{topTech ? `${topTech[0]} (${formatCurrency(topTech[1])})` : '—'}</p>
             </div>
           </div>
-        )
-      })()}
+        </div>
+      )}
 
       {/* Stat Cards */}
       <div className="mb-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
-        {statCards.map((card, i) => (
-          <motion.div
+        {statCards.map((card, i) => {
+          const CardTag = card.onVerify ? motion.button : motion.div
+          return (
+          <CardTag
             key={card.label}
+            type={card.onVerify ? 'button' : undefined}
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: i * 0.05 }}
-            className="rounded-2xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900"
+            onClick={card.onVerify}
+            className={`rounded-2xl border border-slate-200 bg-white p-5 text-left dark:border-slate-800 dark:bg-slate-900${card.onVerify ? ' cursor-pointer transition-shadow hover:shadow-md' : ''}`}
           >
             <div className="flex items-center justify-between">
               <span className="text-sm font-medium text-slate-500 dark:text-slate-400">{card.label}</span>
@@ -432,6 +468,11 @@ export default function Dashboard() {
               </div>
             </div>
             <div className="mt-2 text-3xl font-extrabold text-slate-900 dark:text-white">{card.value}</div>
+            {card.onVerify && (
+              <p className="mt-1 flex items-center gap-0.5 text-[11px] font-semibold text-brand-600 dark:text-brand-400">
+                Verify by receipt <ChevronRight className="h-3 w-3" />
+              </p>
+            )}
             {card.up !== null && (
               <div className={`mt-1 flex items-center gap-1 text-xs font-medium ${
                 card.up ? 'text-green-600' : 'text-red-600'
@@ -440,8 +481,9 @@ export default function Dashboard() {
                 {card.change} from yesterday
               </div>
             )}
-          </motion.div>
-        ))}
+          </CardTag>
+          )
+        })}
       </div>
 
       {/* Recent Notifications */}
@@ -630,6 +672,85 @@ export default function Dashboard() {
           </BarChart>
         </ResponsiveContainer>
       </motion.div>
+
+      {/* Verify Today's Orders / Revenue — every completed transaction today,
+          listed by receipt number so the headline figures can be checked
+          against the till. In workshop mode each receipt is tagged with the
+          job card it billed, and the footer splits job-card billings from
+          counter sales. */}
+      <Modal isOpen={verifyModal === 'receipts'} onClose={() => setVerifyModal(null)} title="Today's Receipts" size="lg">
+        {todayReceipts.length === 0 ? (
+          <p className="py-8 text-center text-sm text-slate-400">No receipts yet today</p>
+        ) : (
+          <>
+            <div className="space-y-2">
+              {todayReceipts.map((t, i) => {
+                const job = orderToJobCard[t.order_id]
+                return (
+                  <div key={`${t.reference || 'tx'}-${i}`} className="flex items-center justify-between gap-3 rounded-xl bg-slate-50 p-3 dark:bg-slate-800">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="truncate text-sm font-medium text-slate-900 dark:text-white">{t.reference || '—'}</span>
+                        {job && (
+                          <span className="flex-shrink-0 rounded-full bg-red-100 px-2 py-0.5 text-[11px] font-bold text-red-700 dark:bg-red-900/40 dark:text-red-300">
+                            Job card {job.job_card_no || ''}
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-xs text-slate-500">
+                        {new Date(t.created_at).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })} · {t.method || '—'}
+                      </div>
+                    </div>
+                    <span className="flex-shrink-0 text-sm font-bold text-slate-900 dark:text-white">{formatCurrency(Number(t.amount) || 0)}</span>
+                  </div>
+                )
+              })}
+            </div>
+            <div className="mt-4 rounded-xl border border-slate-200 p-3 text-sm dark:border-slate-700">
+              <div className="flex items-center justify-between font-bold text-slate-900 dark:text-white">
+                <span>{todayReceipts.length} receipt{todayReceipts.length !== 1 ? 's' : ''}</span>
+                <span>{formatCurrency(metrics?.todayRevenue || 0)}</span>
+              </div>
+              {isWorkshop && (
+                <p className="mt-1 text-xs text-slate-500">
+                  {jobCardReceiptCount} job-card billing{jobCardReceiptCount !== 1 ? 's' : ''} · {todayReceipts.length - jobCardReceiptCount} counter sale{todayReceipts.length - jobCardReceiptCount !== 1 ? 's' : ''}
+                </p>
+              )}
+            </div>
+          </>
+        )}
+      </Modal>
+
+      {/* Verify Jobs Completed / workshop Revenue — every job card marked
+          completed today, by job card number, so the workshop figures can be
+          checked against the cards themselves. */}
+      <Modal isOpen={verifyModal === 'jobs'} onClose={() => setVerifyModal(null)} title="Today's Completed Jobs" size="lg">
+        {completedToday.length === 0 ? (
+          <p className="py-8 text-center text-sm text-slate-400">No jobs completed yet today</p>
+        ) : (
+          <>
+            <div className="space-y-2">
+              {completedToday.map((j) => (
+                <div key={j.id} className="flex items-center justify-between gap-3 rounded-xl bg-slate-50 p-3 dark:bg-slate-800">
+                  <div className="min-w-0">
+                    <div className="text-sm font-medium text-slate-900 dark:text-white">Job card {j.job_card_no || j.id?.slice(0, 8)}</div>
+                    <div className="truncate text-xs text-slate-500">
+                      {j.customers?.name || 'Walk-in'}
+                      {j.vehicles && ` · ${[j.vehicles.make, j.vehicles.model].filter(Boolean).join(' ')}${j.vehicles.reg_number ? ` (${j.vehicles.reg_number})` : ''}`}
+                      {` · ${j.technicians?.name || 'Unassigned'}`}
+                    </div>
+                  </div>
+                  <span className="flex-shrink-0 text-sm font-bold text-slate-900 dark:text-white">{formatCurrency(Number(j.total) || 0)}</span>
+                </div>
+              ))}
+            </div>
+            <div className="mt-4 flex items-center justify-between rounded-xl border border-slate-200 p-3 text-sm font-bold text-slate-900 dark:border-slate-700 dark:text-white">
+              <span>{completedToday.length} job{completedToday.length !== 1 ? 's' : ''}</span>
+              <span>{formatCurrency(workshopRevenueToday)}</span>
+            </div>
+          </>
+        )}
+      </Modal>
     </div>
   )
 }

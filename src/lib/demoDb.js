@@ -311,6 +311,7 @@ export async function fetchDashboardMetrics() {
   return {
     todayRevenue: txsToday.reduce((sum, t) => sum + parseFloat(t.amount), 0),
     todayOrders: txsToday.length,
+    todayTransactions: txsToday,
     totalProducts: activeProducts.length,
     activeStaff: s.staff.filter((u) => u.is_active).length,
     lowStockItems: lowStock,

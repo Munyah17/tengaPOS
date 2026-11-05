@@ -1914,10 +1914,12 @@ export async function fetchDashboardMetrics(tenantId) {
   weekStart.setDate(weekStart.getDate() - 6)
 
   const [txRes, weekTxRes, productRes, staffRes, recentRes, itemsRes] = await Promise.all([
-    // Today's transactions
+    // Today's transactions — reference + order_id power the dashboard's
+    // end-of-day "verify by receipt number" drill-down, and order_id lets
+    // workshop mode tell job-card billings apart from counter sales.
     supabase
       .from('transactions')
-      .select('amount, method, created_at')
+      .select('reference, amount, method, created_at, order_id')
       .eq('tenant_id', tenantId)
       .eq('status', 'completed')
       .gte('created_at', todayStart.toISOString()),
@@ -2010,6 +2012,7 @@ export async function fetchDashboardMetrics(tenantId) {
   return {
     todayRevenue,
     todayOrders,
+    todayTransactions: txs,
     totalProducts: products.length,
     activeStaff: staff.length,
     lowStockItems: lowStock,
