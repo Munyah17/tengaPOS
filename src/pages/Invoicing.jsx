@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { Plus, FileText, Receipt, Download, Printer, ArrowRightLeft, Trash2, X, RefreshCw, Wrench, DollarSign, Loader2 } from 'lucide-react'
+import { Plus, FileText, Receipt, Download, ArrowRightLeft, Trash2, X, RefreshCw, Wrench, DollarSign, Loader2 } from 'lucide-react'
 import Button from '@/components/common/Button'
 import Modal from '@/components/common/Modal'
 import DateInput from '@/components/common/DateInput'
@@ -32,7 +32,9 @@ function RecordPaymentModal({ doc, currency, onClose, onPaid }) {
     setLoadingPayments(true)
     fetchInvoicePayments(doc.id).then(setPayments).catch(() => toast.error('Failed to load payments')).finally(() => setLoadingPayments(false))
   }
+  /* eslint-disable react-hooks/set-state-in-effect -- fetch-on-mount data load */
   useEffect(load, [doc.id])
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const paidSoFar = payments.filter((p) => !p.voided_at).reduce((s, p) => s + Number(p.amount), 0)
   const balance = Number(doc.total) - paidSoFar

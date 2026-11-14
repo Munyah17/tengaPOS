@@ -53,7 +53,6 @@ const colorMap = {
 export default function Dashboard() {
   const { posMode } = useThemeStore()
   const { profile, tenant, user, role } = useAuthStore()
-  const isRestaurant = posMode === 'restaurant'
   const accentColor = posMode === 'restaurant' ? '#22c55e' : posMode === 'workshop' ? '#dc2626' : '#3b82f6'
   const { notifications } = useTenantNotifications({ tenantId: tenant?.id, posMode, limit: 5 })
   const queryClient = useQueryClient()
@@ -147,6 +146,7 @@ export default function Dashboard() {
   // 7-day free trial countdown
   const onTrial = tenant?.trial_ends_at && !tenant?.plan_start_date
   const trialDaysLeft = onTrial
+    // eslint-disable-next-line react-hooks/purity -- day-granularity countdown; a render-time clock read is fine here
     ? Math.max(0, Math.ceil((new Date(tenant.trial_ends_at) - Date.now()) / 86400000))
     : null
   // End-of-day verification: tapping a figure shows exactly which records

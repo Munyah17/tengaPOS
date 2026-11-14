@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Database, HardDrive, Cloud } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
-import { PLANS } from '@/pages/admin/AdminTenants'
+import { PLANS } from '@/lib/planCatalog'
 
 const BACKUP_LABELS = {
   daily_cloud: 'Daily cloud',

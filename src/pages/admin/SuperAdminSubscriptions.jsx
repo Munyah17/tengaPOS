@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { DollarSign, Calendar, AlertTriangle } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
-import { PLANS } from '@/pages/admin/AdminTenants'
+import { PLANS } from '@/lib/planCatalog'
 import { usePlanPricing, priceLabelFor } from '@/lib/platformSettings'
 
 export default function SuperAdminSubscriptions() {

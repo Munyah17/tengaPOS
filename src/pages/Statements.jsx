@@ -25,6 +25,7 @@ export default function Statements() {
       .catch((err) => console.warn('Failed to load unlinked invoices:', err))
   }, [tenant?.id])
 
+  /* eslint-disable react-hooks/set-state-in-effect -- fetch-on-selection data load */
   useEffect(() => {
     if (!tenant?.id || !customerId) { setStatement(null); return }
     setLoading(true)
@@ -33,6 +34,7 @@ export default function Statements() {
       .catch(() => toast.error('Failed to load statement'))
       .finally(() => setLoading(false))
   }, [tenant?.id, customerId])
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const rows = useMemo(() => {
     if (!statement) return []

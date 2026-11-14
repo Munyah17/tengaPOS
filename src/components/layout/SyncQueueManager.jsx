@@ -30,7 +30,9 @@ export default function SyncQueueManager({ isOpen, onClose, onChanged }) {
     setLoading(true)
     fetchAllSyncQueueItems().then(setItems).catch((err) => console.warn('Failed to load offline sync queue:', err)).finally(() => setLoading(false))
   }
+  /* eslint-disable react-hooks/set-state-in-effect -- fetch-on-open data load */
   useEffect(() => { if (isOpen) load() }, [isOpen])
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const handleRetry = async (item) => {
     setBusyId(item.id)

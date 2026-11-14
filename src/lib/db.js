@@ -1621,6 +1621,16 @@ export async function createEyePrescription(tenantId, {
 // Due date is computed server-side at cron time (see notify_medication_refills
 // in 1786280000_medication_refill_reminders.sql), never stored here.
 
+export async function fetchMedicationSchedules(tenantId) {
+  const { data, error } = await supabase
+    .from('medication_schedules')
+    .select('*, customers(name, phone), products(name)')
+    .eq('tenant_id', tenantId)
+    .eq('is_active', true)
+    .order('created_at', { ascending: false })
+  if (error) throw error
+  return data
+}
 export async function createMedicationSchedule(tenantId, { branchId, customerId, productId, frequencyDays, userId }) {
   const { data, error } = await supabase.from('medication_schedules').insert({
     tenant_id: tenantId, branch_id: branchId || null, customer_id: customerId,
@@ -1628,6 +1638,10 @@ export async function createMedicationSchedule(tenantId, { branchId, customerId,
   }).select().single()
   if (error) throw error
   return data
+}
+export async function deactivateMedicationSchedule(id) {
+  const { error } = await supabase.from('medication_schedules').update({ is_active: false }).eq('id', id)
+  if (error) throw error
 }
 // ─── Bar/Liquor Store Mode: Age Verification ───────────────────────────────
 
@@ -2288,6 +2302,12 @@ export async function savePayrollRun(tenantId, userId, run, entries) {
   const { error: entryError } = await supabase.from('payroll_entries').insert(entryRows)
   if (entryError) throw entryError
   return runId
+}
+
+export async function updatePayrollRunStatus(runId, status) {
+  const { error } = await supabase.from('payroll_runs')
+    .update({ status, updated_at: new Date().toISOString() }).eq('id', runId)
+  if (error) throw error
 }
 
 export async function deletePayrollRun(runId) {
@@ -2963,6 +2983,17 @@ export async function createFixedAsset(tenantId, userId, asset) {
   if (error) throw error
   return data
 }
+export async function updateFixedAsset(id, asset) {
+  const { data, error } = await supabase.from('fixed_assets').update({
+    name: asset.name, category: asset.category || null, asset_type: asset.assetType || 'fixed',
+    purchase_date: asset.purchaseDate, cost: asset.cost, salvage_value: asset.salvageValue || 0,
+    useful_life_years: asset.usefulLifeYears, custodian: asset.custodian || null, location: asset.location || null,
+    notes: asset.notes || null, disposed_at: asset.disposedAt || null, disposal_value: asset.disposalValue ?? null,
+    updated_at: new Date().toISOString(),
+  }).eq('id', id).select().single()
+  if (error) throw error
+  return data
+}
 export async function deleteFixedAsset(id) {
   const { error } = await supabase.from('fixed_assets').delete().eq('id', id)
   if (error) throw error
@@ -3167,6 +3198,15 @@ export async function createBoqDocument(tenantId, userId, boq) {
     tenant_id: tenantId, boq_number: boq.boqNumber || null, title: boq.title, client_name: boq.clientName || null,
     items: boq.items || [], total: boq.total || 0, notes: boq.notes || null, created_by: userId || null,
   }).select().single()
+  if (error) throw error
+  return data
+}
+export async function updateBoqDocument(id, boq) {
+  const { data, error } = await supabase.from('boq_documents').update({
+    boq_number: boq.boqNumber || null, title: boq.title, client_name: boq.clientName || null,
+    items: boq.items || [], total: boq.total || 0, notes: boq.notes || null, status: boq.status || 'draft',
+    updated_at: new Date().toISOString(),
+  }).eq('id', id).select().single()
   if (error) throw error
   return data
 }

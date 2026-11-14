@@ -336,7 +336,7 @@ export const useAuthStore = create(
             // to swallow network errors and fall through to the original
             // message, but a lock is a real, user-facing reason to stop.
             set({ isLoading: false })
-            throw new Error(`Account locked${cached.profile.locked_reason ? `: ${cached.profile.locked_reason}` : ''}. Contact your Super Admin to unlock it.`)
+            throw new Error(`Account locked${cached.profile.locked_reason ? `: ${cached.profile.locked_reason}` : ''}. Contact your Super Admin to unlock it.`, { cause: err })
           }
 
           try {
@@ -356,7 +356,7 @@ export const useAuthStore = create(
               })
               return cached.userType
             }
-          } catch (cacheErr) {
+          } catch {
             // Cache fallback failed, continue to throw original error
           }
 

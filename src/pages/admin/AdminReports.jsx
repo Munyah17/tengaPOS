@@ -5,7 +5,7 @@ import {
   Smartphone, Briefcase, Calendar, AlertTriangle, ChevronDown, ChevronUp,
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
-import { PLANS } from './AdminTenants'
+import { PLANS } from '@/lib/planCatalog'
 
 // ─── Plan revenue model ───────────────────────────────────────────────────────
 // Only BYOD Monthly recurs. Standard/Pro are once-off hardware bundles with

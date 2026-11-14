@@ -7,7 +7,7 @@ import { loadWithOfflineCache } from '@/lib/offlineCache'
 import {
   fetchStaffPayroll, updateStaffPay,
   fetchPayrollRuns, fetchPayrollEntries,
-  savePayrollRun, deletePayrollRun,
+  savePayrollRun, deletePayrollRun, updatePayrollRunStatus,
 } from '@/lib/db'
 import { exportToCSV } from '@/utils/exportUtils'
 import { formatCurrency, toLocalDateStr, stripLeadingZero } from '@/utils/formatters'
@@ -236,6 +236,18 @@ export default function HR() {
       toast.success('Payroll run deleted')
     } catch {
       toast.error('Failed to delete run')
+    }
+  }
+
+  // Status lifecycle: draft → processed → paid. The update path existed
+  // in db.js but nothing called it, so runs could never leave 'draft'.
+  const handleSetRunStatus = async (run, status) => {
+    try {
+      await updatePayrollRunStatus(run.id, status)
+      setHistory(h => h.map(x => x.id === run.id ? { ...x, status } : x))
+      toast.success(`Run marked ${STATUS_CFG[status]?.label.toLowerCase() || status}`)
+    } catch (err) {
+      toast.error(err.message || 'Failed to update run status')
     }
   }
 
@@ -468,6 +480,18 @@ export default function HR() {
                     <p className="text-sm font-bold text-green-700 dark:text-green-400">{formatCurrency(r.total_net)}</p>
                   </div>
                   <div className="flex gap-2">
+                    {r.status === 'draft' && (
+                      <button onClick={() => handleSetRunStatus(r, 'processed')}
+                        className="rounded-lg border border-blue-200 px-3 py-1.5 text-xs font-semibold text-blue-600 hover:bg-blue-50 dark:border-blue-900/40 dark:text-blue-400">
+                        Mark Processed
+                      </button>
+                    )}
+                    {r.status === 'processed' && (
+                      <button onClick={() => handleSetRunStatus(r, 'paid')}
+                        className="rounded-lg border border-green-200 px-3 py-1.5 text-xs font-semibold text-green-600 hover:bg-green-50 dark:border-green-900/40 dark:text-green-400">
+                        Mark Paid
+                      </button>
+                    )}
                     <button onClick={() => handleExpandRun(r.id)}
                       className="flex items-center gap-1 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-400">
                       {expandedRun === r.id ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}

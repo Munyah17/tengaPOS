@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Check, X, Save, Loader2, DollarSign, Megaphone, Image, Trash2 } from 'lucide-react'
-import { PLANS, DEFAULT_FEATURES } from '@/pages/admin/AdminTenants'
+import { PLANS, DEFAULT_FEATURES } from '@/lib/planCatalog'
 import { getSetting, updateSetting, DEFAULT_PLAN_PRICING, DEFAULT_FISCAL_PRICING } from '@/lib/platformSettings'
 import { stripLeadingZero } from '@/utils/formatters'
 import { useAuthStore } from '@/stores/authStore'

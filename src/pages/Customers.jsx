@@ -34,7 +34,12 @@ export default function Customers() {
     })
   }
 
-  useEffect(() => { load() }, [tenant?.id])
+  /* eslint-disable react-hooks/set-state-in-effect -- fetch-on-mount data load */
+  useEffect(() => {
+    load()
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- load is re-created every render; tenant?.id is the real trigger
+  }, [tenant?.id])
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   useEffect(() => {
     if (!tenant?.id || !isPharmacy) return

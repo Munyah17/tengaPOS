@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import {
-  Settings as SettingsIcon, Store, CreditCard,
+  Settings as SettingsIcon, CreditCard,
   Bell, Shield, Palette, Globe, ExternalLink, Cpu,
-  CheckCircle, AlertTriangle, Loader, Power, PowerOff, Eye, EyeOff, X,
+  CheckCircle, Loader, Eye, EyeOff, X,
 } from 'lucide-react'
 import Button from '@/components/common/Button'
 import ThemeToggle from '@/components/common/ThemeToggle'
@@ -12,7 +12,6 @@ import { useFiscalStore } from '@/stores/fiscalStore'
 import { pingDevice } from '@/lib/fiscalApi'
 import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/stores/authStore'
-import { useReceiptConfigStore } from '@/stores/receiptConfigStore'
 import { useFiscalPricing } from '@/lib/platformSettings'
 import { CURRENCIES, PAYMENT_PROVIDERS } from '@/utils/constants'
 import {
@@ -59,10 +58,12 @@ export default function Settings() {
     : sections
   const isShopManager = role === 'shop_manager'
 
+  /* eslint-disable react-hooks/set-state-in-effect -- syncing UI state to role/tenant changes is exactly what this effect is for */
   useEffect(() => {
     if (!visibleSections.some((s) => s.id === activeSection)) setActiveSection('general')
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [role])
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   // ─── Platform Billing — invoices tengaPOS raises against this tenant ───
   const [searchParams] = useSearchParams()
@@ -80,10 +81,13 @@ export default function Settings() {
       .then(({ data, error }) => { if (!error) setPlatformInvoices(data || []) })
       .finally(() => setLoadingInvoices(false))
   }
+  /* eslint-disable react-hooks/set-state-in-effect -- fetch-on-mount data load */
   useEffect(loadPlatformInvoices, [tenant?.id])
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   // Returning from a Stripe/Paynow redirect for a platform invoice payment
   // -- same poll-until-webhook-lands pattern as Checkout.jsx.
+  /* eslint-disable react-hooks/set-state-in-effect -- one-time reaction to payment-return URL params */
   useEffect(() => {
     const ref = searchParams.get('ref')
     const returnStatus = searchParams.get('status')
@@ -108,6 +112,7 @@ export default function Settings() {
     return () => clearInterval(timer)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams])
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const payPlatformInvoice = async (invoice, provider) => {
     setPayingInvoiceId(invoice.id)
@@ -194,6 +199,7 @@ export default function Settings() {
   // A scope can now hold two rows: the approved config plus a pending draft.
   // Shop managers see their own pending submission first (that's what they're
   // editing); vendors see the approved config that's actually printing.
+  /* eslint-disable react-hooks/set-state-in-effect -- syncing the form to the selected branch's saved config */
   useEffect(() => {
     const scopeRows = receiptConfigs.filter((c) => (c.branch_id || '') === (scopeBranchId || ''))
     const existing = role === 'shop_manager'
@@ -216,7 +222,8 @@ export default function Settings() {
       bankDetails: existing?.bank_details || '',
       comPort: existing?.com_port || '',
     })
-  }, [scopeBranchId, receiptConfigs])
+  }, [scopeBranchId, receiptConfigs, role])
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const handleSaveReceiptConfig = async () => {
     setSavingReceiptConfig(true)
@@ -673,6 +680,7 @@ export default function Settings() {
   const [health263FacilityId, setHealth263FacilityId] = useState(tenant?.health263_facility_id || '')
   const [generalSaving, setGeneralSaving] = useState(false)
 
+  /* eslint-disable react-hooks/set-state-in-effect -- syncing form fields to the loaded tenant record */
   useEffect(() => {
     if (tenant) {
       setBusinessName(tenant.name || '')
@@ -683,6 +691,7 @@ export default function Settings() {
       setHealth263FacilityId(tenant.health263_facility_id || '')
     }
   }, [tenant])
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   // ─── VAT: free platform-gated request — Vendor requests, Super Admin
   // approves. Once unlocked, the toggle above is a normal free switch,
@@ -851,6 +860,7 @@ export default function Settings() {
   const [pingLoading, setPingLoading] = useState(false)
 
   // Load fiscal config from DB on mount (multi-tenant: each vendor has their own row)
+  /* eslint-disable react-hooks/set-state-in-effect -- fetch-on-mount data load */
   useEffect(() => {
     if (!tenant?.id) return
     setFiscalLoading(true)
@@ -879,7 +889,9 @@ export default function Settings() {
         }
       })
       .finally(() => setFiscalLoading(false))
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- fiscal store is a stable zustand reference; re-running on every fiscal state change would loop
   }, [tenant?.id])
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const handleFiscalSave = async () => {
     if (!tenant?.id) return

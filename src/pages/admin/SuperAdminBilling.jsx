@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { DollarSign, TrendingUp, Briefcase, Info, Receipt, Plus, X, Loader2, RefreshCw, Bell, Check, RotateCw } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
-import { PLANS } from '@/pages/admin/AdminTenants'
+import { PLANS } from '@/lib/planCatalog'
 import { usePlanPricing, priceLabelFor } from '@/lib/platformSettings'
 import { formatCurrency, formatDate, toLocalDateStr, stripLeadingZero } from '@/utils/formatters'
 import toast from 'react-hot-toast'

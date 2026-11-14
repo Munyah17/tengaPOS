@@ -3,11 +3,10 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Search, Barcode, Plus, Minus, Trash2, ShoppingCart,
-  CreditCard, Banknote, Smartphone, Receipt, X, Car, Store, Package as PackageIcon,
+  Receipt, X, Car, Store, Package as PackageIcon,
   RefreshCw, ExternalLink, Camera, Percent, DoorOpen, ShieldAlert, UserPlus,
 } from 'lucide-react'
 import Button from '@/components/common/Button'
-import Modal from '@/components/common/Modal'
 import ZimraReceipt from '@/components/common/ZimraReceipt'
 import { useCartStore } from '@/stores/cartStore'
 import { useThemeStore } from '@/stores/themeStore'
@@ -46,11 +45,16 @@ const restaurantCategories = [
 function CartQtyField({ item, onCommit }) {
   const [draft, setDraft] = useState(String(item.quantity))
   const [focused, setFocused] = useState(false)
+  const [prevQuantity, setPrevQuantity] = useState(item.quantity)
   const isFractional = FRACTIONAL_UNITS.includes(item.unit)
 
-  useEffect(() => {
-    if (!focused) setDraft(String(item.quantity))
-  }, [item.quantity, focused])
+  // Re-sync the draft when the cart quantity changes underneath us (e.g.
+  // +/- buttons or a capped commit) -- the render-time adjust pattern,
+  // not an effect, so it doesn't lag a frame behind the new value.
+  if (!focused && item.quantity !== prevQuantity) {
+    setPrevQuantity(item.quantity)
+    setDraft(String(item.quantity))
+  }
 
   const commit = () => {
     setFocused(false)
@@ -189,11 +193,9 @@ export default function POS() {
     staleTime: 30000,
   })
   const liveProducts = useMemo(() => productsQuery.data || [], [productsQuery.data])
-  const productsLoading = productsQuery.isLoading
 
   useEffect(() => {
     if (productsQuery.isError) toast.error('Failed to load products')
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [productsQuery.isError])
 
   // VAT config comes from the tenant's own settings (inclusive pricing)
@@ -739,8 +741,6 @@ export default function POS() {
       setPaynowLoading(false)
     }
   }
-
-  const accent = isRestaurant ? 'restaurant' : 'brand'
 
   return (
     <div className="relative flex h-[calc(100vh-4rem)] flex-col md:flex-row">

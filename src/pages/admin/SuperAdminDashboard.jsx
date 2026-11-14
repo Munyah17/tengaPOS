@@ -5,7 +5,8 @@ import {
   Clock, CheckCircle, AlertTriangle, ChevronRight, LifeBuoy,
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
-import { TenantModal, PLANS } from '@/pages/admin/AdminTenants'
+import { TenantModal } from '@/pages/admin/AdminTenants'
+import { PLANS } from '@/lib/planCatalog'
 import { getSetting, DEFAULT_PLAN_PRICING } from '@/lib/platformSettings'
 import toast from 'react-hot-toast'
 

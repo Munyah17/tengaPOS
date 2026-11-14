@@ -294,7 +294,7 @@ async function printViaBluetooth(bytes) {
       await characteristic.writeValueWithoutResponse(bytes.slice(i, i + BLE_WRITE_CHUNK_SIZE))
     }
   } catch (serviceErr) {
-    throw new Error(`Connected to "${device.name || 'the printer'}", but it doesn't support the standard ESC/POS Bluetooth profile TengaPOS expects. (${serviceErr.message})`)
+    throw new Error(`Connected to "${device.name || 'the printer'}", but it doesn't support the standard ESC/POS Bluetooth profile TengaPOS expects. (${serviceErr.message})`, { cause: serviceErr })
   } finally {
     server.disconnect()
   }
@@ -357,7 +357,7 @@ async function sendRawBytes(bytes, connectionHint, comPort) {
       const hint = isAndroid
         ? 'This device can\'t run the Windows Print Agent. Ask your admin to switch Printer Connection to "RawBT" in Receipts Config (Settings), then install the free RawBT Print Service app and pair your printer.'
         : 'Install the TengaPOS Print Agent on this computer and make sure it\'s running, or use "Print Receipt" instead.'
-      throw new Error(`Couldn't reach the TengaPOS Print Agent on this device. ${hint} (${agentErr.message})`)
+      throw new Error(`Couldn't reach the TengaPOS Print Agent on this device. ${hint} (${agentErr.message})`, { cause: agentErr })
     }
     // Fall through to WebUSB
   }
@@ -365,7 +365,7 @@ async function sendRawBytes(bytes, connectionHint, comPort) {
   try {
     await printViaWebUsb(bytes)
   } catch (usbErr) {
-    throw new Error(`Print Agent not running, and direct USB printing failed: ${usbErr.message}`)
+    throw new Error(`Print Agent not running, and direct USB printing failed: ${usbErr.message}`, { cause: usbErr })
   }
 }
 

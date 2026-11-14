@@ -63,11 +63,13 @@ function CreateUserModal({ tenants, onClose, onDone }) {
   // confirmed live as a cashier silently seeing only a fraction of the
   // real catalog with no error at all. Required below for every role but
   // vendor, same as the vendor's own "Add Staff" flow already enforces.
+  /* eslint-disable react-hooks/set-state-in-effect -- clearing stale branch options synchronously when tenant changes is the point */
   useEffect(() => {
     if (!form.tenant_id) { setBranches([]); return }
     supabase.from('branches').select('id, name').eq('tenant_id', form.tenant_id).order('name')
       .then(({ data }) => setBranches(data || []))
   }, [form.tenant_id])
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const submit = async (e) => {
     e.preventDefault()
@@ -412,7 +414,9 @@ export default function AdminUsers() {
     setLoading(false)
   }
 
+  /* eslint-disable react-hooks/set-state-in-effect -- fetch-on-mount data load */
   useEffect(() => { load() }, [])
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const toggleActive = async (user) => {
     const { error } = await supabase

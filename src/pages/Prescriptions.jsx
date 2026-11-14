@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { withOfflineCache } from '@/lib/offlineCache'
-import { Pill, Search, Plus, FolderOpen, RefreshCw, Paperclip, CalendarClock } from 'lucide-react'
+import { Pill, Search, Plus, FolderOpen, RefreshCw, Paperclip, CalendarClock, BellRing, Ban } from 'lucide-react'
 import Button from '@/components/common/Button'
 import Modal from '@/components/common/Modal'
 import ExportMenu from '@/components/common/ExportMenu'
@@ -12,6 +12,7 @@ import { useAuthStore } from '@/stores/authStore'
 import {
   fetchPrescriptionDispenses, fetchPrescriptions, createPrescription, uploadPrescriptionImage,
   getPrescriptionImageUrl, fetchDoctors, fetchCustomers, createMedicationSchedule,
+  fetchMedicationSchedules, deactivateMedicationSchedule,
 } from '@/lib/db'
 import toast from 'react-hot-toast'
 
@@ -115,6 +116,11 @@ export default function Prescriptions() {
   const [reminderFor, setReminderFor] = useState(null) // dispense row while setting a refill reminder
   const [reminderForm, setReminderForm] = useState(BLANK_REMINDER)
   const [savingReminder, setSavingReminder] = useState(false)
+  // Active refill schedules — until now they could be created from the
+  // dispense log but never viewed or cancelled anywhere.
+  const [reminders, setReminders] = useState([])
+  const [loadingReminders, setLoadingReminders] = useState(false)
+  const [reminderBusyId, setReminderBusyId] = useState(null)
 
   const loadFiled = () => {
     if (!tenant?.id) return
@@ -125,6 +131,29 @@ export default function Prescriptions() {
       .finally(() => setLoadingFiled(false))
   }
   useEffect(() => { if (tab === 'filed') loadFiled() }, [tab, tenant?.id])
+
+  const loadReminders = () => {
+    if (!tenant?.id) return
+    setLoadingReminders(true)
+    fetchMedicationSchedules(tenant.id)
+      .then(setReminders)
+      .catch((err) => toast.error(err.message || 'Failed to load refill reminders'))
+      .finally(() => setLoadingReminders(false))
+  }
+  useEffect(() => { if (tab === 'reminders') loadReminders() }, [tab, tenant?.id])
+
+  const cancelReminder = async (id) => {
+    setReminderBusyId(id)
+    try {
+      await deactivateMedicationSchedule(id)
+      setReminders((prev) => prev.filter((r) => r.id !== id))
+      toast.success('Reminder cancelled')
+    } catch (err) {
+      toast.error(err.message || 'Failed to cancel reminder')
+    } finally {
+      setReminderBusyId(null)
+    }
+  }
 
   const openFile = () => { setFileForm(BLANK_FILE_FORM); setFileImage(null); setShowFile(true) }
 
@@ -171,6 +200,7 @@ export default function Prescriptions() {
       })
       toast.success('Refill reminder set')
       setReminderFor(null)
+      loadReminders()
     } catch (err) {
       toast.error(err.message || 'Failed to set reminder')
     } finally {
@@ -223,6 +253,9 @@ export default function Prescriptions() {
         </button>
         <button onClick={() => setTab('filed')} className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium ${tab === 'filed' ? 'bg-brand-600 text-white' : 'text-slate-600 dark:text-slate-400'}`}>
           <FolderOpen className="h-4 w-4" /> Filed Prescriptions
+        </button>
+        <button onClick={() => setTab('reminders')} className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium ${tab === 'reminders' ? 'bg-brand-600 text-white' : 'text-slate-600 dark:text-slate-400'}`}>
+          <BellRing className="h-4 w-4" /> Refill Reminders
         </button>
       </div>
 
@@ -322,6 +355,45 @@ export default function Prescriptions() {
                     </tr>
                   )
                 })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {tab === 'reminders' && (
+        <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
+          <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3 dark:border-slate-800">
+            <p className="text-sm text-slate-500">Customers get a refill reminder every N days after their last dispense.</p>
+            <button onClick={loadReminders} className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
+              <RefreshCw className={`h-3.5 w-3.5 ${loadingReminders ? 'animate-spin' : ''}`} /> Refresh
+            </button>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[640px]">
+              <thead>
+                <tr className="border-b border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-900">
+                  {['Customer', 'Product', 'Every', 'Created', ''].map((h) => <th key={h} className="px-4 py-3 text-left text-xs font-semibold uppercase text-slate-500">{h}</th>)}
+                </tr>
+              </thead>
+              <tbody>
+                {loadingReminders ? (
+                  <tr><td colSpan={5} className="py-12 text-center text-sm text-slate-400">Loading…</td></tr>
+                ) : reminders.length === 0 ? (
+                  <tr><td colSpan={5} className="py-12 text-center text-sm text-slate-400">No active refill reminders. Set one from the clock icon on a dispense-log row.</td></tr>
+                ) : reminders.map((r) => (
+                  <tr key={r.id} className="border-b border-slate-100 hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-800/50">
+                    <td className="px-4 py-3 text-sm font-medium text-slate-900 dark:text-white">{r.customers?.name || '—'}</td>
+                    <td className="px-4 py-3 text-sm text-slate-600 dark:text-slate-400">{r.products?.name || '—'}</td>
+                    <td className="px-4 py-3 text-sm text-slate-600 dark:text-slate-400">every {r.frequency_days} days</td>
+                    <td className="px-4 py-3 text-sm text-slate-600 dark:text-slate-400">{formatDate(r.created_at)}</td>
+                    <td className="px-4 py-3">
+                      <button onClick={() => cancelReminder(r.id)} disabled={reminderBusyId === r.id} title="Cancel reminder" className="rounded-lg p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-500 disabled:opacity-50 dark:hover:bg-red-950/40">
+                        <Ban className="h-4 w-4" />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>

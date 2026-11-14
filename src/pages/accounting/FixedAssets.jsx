@@ -1,13 +1,13 @@
 import { useState, useEffect } from 'react'
-import { Plus, RefreshCw, Trash2, Loader2 } from 'lucide-react'
+import { Plus, RefreshCw, Trash2, Loader2, Pencil } from 'lucide-react'
 import Button from '@/components/common/Button'
 import Modal from '@/components/common/Modal'
 import { useAuthStore } from '@/stores/authStore'
-import { fetchFixedAssets, createFixedAsset, deleteFixedAsset } from '@/lib/db'
+import { fetchFixedAssets, createFixedAsset, updateFixedAsset, deleteFixedAsset } from '@/lib/db'
 import { formatCurrency, formatDate, toLocalDateStr, stripLeadingZero } from '@/utils/formatters'
 import toast from 'react-hot-toast'
 
-const BLANK = { name: '', category: '', assetType: 'fixed', purchaseDate: toLocalDateStr(), cost: '', salvageValue: '0', usefulLifeYears: '5', custodian: '', location: '' }
+const BLANK = { name: '', category: '', assetType: 'fixed', purchaseDate: toLocalDateStr(), cost: '', salvageValue: '0', usefulLifeYears: '5', custodian: '', location: '', notes: '' }
 
 // Straight-line depreciation: accumulated = min(annual * yearsElapsed, cost - salvage)
 function bookValue(asset) {
@@ -25,6 +25,7 @@ export default function FixedAssets() {
   const [assets, setAssets] = useState([])
   const [loading, setLoading] = useState(false)
   const [showAdd, setShowAdd] = useState(false)
+  const [editing, setEditing] = useState(null)
   const [form, setForm] = useState(BLANK)
   const [saving, setSaving] = useState(false)
   const [deletingId, setDeletingId] = useState(null)
@@ -36,6 +37,17 @@ export default function FixedAssets() {
   }
   useEffect(load, [tenant?.id])
 
+  const openEdit = (a) => {
+    setEditing(a)
+    setForm({
+      name: a.name || '', category: a.category || '', assetType: a.asset_type || 'fixed',
+      purchaseDate: a.purchase_date ? toLocalDateStr(new Date(a.purchase_date)) : toLocalDateStr(),
+      cost: a.cost ?? '', salvageValue: a.salvage_value ?? '0', usefulLifeYears: a.useful_life_years ?? '5',
+      custodian: a.custodian || '', location: a.location || '', notes: a.notes || '',
+    })
+    setShowAdd(true)
+  }
+
   const save = async (e) => {
     e.preventDefault()
     const cost = Number(form.cost)
@@ -43,10 +55,18 @@ export default function FixedAssets() {
     if (!cost || cost < 0) { toast.error('Enter a valid cost'); return }
     setSaving(true)
     try {
-      const created = await createFixedAsset(tenant.id, undefined, { ...form, cost, salvageValue: Number(form.salvageValue) || 0, usefulLifeYears: Number(form.usefulLifeYears) })
-      setAssets((prev) => [created, ...prev])
-      toast.success('Asset added')
+      const payload = { ...form, cost, salvageValue: Number(form.salvageValue) || 0, usefulLifeYears: Number(form.usefulLifeYears) }
+      if (editing) {
+        const updated = await updateFixedAsset(editing.id, payload)
+        setAssets((prev) => prev.map((x) => (x.id === editing.id ? updated : x)))
+        toast.success('Asset updated')
+      } else {
+        const created = await createFixedAsset(tenant.id, undefined, payload)
+        setAssets((prev) => [created, ...prev])
+        toast.success('Asset added')
+      }
       setForm(BLANK)
+      setEditing(null)
       setShowAdd(false)
     } catch (err) {
       toast.error(err.message || 'Failed to save')
@@ -79,7 +99,7 @@ export default function FixedAssets() {
         </div>
         <div className="flex gap-2">
           <button onClick={load} className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300"><RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} /></button>
-          <Button variant="primary" onClick={() => setShowAdd(true)}><Plus className="h-4 w-4" /> Add Asset</Button>
+          <Button variant="primary" onClick={() => { setEditing(null); setForm(BLANK); setShowAdd(true) }}><Plus className="h-4 w-4" /> Add Asset</Button>
         </div>
       </div>
 
@@ -108,9 +128,14 @@ export default function FixedAssets() {
                       <td className="px-4 py-3 text-sm text-slate-600 dark:text-slate-400">{fmt(annual)}</td>
                       <td className="px-4 py-3 text-sm font-semibold text-slate-900 dark:text-white">{fmt(bv)}</td>
                       <td className="px-4 py-3">
-                        <button onClick={() => handleDelete(a)} disabled={deletingId === a.id} className="rounded-lg p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-500 disabled:opacity-50 dark:hover:bg-red-950">
-                          {deletingId === a.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
-                        </button>
+                        <div className="flex gap-1">
+                          <button onClick={() => openEdit(a)} className="rounded-lg p-1.5 text-slate-400 hover:bg-brand-50 hover:text-brand-600 dark:hover:bg-brand-950">
+                            <Pencil className="h-4 w-4" />
+                          </button>
+                          <button onClick={() => handleDelete(a)} disabled={deletingId === a.id} className="rounded-lg p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-500 disabled:opacity-50 dark:hover:bg-red-950">
+                            {deletingId === a.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   )
@@ -121,7 +146,7 @@ export default function FixedAssets() {
         )}
       </div>
 
-      <Modal isOpen={showAdd} onClose={() => setShowAdd(false)} title="Add Asset">
+      <Modal isOpen={showAdd} onClose={() => { setShowAdd(false); setEditing(null); setForm(BLANK) }} title={editing ? 'Edit Asset' : 'Add Asset'}>
         <form onSubmit={save} className="space-y-4">
           <div>
             <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">Name *</label>
@@ -170,7 +195,11 @@ export default function FixedAssets() {
               <input value={form.location} onChange={(e) => setForm((f) => ({ ...f, location: e.target.value }))} className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white" />
             </div>
           </div>
-          <Button type="submit" variant="primary" disabled={saving} className="w-full justify-center">{saving ? 'Saving…' : 'Add Asset'}</Button>
+          <div>
+            <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">Notes</label>
+            <input value={form.notes} onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))} className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white" />
+          </div>
+          <Button type="submit" variant="primary" disabled={saving} className="w-full justify-center">{saving ? 'Saving…' : editing ? 'Save Changes' : 'Add Asset'}</Button>
         </form>
       </Modal>
     </div>

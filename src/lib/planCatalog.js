@@ -1,0 +1,115 @@
+import { Smartphone, Star, Zap, Briefcase, Crown } from 'lucide-react'
+
+// ─── Plan metadata ────────────────────────────────────────────────────────────
+// Lives outside AdminTenants.jsx because that file is a component module —
+// react-refresh only allows component exports there, and SuperAdminPricing
+// needs these same constants.
+
+export const PLANS = {
+  byod_monthly: {
+    label: 'BYOD Monthly',
+    icon: Smartphone,
+    color: 'text-slate-300',
+    bg: 'bg-slate-200 dark:bg-slate-700/50',
+    border: 'border-slate-600',
+    renewalMonths: 1,
+    tier: 1,
+    price: 30,
+    recurring: true,
+    priceLabel: '$30 / month',
+    desc: 'Own device · Monthly billing',
+  },
+  standard_plan: {
+    label: 'Standard Plan',
+    icon: Star,
+    color: 'text-blue-300',
+    bg: 'bg-blue-500/20',
+    border: 'border-blue-500/40',
+    renewalMonths: 6,
+    tier: 2,
+    price: 170,
+    recurring: false,
+    priceLabel: '$170 once-off · 6 months included',
+    renewalNote: 'Free renewal — Ts & Cs apply',
+    desc: 'Combo hardware · Free renewal (Ts & Cs apply)',
+  },
+  pro_package: {
+    label: 'Pro Package',
+    icon: Zap,
+    color: 'text-indigo-300',
+    bg: 'bg-indigo-500/20',
+    border: 'border-indigo-500/40',
+    renewalMonths: 6,
+    tier: 3,
+    price: 200,
+    recurring: false,
+    priceLabel: '$200 once-off · 6 months included',
+    renewalNote: 'Free renewal — Ts & Cs apply',
+    desc: 'Combo hardware · Free renewal (Ts & Cs apply)',
+  },
+  business: {
+    label: 'Business',
+    icon: Briefcase,
+    color: 'text-purple-300',
+    bg: 'bg-purple-500/20',
+    border: 'border-purple-500/40',
+    renewalMonths: 12,
+    tier: 4,
+    price: null,
+    recurring: false,
+    priceLabel: 'Custom quote',
+    desc: 'White-label · Backups · Dedicated tech',
+  },
+  enterprise: {
+    label: 'Enterprise',
+    icon: Crown,
+    color: 'text-amber-300',
+    bg: 'bg-amber-500/20',
+    border: 'border-amber-500/40',
+    renewalMonths: 12,
+    tier: 5,
+    price: null,
+    recurring: false,
+    priceLabel: 'Custom quote',
+    desc: 'Full custom · Unlimited · Priority support',
+  },
+}
+
+export const DEFAULT_FEATURES = {
+  byod_monthly: {
+    pos: true, inventory: true, transactions: true,
+    reports: 'basic', staff: false, tasks: true,
+    kitchen: false, orders: false, dining_board: false,
+    drive_through: false, fiscalisation: false,
+    branches: 1, max_users: 3, api_access: false,
+  },
+  standard_plan: {
+    pos: true, inventory: true, transactions: true,
+    reports: 'basic', staff: true, tasks: true,
+    kitchen: true, orders: true, dining_board: false,
+    drive_through: false, fiscalisation: false,
+    branches: 3, max_users_per_branch: 2, api_access: false,
+  },
+  pro_package: {
+    pos: true, inventory: true, transactions: true,
+    reports: 'advanced', staff: true, tasks: true,
+    kitchen: true, orders: true, dining_board: true,
+    drive_through: true, fiscalisation: false,
+    branches: 5, max_users_per_branch: 4, api_access: false,
+  },
+  business: {
+    pos: true, inventory: true, transactions: true,
+    reports: 'advanced', staff: true, tasks: true,
+    kitchen: true, orders: true, dining_board: true,
+    drive_through: true, fiscalisation: false,
+    branches: 10, max_users: 25, api_access: true,
+  },
+  enterprise: {
+    pos: true, inventory: true, transactions: true,
+    reports: 'advanced', staff: true, tasks: true,
+    kitchen: true, orders: true, dining_board: true,
+    drive_through: true, fiscalisation: false,
+    branches: -1, max_users: -1, api_access: true,
+    custom_integrations: true,
+  },
+}

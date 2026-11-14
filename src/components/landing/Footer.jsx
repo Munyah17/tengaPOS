@@ -3,7 +3,7 @@ import { ExternalLink } from 'lucide-react'
 const footerLinks = {
   Product: ['Features', 'Pricing', 'Retail POS', 'Restaurant POS', 'Inventory'],
   Resources: [
-    { label: 'Get Barcodes', href: 'http://scancode.co.zw', external: true },
+    { label: 'Get Barcodes', href: 'https://www.scancode.co.zw', external: true },
     'Documentation',
     'API Reference',
     'Status',
@@ -72,7 +72,7 @@ export default function Footer() {
             &copy; {new Date().getFullYear()} tengaPOS. All rights reserved.
           </p>
           <a
-            href="http://scancode.co.zw"
+            href="https://www.scancode.co.zw"
             target="_blank"
             rel="noopener noreferrer"
             className="flex items-center gap-1 text-sm text-brand-400 transition-colors hover:text-brand-300"

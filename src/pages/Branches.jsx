@@ -2,8 +2,8 @@ import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Store, MapPin, Users, DollarSign, Plus, Edit3, Trash2,
-  TrendingUp, Package, CheckCircle, X, BarChart3, Phone,
-  ArrowLeft, Eye, RefreshCw,
+  TrendingUp, BarChart3,
+  ArrowLeft, Eye,
 } from 'lucide-react'
 import { formatCurrency } from '@/utils/formatters'
 import { useAuthStore } from '@/stores/authStore'
@@ -235,8 +235,8 @@ export default function Branches() {
   const isBranchScoped = role === 'shop_manager'
 
   const [branches, setBranches] = useState([])
-  const [loading, setLoading] = useState(false)
-  const [saving, setSaving] = useState(false)
+  const [, setLoading] = useState(false)
+  const [, setSaving] = useState(false)
   const [viewing, setViewing] = useState(null)
   const [editing, setEditing] = useState(null)
   const [showNew, setShowNew] = useState(false)
@@ -271,7 +271,10 @@ export default function Branches() {
     })
   }
 
-  useEffect(() => { loadBranches() }, [tenant?.id])
+  useEffect(() => {
+    loadBranches()
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- loadBranches is re-created every render; tenant?.id is the real trigger
+  }, [tenant?.id])
 
   useEffect(() => {
     window.addEventListener('tengapos:force-refresh', loadBranches)

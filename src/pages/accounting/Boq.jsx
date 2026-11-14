@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react'
-import { Plus, RefreshCw, Trash2, Loader2, X } from 'lucide-react'
+import { Plus, RefreshCw, Trash2, Loader2, X, Pencil } from 'lucide-react'
 import Button from '@/components/common/Button'
 import Modal from '@/components/common/Modal'
 import { useAuthStore } from '@/stores/authStore'
-import { fetchBoqDocuments, createBoqDocument, deleteBoqDocument } from '@/lib/db'
+import { fetchBoqDocuments, createBoqDocument, updateBoqDocument, deleteBoqDocument } from '@/lib/db'
 import { formatCurrency, formatDate, stripLeadingZero } from '@/utils/formatters'
 import toast from 'react-hot-toast'
 
@@ -15,6 +15,7 @@ export default function Boq() {
   const [docs, setDocs] = useState([])
   const [loading, setLoading] = useState(false)
   const [showAdd, setShowAdd] = useState(false)
+  const [editing, setEditing] = useState(null)
   const [form, setForm] = useState(BLANK)
   const [saving, setSaving] = useState(false)
   const [deletingId, setDeletingId] = useState(null)
@@ -31,6 +32,17 @@ export default function Boq() {
   const removeItem = (i) => setForm((f) => ({ ...f, items: f.items.filter((_, idx) => idx !== i) }))
   const total = form.items.reduce((s, it) => s + (Number(it.qty) || 0) * (Number(it.rate) || 0), 0)
 
+  const openEdit = (d) => {
+    setEditing(d)
+    setForm({
+      boqNumber: d.boq_number || '', title: d.title || '', clientName: d.client_name || '', notes: d.notes || '',
+      items: (d.items?.length ? d.items : [{ ...BLANK_ITEM }]).map((it) => ({
+        description: it.description || '', unit: it.unit || '', qty: it.qty ?? 1, rate: it.rate ?? 0,
+      })),
+    })
+    setShowAdd(true)
+  }
+
   const save = async (e) => {
     e.preventDefault()
     if (!form.title.trim()) { toast.error('Title is required'); return }
@@ -39,10 +51,18 @@ export default function Boq() {
     setSaving(true)
     try {
       const items = validItems.map((it) => ({ ...it, amount: Number(it.qty) * Number(it.rate) }))
-      const created = await createBoqDocument(tenant.id, undefined, { ...form, items, total: items.reduce((s, it) => s + it.amount, 0) })
-      setDocs((prev) => [created, ...prev])
-      toast.success('BOQ created')
+      const payload = { ...form, items, total: items.reduce((s, it) => s + it.amount, 0) }
+      if (editing) {
+        const updated = await updateBoqDocument(editing.id, { ...payload, status: editing.status || 'draft' })
+        setDocs((prev) => prev.map((x) => (x.id === editing.id ? updated : x)))
+        toast.success('BOQ updated')
+      } else {
+        const created = await createBoqDocument(tenant.id, undefined, payload)
+        setDocs((prev) => [created, ...prev])
+        toast.success('BOQ created')
+      }
       setForm(BLANK)
+      setEditing(null)
       setShowAdd(false)
     } catch (err) {
       toast.error(err.message || 'Failed to save')
@@ -72,7 +92,7 @@ export default function Boq() {
         <h2 className="text-lg font-bold text-slate-900 dark:text-white">Bill of Quantities</h2>
         <div className="flex gap-2">
           <button onClick={load} className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300"><RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} /></button>
-          <Button variant="primary" onClick={() => setShowAdd(true)}><Plus className="h-4 w-4" /> New BOQ</Button>
+          <Button variant="primary" onClick={() => { setEditing(null); setForm(BLANK); setShowAdd(true) }}><Plus className="h-4 w-4" /> New BOQ</Button>
         </div>
       </div>
 
@@ -90,6 +110,9 @@ export default function Boq() {
                   <p className="text-xs text-slate-500">{d.client_name}{d.client_name && ' · '}{formatDate(d.created_at)} · {d.items.length} item{d.items.length !== 1 ? 's' : ''}</p>
                 </div>
                 <span className="text-sm font-bold text-slate-900 dark:text-white">{fmt(d.total)}</span>
+                <button onClick={() => openEdit(d)} className="rounded-lg p-1.5 text-slate-400 hover:bg-brand-50 hover:text-brand-600 dark:hover:bg-brand-950">
+                  <Pencil className="h-4 w-4" />
+                </button>
                 <button onClick={() => handleDelete(d)} disabled={deletingId === d.id} className="rounded-lg p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-500 disabled:opacity-50 dark:hover:bg-red-950">
                   {deletingId === d.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
                 </button>
@@ -99,7 +122,7 @@ export default function Boq() {
         )}
       </div>
 
-      <Modal isOpen={showAdd} onClose={() => setShowAdd(false)} title="New Bill of Quantities" size="lg">
+      <Modal isOpen={showAdd} onClose={() => { setShowAdd(false); setEditing(null); setForm(BLANK) }} title={editing ? 'Edit Bill of Quantities' : 'New Bill of Quantities'} size="lg">
         <form onSubmit={save} className="space-y-4">
           <div className="grid grid-cols-2 gap-3">
             <div>
@@ -140,7 +163,7 @@ export default function Boq() {
             <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">Notes</label>
             <textarea value={form.notes} onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))} rows={2} className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white" />
           </div>
-          <Button type="submit" variant="primary" disabled={saving} className="w-full justify-center">{saving ? 'Saving…' : 'Create BOQ'}</Button>
+          <Button type="submit" variant="primary" disabled={saving} className="w-full justify-center">{saving ? 'Saving…' : editing ? 'Save Changes' : 'Create BOQ'}</Button>
         </form>
       </Modal>
     </div>

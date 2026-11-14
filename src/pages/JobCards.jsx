@@ -366,6 +366,7 @@ export default function JobCards() {
   // captured, so only the items pre-fill; customer and vehicle both still
   // need picking.
   const [quotationPrefill, setQuotationPrefill] = useState(null)
+  /* eslint-disable react-hooks/set-state-in-effect -- one-time consumption of navigation state into the new-job-card form */
   useEffect(() => {
     const doc = location.state?.fromQuotation
     const txn = location.state?.fromTransaction
@@ -383,6 +384,7 @@ export default function JobCards() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const load = () => {
     if (!tenant?.id) return

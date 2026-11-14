@@ -335,7 +335,6 @@ export default function Inventory() {
 
   useEffect(() => {
     if (productsQuery.isError) toast.error('Failed to load products')
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [productsQuery.isError])
 
   // Branch filter: 'all' shows everything the caller can see (vendor = the
@@ -536,7 +535,7 @@ export default function Inventory() {
           queryClient.setQueryData(['products', tenant.id], (old) => [...(old || []), created])
           toast.success('Product added')
         }
-      } catch (err) {
+      } catch {
         // Network/server error mid-save — queue it rather than lose the edit
         await queueOfflineInventoryWrite(editTarget ? 'update' : 'insert', tenant.id, payload, editTarget?.id)
         toast('Connection issue — product saved, will sync automatically', { icon: '📴' })
@@ -654,7 +653,7 @@ export default function Inventory() {
           <p className="text-sm text-slate-500">Manage your products and stock levels</p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <a href="http://scancode.co.zw" target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
+          <a href="https://www.scancode.co.zw" target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
             Get Barcodes <ExternalLink className="h-3.5 w-3.5" />
           </a>
           <button onClick={() => productsQuery.refetch()} className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300" title="Refresh">
@@ -1549,7 +1548,7 @@ export default function Inventory() {
           )}
           <div className="flex items-center gap-2 text-sm text-slate-500">
             <ExternalLink className="h-3.5 w-3.5" />
-            <a href="http://scancode.co.zw" target="_blank" rel="noopener noreferrer" className="text-brand-600 hover:underline">Need barcodes? Visit scancode.co.zw</a>
+            <a href="https://www.scancode.co.zw" target="_blank" rel="noopener noreferrer" className="text-brand-600 hover:underline">Need barcodes? Visit scancode.co.zw</a>
           </div>
           <div className="flex justify-end gap-2 pt-2">
             <Button variant="secondary" type="button" onClick={() => setShowAdd(false)}>Cancel</Button>

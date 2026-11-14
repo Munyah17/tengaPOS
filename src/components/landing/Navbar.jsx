@@ -8,7 +8,7 @@ import posLogo from '@/assets/pos-logo.png'
 const navLinks = [
   { label: 'Features', href: '#features' },
   { label: 'Pricing', href: '#pricing' },
-  { label: 'Get Barcodes', href: 'http://scancode.co.zw', external: true },
+  { label: 'Get Barcodes', href: 'https://www.scancode.co.zw', external: true },
 ]
 
 export default function Navbar() {

@@ -70,7 +70,9 @@ export default function EquipmentRental() {
     setLoading(true)
     fetchEquipmentRentals(tenant.id).then(setRentals).catch((err) => toast.error(err.message || 'Failed to load rentals')).finally(() => setLoading(false))
   }
+  /* eslint-disable react-hooks/set-state-in-effect -- fetch-on-mount data load */
   useEffect(load, [tenant?.id])
+  /* eslint-enable react-hooks/set-state-in-effect */
   useEffect(() => { if (tenant?.id) fetchBranches(tenant.id).then(setBranches).catch((err) => console.warn('Failed to load branches:', err)) }, [tenant?.id])
 
   const filtered = useMemo(() => {
