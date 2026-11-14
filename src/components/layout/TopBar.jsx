@@ -35,7 +35,7 @@ function useClickOutside(ref, handler) {
 
 export default function TopBar({ onMenuClick }) {
   const { posMode, setPosMode } = useThemeStore()
-  const { profile, role, clearAuth, tenant } = useAuthStore()
+  const { profile, role, clearAuth, tenant, branch, allowedBranches, setActiveBranch } = useAuthStore()
   const { fiscalDayStatus, isEnabled: fiscalEnabled } = useFiscalStore()
   const navigate = useNavigate()
   const [isOnline, setIsOnline] = useState(navigator.onLine)
@@ -118,6 +118,25 @@ export default function TopBar({ onMenuClick }) {
       {/* Spacer keeps right-side items right-aligned — the header has no search box.
           Product search lives on the POS and Inventory pages where it's actually needed. */}
       <div className="flex-1" />
+
+      {/* Branch switcher — Vendor can move between every branch; other
+          roles only ever see the branches they were assigned (home +
+          grants), enforced again server-side by process_checkout/RLS. */}
+      {allowedBranches.length > 1 && (
+        <select
+          value={branch?.id || ''}
+          onChange={(e) => {
+            const b = allowedBranches.find((x) => x.id === e.target.value)
+            if (b) setActiveBranch(b)
+          }}
+          title="Active branch"
+          className="mr-2 max-w-[130px] flex-shrink-0 rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs font-semibold text-slate-700 focus:border-brand-500 focus:outline-none dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 sm:max-w-[160px]"
+        >
+          {allowedBranches.map((b) => (
+            <option key={b.id} value={b.id}>{b.name}</option>
+          ))}
+        </select>
+      )}
 
       {/* Right — its own scroll container so on a narrow/mid-size tablet
           (enough width to clear the `lg:hidden` hamburger breakpoint, not

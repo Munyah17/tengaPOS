@@ -16,7 +16,22 @@ const CHECKOUT_SAFE_ERROR_PATTERNS = [
   /discount authorization/i,
   /manager authorization/i,
   /not authorized for this tenant/i,
+  /not authorized to sell at this branch/i,
+  /not stocked at this branch/i,
 ]
+
+// Mirrors the branch_scope_products RLS policy (and process_checkout's
+// sellable-at-branch rule): a product belongs to its home branch
+// (branch_id) plus any extra branches granted in product_branches;
+// branch_id NULL with no grants is shared across every branch. A falsy
+// branchId means "no branch context" (e.g. vendor oversight views) —
+// everything stays visible, same as before branch scoping existed.
+export function productVisibleAtBranch(product, branchId) {
+  if (!branchId) return true
+  const grants = (product?.product_branches || []).map((g) => g?.branch_id ?? g).filter(Boolean)
+  if (product?.branch_id) return product.branch_id === branchId || grants.includes(branchId)
+  return grants.length === 0 || grants.includes(branchId)
+}
 
 // ─── Products ────────────────────────────────────────────────────────────────
 
@@ -33,7 +48,7 @@ const CHECKOUT_SAFE_ERROR_PATTERNS = [
 export async function fetchProducts(tenantId, _retried = false) {
   const { data, error } = await supabase
     .from('products')
-    .select('*, categories(name, color)')
+    .select('*, categories(name, color), product_branches(branch_id)')
     .eq('tenant_id', tenantId)
     .eq('is_active', true)
     .order('name')
@@ -847,7 +862,9 @@ export async function fetchStockTransfers(tenantId) {
       products(name, sku),
       from_branch:branches!stock_transfers_from_branch_id_fkey(name),
       to_branch:branches!stock_transfers_to_branch_id_fkey(name),
-      users(name)
+      requester:users!stock_transfers_created_by_fkey(name),
+      approver:users!stock_transfers_approved_by_fkey(name),
+      receiver:users!stock_transfers_received_by_fkey(name)
     `)
     .eq('tenant_id', tenantId)
     .order('created_at', { ascending: false })
@@ -868,6 +885,39 @@ export async function transferStock(tenantId, productId, toBranchId, qty, note) 
     p_qty: qty,
     p_note: note || null,
   })
+  if (error) throw error
+  return data
+}
+
+// ─── Transfer workflow: request -> dispatch (signed authorisation) ->
+// receive (signed receipt). See 1787200000_stock_transfer_workflow.sql.
+export async function requestStockTransfer(tenantId, productId, toBranchId, qty, note) {
+  const { data, error } = await supabase.rpc('request_stock_transfer', {
+    p_tenant_id: tenantId, p_product_id: productId, p_to_branch_id: toBranchId,
+    p_qty: qty, p_note: note || null,
+  })
+  if (error) throw error
+  return data
+}
+
+export async function dispatchStockTransfer(transferId, signature) {
+  const { data, error } = await supabase.rpc('dispatch_stock_transfer', {
+    p_transfer_id: transferId, p_signature: signature,
+  })
+  if (error) throw error
+  return data
+}
+
+export async function receiveStockTransfer(transferId, signature, note) {
+  const { data, error } = await supabase.rpc('receive_stock_transfer', {
+    p_transfer_id: transferId, p_signature: signature, p_note: note || null,
+  })
+  if (error) throw error
+  return data
+}
+
+export async function cancelStockTransfer(transferId) {
+  const { data, error } = await supabase.rpc('cancel_stock_transfer', { p_transfer_id: transferId })
   if (error) throw error
   return data
 }

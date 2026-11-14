@@ -11,6 +11,7 @@ import { useReceiptConfigStore } from '@/stores/receiptConfigStore'
 import { useFiscalStore } from '@/stores/fiscalStore'
 import { startBackgroundSync } from '@/lib/offlineSync'
 import { fetchEffectiveReceiptConfig } from '@/lib/db'
+import { fetchBranches, fetchUserBranches } from '@/lib/dataLayer'
 import { loadWithOfflineCache } from '@/lib/offlineCache'
 import { applyWhitelabelTheme, clearWhitelabelTheme } from '@/lib/whitelabelTheme'
 import { supabase } from '@/lib/supabase'
@@ -23,7 +24,7 @@ const DEMO_SWITCHABLE_ROLES = ['vendor', 'shop_manager', 'supervisor', 'cashier'
 
 export default function AppLayout() {
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false)
-  const { tenant, branch, role } = useAuthStore()
+  const { tenant, branch, role, user, profile } = useAuthStore()
   const location = useLocation()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
@@ -129,6 +130,42 @@ export default function AppLayout() {
       useThemeStore.getState().setPosMode(tenant.pos_mode || enabled[0])
     }
   }, [tenant?.id, tenant?.pos_mode, tenant?.enabled_modes])
+
+  // Branch scope: decide which branches this user may act in and make sure
+  // the active branch (`branch`, read by every page) is one of them.
+  // Vendor sees/switches across ALL branches; everyone else is limited to
+  // their home branch plus explicit user_branches grants — the same set
+  // get_user_branch_ids() enforces server-side, so the switcher can never
+  // offer a branch checkout would reject. profile.branch is the home
+  // branch resolved at login (users.branch_id, main-branch fallback);
+  // activeBranchId restores a previous selection after reload.
+  useEffect(() => {
+    if (!tenant?.id || !user?.id || isDemoRoute()) return
+    let cancelled = false
+    ;(async () => {
+      try {
+        const all = await fetchBranches(tenant.id)
+        const grants = role === 'vendor' ? [] : await fetchUserBranches(user.id)
+        if (cancelled) return
+        const homeId = profile?.branch?.id || null
+        const allowed = role === 'vendor'
+          ? all
+          : all.filter((b) => b.id === homeId || grants.includes(b.id))
+        // A legacy user with no branch assignment at all keeps whatever
+        // get_my_profile gave them rather than being branch-locked out.
+        const effective = allowed.length ? allowed : (profile?.branch ? [profile.branch] : [])
+        const store = useAuthStore.getState()
+        store.setAllowedBranches(effective)
+        const target = effective.find((b) => b.id === store.activeBranchId)
+          || effective.find((b) => b.id === homeId)
+          || effective[0]
+          || null
+        if (target && target.id !== store.branch?.id) store.setActiveBranch(target)
+      } catch { /* offline — keep the last-known branch, RLS still guards data */ }
+    })()
+    return () => { cancelled = true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tenant?.id, user?.id, role, profile?.branch?.id])
 
   // Lock body scroll when mobile sidebar is open
   useEffect(() => {

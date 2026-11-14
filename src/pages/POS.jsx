@@ -18,7 +18,7 @@ import { formatCurrency, formatUnitPrice, generateReceiptNumber, stripLeadingZer
 import { FRACTIONAL_UNITS, unitStep } from '@/lib/units'
 import { initiatePaynowCheckout } from '@/lib/paynow'
 import { fetchProducts, saveCheckout, fetchStaff, completeJobCard, recordPrescriptionDispense, recordAgeVerification } from '@/lib/dataLayer'
-import { authorizeDiscountOverride, fetchPrescriptions, logDrawerOpen, triggerSosAlert, findOrCreateCustomer, createVehicle } from '@/lib/db'
+import { authorizeDiscountOverride, fetchPrescriptions, logDrawerOpen, triggerSosAlert, findOrCreateCustomer, createVehicle, productVisibleAtBranch } from '@/lib/db'
 import { kickCashDrawer } from '@/lib/posPrinter'
 import { isDemoRoute } from '@/lib/demoMode'
 import { getOfflineProducts, queueOfflineSale } from '@/lib/offlineSync'
@@ -188,7 +188,7 @@ export default function POS() {
     enabled: !!tenant?.id,
     staleTime: 30000,
   })
-  const liveProducts = productsQuery.data || []
+  const liveProducts = useMemo(() => productsQuery.data || [], [productsQuery.data])
   const productsLoading = productsQuery.isLoading
 
   useEffect(() => {
@@ -281,7 +281,13 @@ export default function POS() {
     }
   }
 
-  const products = liveProducts
+  // Branch scope: the till only sells what belongs to the signed-in user's
+  // branch — their home-branch product rows, shared (unassigned) catalog
+  // items, and anything explicitly granted to that branch. Without this a
+  // multi-branch tenant's catalogue showed every branch's copy of the same
+  // item at once, each with its own stock, and a tap could decrement a
+  // different branch's row while the order was stamped with this one.
+  const products = liveProducts.filter((p) => productVisibleAtBranch(p, branch?.id))
   const categories = isRestaurant ? restaurantCategories : [{ id: 'all', name: 'All' }]
 
   const filtered = useMemo(() => {

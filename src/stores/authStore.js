@@ -83,6 +83,13 @@ export const useAuthStore = create(
       tenant: null,
       role: null,
       branch: null,
+      // Branch switching: `branch` stays the ACTIVE branch every page reads;
+      // activeBranchId is its persisted id so the selection survives a
+      // reload, and allowedBranches is the set the switcher may offer —
+      // every branch for a Vendor, only assigned branches (home + grants)
+      // for everyone else. Populated by AppLayout once branches load.
+      activeBranchId: null,
+      allowedBranches: [],
       userType: null,
       tenantStatus: null,
       isAuthenticated: false,
@@ -372,6 +379,8 @@ export const useAuthStore = create(
           tenant: null,
           role: null,
           branch: null,
+          activeBranchId: null,
+          allowedBranches: [],
           userType: null,
           tenantStatus: null,
           isAuthenticated: false,
@@ -443,6 +452,9 @@ export const useAuthStore = create(
       setAuth: ({ user, session, profile, tenant, role, branch }) =>
         set({ user, session, profile, tenant, role, branch, isAuthenticated: !!user, isLoading: false }),
 
+      setAllowedBranches: (allowedBranches) => set({ allowedBranches }),
+      setActiveBranch: (branch) => set({ branch, activeBranchId: branch?.id || null }),
+
       // Merges a partial tenant row (e.g. from a realtime UPDATE payload) into
       // the current tenant in place — so plan approvals, trial extensions, or
       // status changes made elsewhere (Super Admin, payment webhook) reach an
@@ -465,6 +477,7 @@ export const useAuthStore = create(
         tenant: state.tenant,
         role: state.role,
         branch: state.branch,
+        activeBranchId: state.activeBranchId,
         userType: state.userType,
         isAuthenticated: state.isAuthenticated,
         tenantStatus: state.tenantStatus,

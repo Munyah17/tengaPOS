@@ -272,7 +272,9 @@ export default function Staff() {
                         >
                           <Pencil className="h-4 w-4" />
                         </button>
-                        {member.role !== 'vendor' && branches.length > 1 && (
+                        {/* Branch grants are Vendor-only — a shop_manager's
+                            own branches are assigned by the Vendor too. */}
+                        {role === 'vendor' && member.role !== 'vendor' && branches.length > 1 && (
                           <button
                             onClick={() => openBranchesEdit(member)}
                             className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800"

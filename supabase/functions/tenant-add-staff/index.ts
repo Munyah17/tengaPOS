@@ -66,6 +66,31 @@ serve(async (req) => {
       return json({ error: 'Password must be at least 8 characters' }, 400)
     }
 
+    // Vendor-only branch grants (see 1787100000): a shop_manager may add
+    // staff, but only into branches THEY are assigned to — their own access
+    // was granted by the Vendor, and they can't widen it for new hires.
+    if (callerRow.role === 'shop_manager') {
+      const { data: callerUser } = await admin
+        .from('users')
+        .select('branch_id')
+        .eq('id', caller.id)
+        .maybeSingle()
+      const { data: callerGrants } = await admin
+        .from('user_branches')
+        .select('branch_id')
+        .eq('user_id', caller.id)
+      const allowedBranchIds = new Set(
+        [callerUser?.branch_id, ...(callerGrants || []).map((g) => g.branch_id)]
+          .filter(Boolean)
+      )
+      if (!allowedBranchIds.size) {
+        return json({ error: 'Your account has no branch assigned — ask the business owner to assign you one first' }, 403)
+      }
+      if (branch_id && !allowedBranchIds.has(branch_id)) {
+        return json({ error: 'You can only add staff to branches you are assigned to' }, 403)
+      }
+    }
+
     if (features.max_users_per_branch != null) {
       if (!branch_id) return json({ error: 'Select a branch for this staff member' }, 400)
       const { data: branchRow } = await admin

@@ -4,7 +4,7 @@
 import { db, addToSyncQueue, getSyncQueueItems, removeSyncQueueItem, markSyncItemFailed } from '@/db'
 import {
   fetchProducts, saveCheckout, insertProduct, updateProduct,
-  receiveStock, adjustStockByDelta, transferStock, requestVoid, requestReturn, recordStockTakeCount,
+  receiveStock, adjustStockByDelta, transferStock, requestStockTransfer, requestVoid, requestReturn, recordStockTakeCount,
 } from '@/lib/db'
 import { generateUUID } from '@/lib/uuid'
 
@@ -34,6 +34,7 @@ const PERMANENT_ERROR_PATTERNS = [
   // count ever got a chance to sync. Same reasoning as insufficient stock
   // above: surface it for a person to look at, not loop forever.
   /product not found/i, /services don't carry stock/i, /source and destination branch must be different/i,
+  /not stocked at this branch/i, /not authorized to sell at this branch/i,
   /already pending or completed/i, /order not found/i, /reason is required/i, /refund amount/i,
   /stock take not found/i, /already completed/i, /counted quantity cannot be negative/i,
 ]
@@ -100,6 +101,10 @@ const REPLAY_ACTIONS = {
   // while.
   adjust_stock: (data) => adjustStockByDelta(data.tenantId, data.productId, data.delta, data.note),
   transfer_stock: (data) => transferStock(data.tenantId, data.productId, data.toBranchId, data.qty, data.note),
+  // New transfers queue as REQUESTS only -- they move no stock until a
+  // manager dispatches and the destination signs, so replaying one late
+  // is always safe.
+  request_stock_transfer: (data) => requestStockTransfer(data.tenantId, data.productId, data.toBranchId, data.qty, data.note),
   void_request: (data) => requestVoid(data.orderId, data.reason),
   return_request: (data) => requestReturn(data.orderId, data.reason, data.refundAmount),
   stock_take_count: (data) => recordStockTakeCount(data.stockTakeId, data.productId, data.countedQty, data.note),

@@ -198,12 +198,29 @@ export async function fetchStockTransfers() {
   const s = store()
   return s.stockTransfers.map((t) => {
     const p = s.products.find((pr) => pr.id === t.product_id)
-    return { ...t, products: p ? { name: p.name, sku: p.sku } : null, from_branch: { name: s.branches[0]?.name }, to_branch: { name: s.branches[0]?.name }, users: { name: null } }
+    return {
+      ...t,
+      status: t.status || 'received',
+      products: p ? { name: p.name, sku: p.sku } : null,
+      from_branch: { name: s.branches[0]?.name },
+      to_branch: { name: s.branches[0]?.name },
+      requester: { name: null }, approver: { name: null }, receiver: { name: null },
+    }
   })
 }
 export async function transferStock(_tenantId, productId, toBranchId, qty, note) {
   return store().transferStockRow(productId, toBranchId, qty, note)
 }
+// Demo collapses the request->dispatch->receive workflow into the same
+// instant transfer the sandbox always did -- the real approval chain only
+// exists against real accounts anyway.
+export async function requestStockTransfer(_tenantId, productId, toBranchId, qty, note) {
+  const result = await transferStock(_tenantId, productId, toBranchId, qty, note)
+  return { id: result?.dest_product_id || `demo-${Date.now()}`, status: 'received' }
+}
+export async function dispatchStockTransfer() { return { status: 'in_transit' } }
+export async function receiveStockTransfer() { return { status: 'received' } }
+export async function cancelStockTransfer() { return { status: 'cancelled' } }
 export async function fetchStockReceipts() {
   const s = store()
   return s.stockReceipts.map((r) => {

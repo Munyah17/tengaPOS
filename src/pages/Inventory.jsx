@@ -16,10 +16,13 @@ import { useAuthStore } from '@/stores/authStore'
 import {
   fetchProducts, insertProduct, bulkInsertProducts, updateProduct, deleteProduct, uploadProductImage,
   fetchBranches, fetchProductBranches, assignProductBranch, unassignProductBranch,
-  fetchCategories, createCategory, fetchStockTransfers, transferStock,
+  fetchCategories, createCategory, fetchStockTransfers,
+  requestStockTransfer, dispatchStockTransfer, receiveStockTransfer, cancelStockTransfer,
+  fetchUserBranches,
   fetchStockReceipts, receiveStock, adjustStock, fetchStockAdjustments,
 } from '@/lib/dataLayer'
 import { getOfflineProducts, queueOfflineInventoryWrite, queueOfflineAction } from '@/lib/offlineSync'
+import { productVisibleAtBranch } from '@/lib/db'
 import { isNetworkError } from '@/lib/authRetry'
 import { resizeImageFile } from '@/utils/imageResize'
 import toast from 'react-hot-toast'
@@ -51,12 +54,13 @@ const DISPENSING_CLASSES = [
 
 export default function Inventory() {
   const { posMode } = useThemeStore()
-  const { tenant, branch } = useAuthStore()
+  const { tenant, branch, role, user, profile } = useAuthStore()
   const isRestaurant = posMode === 'restaurant'
   const isHardware = posMode === 'hardware'
   const isPharmacy = posMode === 'pharmacy'
   const isBar = posMode === 'bar'
   const [search, setSearch] = useState('')
+  const [branchFilter, setBranchFilter] = useState('all')
   const [showAdd, setShowAdd] = useState(false)
   const [showImport, setShowImport] = useState(false)
   const [importProgress, setImportProgress] = useState(null) // { done, total } while a mass import is running
@@ -75,6 +79,13 @@ export default function Inventory() {
   const [transferForm, setTransferForm] = useState({ productId: '', toBranchId: '', qty: '', note: '' })
   const [transferring, setTransferring] = useState(false)
   const [transfers, setTransfers] = useState([])
+  const [userBranchIds, setUserBranchIds] = useState([])
+  // Signed transfer workflow: request -> dispatch (manager authorises) ->
+  // receive (destination signs). signOff drives the one modal all three
+  // actions share; `mode` picks which RPC it calls.
+  const [signOff, setSignOff] = useState(null) // { mode: 'dispatch'|'receive'|'cancel', transfer }
+  const [signOffForm, setSignOffForm] = useState({ signature: '', note: '' })
+  const [signing, setSigning] = useState(false)
   const [showReceive, setShowReceive] = useState(false)
   const [receiveForm, setReceiveForm] = useState({ productId: '', qty: '', note: '' })
   const [receiving, setReceiving] = useState(false)
@@ -95,6 +106,13 @@ export default function Inventory() {
     fetchStockTransfers(tenant.id).then(setTransfers).catch(() => {})
   }
   useEffect(loadTransfers, [tenant?.id])
+
+  // Branches this user belongs to (home + grants) — decides who can sign
+  // for receipt at the destination. Vendor/managers bypass this check.
+  useEffect(() => {
+    if (!tenant?.id || !user?.id || role === 'vendor') return
+    fetchUserBranches(user.id).then(setUserBranchIds).catch(() => {})
+  }, [tenant?.id, user?.id, role])
 
   const openTransfer = () => {
     setTransferForm({ productId: '', toBranchId: '', qty: '', note: '' })
@@ -163,11 +181,13 @@ export default function Inventory() {
     enabled: !!tenant?.id,
     staleTime: 30000,
   })
-  const products = productsQuery.data || []
+  const products = useMemo(() => productsQuery.data || [], [productsQuery.data])
   const loading = productsQuery.isLoading
 
   const transferProduct = products.find((p) => p.id === transferForm.productId)
   const transferDestBranches = branches.filter((b) => b.id !== transferProduct?.branch_id)
+
+  const canManageTransfers = ['vendor', 'shop_manager', 'supervisor'].includes(role)
 
   const handleTransfer = async (e) => {
     e.preventDefault()
@@ -177,27 +197,55 @@ export default function Inventory() {
     if (!qty || qty <= 0) { toast.error('Enter a quantity greater than zero'); return }
     setTransferring(true)
     try {
-      await transferStock(tenant.id, transferForm.productId, transferForm.toBranchId, qty, transferForm.note.trim() || null)
-      toast.success('Stock transferred')
-      queryClient.invalidateQueries({ queryKey: ['products', tenant.id] })
+      // Requests only — nothing moves until a manager dispatches it and the
+      // destination signs for it (see the sign-off modal below).
+      await requestStockTransfer(tenant.id, transferForm.productId, transferForm.toBranchId, qty, transferForm.note.trim() || null)
+      toast.success('Transfer requested — awaiting authorization')
       loadTransfers()
       setShowTransfer(false)
     } catch (err) {
-      // Same principle as POS checkout: attempt the real call first and
-      // only treat it as offline if the network itself failed, rather
-      // than pre-guessing off navigator.onLine (unreliable -- see
-      // offlineSync.js). A genuine server rejection (branch mismatch,
-      // insufficient stock) surfaces immediately instead of being queued
-      // to fail the exact same way again later.
+      // Same offline treatment as before: a request is safe to queue since
+      // it moves no stock by itself.
       if (isNetworkError(err)) {
-        await queueOfflineAction('transfer_stock', { tenantId: tenant.id, productId: transferForm.productId, toBranchId: transferForm.toBranchId, qty, note: transferForm.note.trim() || null })
-        toast('Offline — transfer saved, will sync automatically', { icon: '📴' })
+        await queueOfflineAction('request_stock_transfer', { tenantId: tenant.id, productId: transferForm.productId, toBranchId: transferForm.toBranchId, qty, note: transferForm.note.trim() || null })
+        toast('Offline — transfer request saved, will sync automatically', { icon: '📴' })
         setShowTransfer(false)
       } else {
-        toast.error(err.message || 'Failed to transfer stock')
+        toast.error(err.message || 'Failed to request transfer')
       }
     } finally {
       setTransferring(false)
+    }
+  }
+
+  const openSignOff = (mode, transfer) => {
+    setSignOff({ mode, transfer })
+    setSignOffForm({ signature: profile?.name || '', note: '' })
+  }
+
+  const handleSignOff = async (e) => {
+    e.preventDefault()
+    const signature = signOffForm.signature.trim()
+    if (!signature) { toast.error('Type your full name to sign'); return }
+    setSigning(true)
+    try {
+      if (signOff.mode === 'dispatch') {
+        await dispatchStockTransfer(signOff.transfer.id, signature)
+        toast.success('Transfer authorized and dispatched')
+      } else if (signOff.mode === 'receive') {
+        await receiveStockTransfer(signOff.transfer.id, signature, signOffForm.note.trim() || null)
+        toast.success('Transfer received — stock added at destination')
+      } else {
+        await cancelStockTransfer(signOff.transfer.id)
+        toast.success('Transfer cancelled')
+      }
+      queryClient.invalidateQueries({ queryKey: ['products', tenant.id] })
+      loadTransfers()
+      setSignOff(null)
+    } catch (err) {
+      toast.error(err.message || 'Failed to complete transfer step')
+    } finally {
+      setSigning(false)
     }
   }
 
@@ -290,22 +338,31 @@ export default function Inventory() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [productsQuery.isError])
 
+  // Branch filter: 'all' shows everything the caller can see (vendor = the
+  // whole tenant, staff = whatever RLS already scoped to their branches);
+  // picking a branch narrows to products that belong to / are granted to it,
+  // so each branch's own stock rows stop reading as one mixed list.
+  const branchScoped = useMemo(
+    () => (branchFilter === 'all' ? products : products.filter((p) => productVisibleAtBranch(p, branchFilter))),
+    [products, branchFilter]
+  )
+
   const filtered = useMemo(() => {
-    if (!search) return products
+    if (!search) return branchScoped
     const q = search.toLowerCase()
-    return products.filter(
+    return branchScoped.filter(
       p => (p.name || '').toLowerCase().includes(q) ||
         (p.sku || '').toLowerCase().includes(q) ||
         (p.barcode || '').includes(q) ||
         (p.category || '').toLowerCase().includes(q)
     )
-  }, [products, search])
+  }, [branchScoped, search])
 
   const stats = useMemo(() => ({
-    total: products.length,
-    lowStock: products.filter(p => !p.is_service && p.stock_qty <= (p.low_stock_threshold ?? 10)).length,
-    totalValue: products.reduce((s, p) => s + parseFloat(p.price || 0) * (p.stock_qty ?? p.stock ?? 0), 0),
-  }), [products])
+    total: branchScoped.length,
+    lowStock: branchScoped.filter(p => !p.is_service && p.stock_qty <= (p.low_stock_threshold ?? 10)).length,
+    totalValue: branchScoped.reduce((s, p) => s + parseFloat(p.price || 0) * (p.stock_qty ?? p.stock ?? 0), 0),
+  }), [branchScoped])
 
   const resetImagePicker = () => {
     setImageFile(null)
@@ -544,6 +601,9 @@ export default function Inventory() {
           lowStockThreshold: row.low_stock_threshold,
           vatTreatment: ['standard', 'zero_rated', 'exempt'].includes(row.vat_treatment) ? row.vat_treatment : 'standard',
           attributes,
+          // Same default as the single-product form: non-vendor staff import
+          // into their own branch; vendors leave it unassigned (shared).
+          branchId: role === 'vendor' ? null : (branch?.id || null),
           // Bulk-imported rows are assumed to have no photo yet — flagged for follow-up
           imageUnavailable: true,
         }
@@ -612,7 +672,7 @@ export default function Inventory() {
           </Button>
           {branches.length > 1 && (
             <Button variant="secondary" onClick={openTransfer}>
-              <ArrowLeftRight className="h-4 w-4" /> Transfer Stock
+              <ArrowLeftRight className="h-4 w-4" /> Request Transfer
             </Button>
           )}
           <Button variant={isRestaurant ? 'restaurant' : isHardware ? 'hardware' : isPharmacy ? 'pharmacy' : 'primary'} onClick={openAdd}>
@@ -642,9 +702,9 @@ export default function Inventory() {
         ))}
       </div>
 
-      {/* Search */}
-      <div className="mb-4">
-        <div className="relative">
+      {/* Search + branch filter */}
+      <div className="mb-4 flex flex-col gap-3 sm:flex-row">
+        <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
           <input
             type="text"
@@ -654,6 +714,16 @@ export default function Inventory() {
             className="w-full rounded-xl border border-slate-200 bg-white py-2.5 pl-10 pr-4 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 dark:border-slate-700 dark:bg-slate-900 dark:text-white"
           />
         </div>
+        {branches.length > 1 && (
+          <select
+            value={branchFilter}
+            onChange={(e) => setBranchFilter(e.target.value)}
+            className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700 focus:border-brand-500 focus:outline-none dark:border-slate-700 dark:bg-slate-900 dark:text-white"
+          >
+            <option value="all">All branches</option>
+            {branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+          </select>
+        )}
       </div>
 
       {/* Table */}
@@ -667,14 +737,14 @@ export default function Inventory() {
             <table className="w-full">
               <thead>
                 <tr className="border-b border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-900">
-                  {['Product', 'SKU', 'Category', 'Price', 'Stock', 'Actions'].map(h => (
+                  {['Product', 'SKU', 'Category', ...(branches.length > 1 ? ['Branch'] : []), 'Price', 'Stock', 'Actions'].map(h => (
                     <th key={h} className="px-4 py-3 text-left text-xs font-semibold uppercase text-slate-500">{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
                 {filtered.length === 0 ? (
-                  <tr><td colSpan={6} className="py-12 text-center text-sm text-slate-400">
+                  <tr><td colSpan={branches.length > 1 ? 7 : 6} className="py-12 text-center text-sm text-slate-400">
                     {products.length === 0 ? 'No products yet — add your first product to get started.' : 'No products match your search.'}
                   </td></tr>
                 ) : filtered.map(product => {
@@ -707,6 +777,13 @@ export default function Inventory() {
                           ? <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300">{product.category}</span>
                           : '—'}
                       </td>
+                      {branches.length > 1 && (
+                        <td className="px-4 py-3 text-sm text-slate-600 dark:text-slate-400">
+                          {product.branch_id
+                            ? branches.find((b) => b.id === product.branch_id)?.name || '—'
+                            : 'Shared'}
+                        </td>
+                      )}
                       <td className="px-4 py-3 text-sm font-semibold text-slate-900 dark:text-white">{formatUnitPrice(product.price)}</td>
                       <td className="px-4 py-3">
                         {product.is_service ? (
@@ -922,41 +999,91 @@ export default function Inventory() {
         </form>
       </Modal>
 
-      {/* Recent branch-to-branch stock transfers */}
+      {/* Branch-to-branch stock transfers — request -> authorize/dispatch
+          -> receive, each step signed. Only Vendor/managers authorize;
+          only destination-branch staff (or managers) sign for receipt. */}
       {branches.length > 1 && transfers.length > 0 && (
         <div className="mt-6 overflow-hidden rounded-2xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
           <div className="border-b border-slate-200 px-4 py-3 dark:border-slate-800">
-            <h2 className="text-sm font-bold text-slate-900 dark:text-white">Recent Transfers</h2>
+            <h2 className="text-sm font-bold text-slate-900 dark:text-white">Stock Transfers</h2>
+            <p className="mt-0.5 text-xs text-slate-400">
+              Stock only moves once a manager authorizes dispatch and the receiving branch signs — every step is recorded below.
+            </p>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
                 <tr className="border-b border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-900">
-                  {['Date', 'Product', 'From', 'To', 'Qty', 'By', 'Note'].map((h) => (
+                  {['Date', 'Product', 'Route', 'Qty', 'Status', 'Signatures', 'Actions'].map((h) => (
                     <th key={h} className="px-4 py-2 text-left text-xs font-semibold uppercase text-slate-500">{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
-                {transfers.map((t) => (
-                  <tr key={t.id} className="border-b border-slate-100 dark:border-slate-800">
-                    <td className="px-4 py-2 text-xs text-slate-500">{formatDateTime(t.created_at)}</td>
-                    <td className="px-4 py-2 text-sm text-slate-700 dark:text-slate-300">{t.products?.name || '—'}</td>
-                    <td className="px-4 py-2 text-sm text-slate-500">{t.from_branch?.name || 'Unassigned'}</td>
-                    <td className="px-4 py-2 text-sm text-slate-500">{t.to_branch?.name || '—'}</td>
-                    <td className="px-4 py-2 text-sm font-semibold text-slate-900 dark:text-white">{t.qty}</td>
-                    <td className="px-4 py-2 text-xs text-slate-500">{t.users?.name || '—'}</td>
-                    <td className="px-4 py-2 text-xs text-slate-400">{t.note || '—'}</td>
-                  </tr>
-                ))}
+                {transfers.map((t) => {
+                  const status = t.status || 'received'
+                  const isRequester = t.created_by === user?.id
+                  const canDispatch = status === 'pending' && canManageTransfers && !isRequester
+                  const canCancel = status === 'pending' && (canManageTransfers || isRequester)
+                  const canReceive = status === 'in_transit' && (canManageTransfers || userBranchIds.includes(t.to_branch_id))
+                  const statusStyle = {
+                    pending: 'bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300',
+                    in_transit: 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300',
+                    received: 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300',
+                    cancelled: 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400',
+                  }[status] || 'bg-slate-100 text-slate-500'
+                  return (
+                    <tr key={t.id} className="border-b border-slate-100 dark:border-slate-800">
+                      <td className="px-4 py-2 text-xs text-slate-500">{formatDateTime(t.created_at)}</td>
+                      <td className="px-4 py-2 text-sm text-slate-700 dark:text-slate-300">{t.products?.name || '—'}</td>
+                      <td className="px-4 py-2 text-sm text-slate-500">
+                        {t.from_branch?.name || 'Unassigned'} → {t.to_branch?.name || '—'}
+                      </td>
+                      <td className="px-4 py-2 text-sm font-semibold text-slate-900 dark:text-white">{t.qty}</td>
+                      <td className="px-4 py-2">
+                        <span className={`rounded-full px-2.5 py-0.5 text-xs font-bold capitalize ${statusStyle}`}>
+                          {status.replace('_', ' ')}
+                        </span>
+                      </td>
+                      <td className="px-4 py-2 text-xs text-slate-500">
+                        <div>Req: {t.requester?.name || t.users?.name || '—'}</div>
+                        {(t.approver || t.source_signed_by) && <div>Auth: {t.source_signed_by || t.approver?.name}</div>}
+                        {(t.receiver || t.dest_signed_by) && <div>Rcv: {t.dest_signed_by || t.receiver?.name}</div>}
+                        {t.receive_note && <div className="text-slate-400">Note: {t.receive_note}</div>}
+                      </td>
+                      <td className="px-4 py-2">
+                        <div className="flex gap-1.5">
+                          {canDispatch && (
+                            <button onClick={() => openSignOff('dispatch', t)} className="rounded-lg bg-blue-600 px-2.5 py-1 text-xs font-bold text-white hover:bg-blue-700">
+                              Authorize
+                            </button>
+                          )}
+                          {canReceive && (
+                            <button onClick={() => openSignOff('receive', t)} className="rounded-lg bg-green-600 px-2.5 py-1 text-xs font-bold text-white hover:bg-green-700">
+                              Receive
+                            </button>
+                          )}
+                          {canCancel && (
+                            <button onClick={() => openSignOff('cancel', t)} className="rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-semibold text-slate-500 hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800">
+                              Cancel
+                            </button>
+                          )}
+                          {!canDispatch && !canReceive && !canCancel && <span className="text-xs text-slate-300">—</span>}
+                        </div>
+                      </td>
+                    </tr>
+                  )
+                })}
               </tbody>
             </table>
           </div>
         </div>
       )}
 
-      {/* Transfer Stock Modal */}
-      <Modal isOpen={showTransfer} onClose={() => setShowTransfer(false)} title="Transfer Stock Between Branches">
+      {/* Request Stock Transfer Modal — creates a pending request only;
+          a manager must authorize dispatch and the destination branch must
+          sign for receipt before any stock actually moves. */}
+      <Modal isOpen={showTransfer} onClose={() => setShowTransfer(false)} title="Request Stock Transfer">
         <form onSubmit={handleTransfer} className="space-y-4">
           <div>
             <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">Product</label>
@@ -967,7 +1094,7 @@ export default function Inventory() {
               className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
             >
               <option value="">Select product…</option>
-              {products.map((p) => {
+              {products.filter((p) => p.branch_id).map((p) => {
                 const homeBranch = branches.find((b) => b.id === p.branch_id)
                 return <option key={p.id} value={p.id}>{p.name}{homeBranch ? ` — ${homeBranch.name}` : ''} (stock: {p.stock_qty ?? p.stock ?? 0})</option>
               })}
@@ -1011,13 +1138,72 @@ export default function Inventory() {
             />
           </div>
           <p className="text-xs text-slate-500">
-            Moves stock immediately — if the destination branch doesn't already have this product, it's created there automatically.
+            This only raises a request — no stock moves yet. A manager must authorize dispatch (signed), then the destination branch signs for receipt before the quantity lands there.
           </p>
           <div className="flex justify-end gap-2 pt-2">
             <Button variant="secondary" type="button" onClick={() => setShowTransfer(false)}>Cancel</Button>
-            <Button type="submit" disabled={transferring}>{transferring ? 'Transferring…' : 'Transfer Stock'}</Button>
+            <Button type="submit" disabled={transferring}>{transferring ? 'Requesting…' : 'Request Transfer'}</Button>
           </div>
         </form>
+      </Modal>
+
+      {/* Sign-off modal shared by authorize/dispatch, receive, and cancel —
+          the typed name is the signature recorded against the transfer. */}
+      <Modal
+        isOpen={!!signOff}
+        onClose={() => setSignOff(null)}
+        title={signOff?.mode === 'dispatch' ? 'Authorize & Dispatch Transfer'
+          : signOff?.mode === 'receive' ? 'Receive Stock Transfer'
+          : 'Cancel Transfer Request'}
+      >
+        {signOff && (
+          <form onSubmit={handleSignOff} className="space-y-4">
+            <div className="rounded-xl bg-slate-50 p-3 text-sm dark:bg-slate-800">
+              <p className="font-semibold text-slate-900 dark:text-white">{signOff.transfer.products?.name || 'Product'}</p>
+              <p className="text-slate-500">
+                {signOff.transfer.qty} × {signOff.transfer.from_branch?.name || 'Unassigned'} → {signOff.transfer.to_branch?.name || '—'}
+              </p>
+              {signOff.transfer.note && <p className="mt-1 text-xs text-slate-400">Note: {signOff.transfer.note}</p>}
+            </div>
+            {signOff.mode === 'dispatch' && (
+              <p className="text-xs text-slate-500">
+                Authorizing deducts {signOff.transfer.qty} from {signOff.transfer.from_branch?.name || 'the source branch'} immediately — it lands at {signOff.transfer.to_branch?.name} only when they sign for receipt. You can't authorize a transfer you requested yourself.
+              </p>
+            )}
+            {signOff.mode === 'receive' && (
+              <p className="text-xs text-slate-500">
+                Confirms {signOff.transfer.qty} of {signOff.transfer.products?.name || 'the product'} physically arrived — the destination branch's stock is credited now.
+              </p>
+            )}
+            <div>
+              <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">
+                Signature — type your full name {signOff.mode !== 'cancel' && <span className="text-red-500">*</span>}
+              </label>
+              <input
+                type="text" value={signOffForm.signature} autoFocus
+                onChange={(e) => setSignOffForm((f) => ({ ...f, signature: e.target.value }))}
+                className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+              />
+            </div>
+            {signOff.mode === 'receive' && (
+              <div>
+                <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">Receipt note (optional)</label>
+                <input
+                  type="text" value={signOffForm.note}
+                  onChange={(e) => setSignOffForm((f) => ({ ...f, note: e.target.value }))}
+                  placeholder="e.g. all units arrived in good condition"
+                  className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                />
+              </div>
+            )}
+            <div className="flex justify-end gap-2 pt-2">
+              <Button variant="secondary" type="button" onClick={() => setSignOff(null)}>Back</Button>
+              <Button type="submit" disabled={signing || (signOff.mode !== 'cancel' && !signOffForm.signature.trim())}>
+                {signing ? 'Saving…' : signOff.mode === 'dispatch' ? 'Authorize & Dispatch' : signOff.mode === 'receive' ? 'Sign & Receive' : 'Cancel Request'}
+              </Button>
+            </div>
+          </form>
+        )}
       </Modal>
 
       {/* Add / Edit Modal */}
