@@ -1763,6 +1763,23 @@ export async function unassignUserBranch(userId, branchId) {
   if (error) throw error
 }
 
+// All extra-branch grants across the tenant at once (user_branches rows),
+// for branch-centric management screens like Branches → staff access.
+export async function fetchUserBranchGrants(tenantId) {
+  const { data, error } = await supabase
+    .from('user_branches')
+    .select('user_id, branch_id, users!inner(tenant_id)')
+    .eq('users.tenant_id', tenantId)
+  if (error) throw error
+  return data || []
+}
+
+// A staff member's HOME branch (users.branch_id) — vendor-only RPC.
+export async function setStaffHomeBranch(userId, branchId) {
+  const { error } = await supabase.rpc('set_user_home_branch', { p_user_id: userId, p_branch_id: branchId })
+  if (error) throw error
+}
+
 export async function fetchProductBranches(productId) {
   const { data, error } = await supabase.from('product_branches').select('branch_id').eq('product_id', productId)
   if (error) throw error

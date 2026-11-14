@@ -180,6 +180,15 @@ export async function assignUserBranch(userId, branchId) {
 export async function unassignUserBranch(userId, branchId) {
   store().unassignUserBranchRow(userId, branchId)
 }
+export async function fetchUserBranchGrants() {
+  const s = store()
+  return Object.entries(s.userBranches || {}).flatMap(([user_id, ids]) =>
+    (ids || []).map((branch_id) => ({ user_id, branch_id }))
+  )
+}
+export async function setStaffHomeBranch(userId, branchId) {
+  store().updateStaffRow(userId, { branch_id: branchId || null })
+}
 export async function fetchProductBranches(productId) {
   return store().productBranches[productId] || []
 }

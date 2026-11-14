@@ -8,17 +8,23 @@ import {
 import { formatCurrency } from '@/utils/formatters'
 import { useAuthStore } from '@/stores/authStore'
 import Modal from '@/components/common/Modal'
-import { fetchBranches, insertBranch, updateBranch, deleteBranch } from '@/lib/db'
+import { fetchBranches, insertBranch, updateBranch, deleteBranch, fetchStaff, fetchUserBranchGrants, assignUserBranch, unassignUserBranch, setStaffHomeBranch } from '@/lib/db'
 import { loadWithOfflineCache } from '@/lib/offlineCache'
 import toast from 'react-hot-toast'
 
 const CAN_MANAGE = ['vendor']
 
+const ROLE_LABELS = {
+  vendor: 'Owner', shop_manager: 'Shop Manager', supervisor: 'Supervisor',
+  cashier: 'Cashier', shop_assistant: 'Shop Assistant', tech_support: 'Tech Support',
+}
+
 const BLANK = { name: '', location: '', address: '', phone: '', manager: '', status: 'active' }
 
-function BranchDetail({ branch, onBack }) {
+function BranchDetail({ branch, onBack, staff = [], grants = [], allBranches = [], canManageAccess = false, onGrant, onRevoke, onSetHome, accessBusy = null }) {
   const profit = branch.revenue - branch.expenses
   const margin = ((profit / branch.revenue) * 100).toFixed(1)
+  const grantSet = new Set(grants.filter((g) => g.branch_id === branch.id).map((g) => g.user_id))
 
   return (
     <div>
@@ -124,6 +130,90 @@ function BranchDetail({ branch, onBack }) {
             })}
           </div>
         </div>
+
+        {/* Staff access — Vendor-only. Shows who can act in this branch:
+            home-branch staff plus anyone granted extra access, with
+            grant/revoke and home-branch reassignment controls. */}
+        {canManageAccess && (
+          <div className="rounded-2xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900 lg:col-span-2">
+            <div className="mb-1 flex items-center justify-between">
+              <h3 className="text-sm font-bold text-slate-900 dark:text-white">Staff Access</h3>
+              <span className="text-xs text-slate-400">Only you can change who sees this branch</span>
+            </div>
+            <p className="mb-4 text-xs text-slate-500">
+              Home branch = their default branch at sign-in. Extra access = they can also switch into this branch.
+            </p>
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b border-slate-200 text-left text-xs font-semibold uppercase text-slate-500 dark:border-slate-800">
+                    {['Staff Member', 'Role', 'Access to this branch', 'Home branch', ''].map((h) => (
+                      <th key={h} className="px-2 py-2">{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {staff.filter((m) => m.role !== 'vendor').length === 0 && (
+                    <tr><td colSpan={5} className="px-2 py-6 text-center text-sm text-slate-400">No staff yet</td></tr>
+                  )}
+                  {staff.filter((m) => m.role !== 'vendor').map((m) => {
+                    const isHome = m.branch_id === branch.id
+                    const hasGrant = grantSet.has(m.id)
+                    const busy = accessBusy === m.id
+                    return (
+                      <tr key={m.id} className="border-b border-slate-100 dark:border-slate-800">
+                        <td className="px-2 py-2.5">
+                          <div className="text-sm font-semibold text-slate-900 dark:text-white">{m.name}</div>
+                          <div className="text-xs text-slate-400">{m.email}</div>
+                        </td>
+                        <td className="px-2 py-2.5 text-xs text-slate-500">{ROLE_LABELS[m.role] || m.role}</td>
+                        <td className="px-2 py-2.5">
+                          {isHome ? (
+                            <span className="rounded-full bg-brand-100 px-2.5 py-0.5 text-xs font-bold text-brand-700 dark:bg-brand-900/40 dark:text-brand-400">Home branch</span>
+                          ) : hasGrant ? (
+                            <span className="rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-bold text-green-700 dark:bg-green-900/40 dark:text-green-400">Extra access</span>
+                          ) : (
+                            <span className="text-xs text-slate-400">No access</span>
+                          )}
+                        </td>
+                        <td className="px-2 py-2.5">
+                          <select
+                            value={m.branch_id || ''}
+                            disabled={busy}
+                            onChange={(e) => onSetHome && onSetHome(m, e.target.value || null)}
+                            className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                          >
+                            <option value="">Unassigned</option>
+                            {allBranches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+                          </select>
+                        </td>
+                        <td className="px-2 py-2.5 text-right">
+                          {!isHome && (hasGrant ? (
+                            <button
+                              onClick={() => onRevoke && onRevoke(m)}
+                              disabled={busy}
+                              className="rounded-lg border border-red-200 px-2.5 py-1 text-xs font-semibold text-red-600 hover:bg-red-50 disabled:opacity-50 dark:border-red-800 dark:text-red-400 dark:hover:bg-red-950/30"
+                            >
+                              Revoke
+                            </button>
+                          ) : (
+                            <button
+                              onClick={() => onGrant && onGrant(m)}
+                              disabled={busy}
+                              className="rounded-lg bg-brand-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-brand-700 disabled:opacity-50"
+                            >
+                              Grant access
+                            </button>
+                          ))}
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )
@@ -143,6 +233,10 @@ export default function Branches() {
   const [editing, setEditing] = useState(null)
   const [showNew, setShowNew] = useState(false)
   const [form, setForm] = useState(BLANK)
+  // Staff-access management for the open branch (Vendor only).
+  const [staff, setStaff] = useState([])
+  const [grants, setGrants] = useState([])
+  const [accessBusy, setAccessBusy] = useState(null)
 
   const loadBranches = () => {
     if (!tenant?.id) return
@@ -164,10 +258,68 @@ export default function Branches() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tenant?.id])
 
+  // Load staff + their extra-branch grants whenever the Vendor opens a
+  // branch detail — powers the Staff Access card.
+  useEffect(() => {
+    if (!viewing || !canManage || !tenant?.id) return
+    fetchStaff(tenant.id).then(setStaff).catch(() => {})
+    fetchUserBranchGrants(tenant.id).then(setGrants).catch(() => {})
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [viewing?.id, canManage, tenant?.id])
+
+  const refreshAccess = async () => {
+    const [s, g] = await Promise.all([fetchStaff(tenant.id), fetchUserBranchGrants(tenant.id)])
+    setStaff(s); setGrants(g)
+  }
+
+  const handleGrantAccess = async (member) => {
+    setAccessBusy(member.id)
+    try {
+      await assignUserBranch(member.id, viewing.id)
+      await refreshAccess()
+      toast.success(`${member.name} can now access ${viewing.name}`)
+    } catch (err) {
+      toast.error(err.message || 'Failed to grant access')
+    } finally { setAccessBusy(null) }
+  }
+
+  const handleRevokeAccess = async (member) => {
+    setAccessBusy(member.id)
+    try {
+      await unassignUserBranch(member.id, viewing.id)
+      await refreshAccess()
+      toast.success(`Access to ${viewing.name} revoked for ${member.name}`)
+    } catch (err) {
+      toast.error(err.message || 'Failed to revoke access')
+    } finally { setAccessBusy(null) }
+  }
+
+  const handleSetHomeBranch = async (member, branchId) => {
+    setAccessBusy(member.id)
+    try {
+      await setStaffHomeBranch(member.id, branchId)
+      await refreshAccess()
+      toast.success(`${member.name}'s home branch updated`)
+    } catch (err) {
+      toast.error(err.message || 'Failed to update home branch')
+    } finally { setAccessBusy(null) }
+  }
+
   if (viewing) {
     return (
       <div className="p-4 sm:p-6">
-        <BranchDetail branch={viewing} onBack={() => setViewing(null)} />
+        <BranchDetail
+          branch={viewing}
+          onBack={() => setViewing(null)}
+          staff={staff}
+          grants={grants}
+          allBranches={branches}
+          canManageAccess={canManage}
+          onGrant={handleGrantAccess}
+          onRevoke={handleRevokeAccess}
+          onSetHome={handleSetHomeBranch}
+          accessBusy={accessBusy}
+        />
       </div>
     )
   }
