@@ -152,7 +152,7 @@ export default function Settings() {
   const [pendingChanges, setPendingChanges] = useState([])
   const loadPendingChanges = () => {
     if (!tenant?.id) return
-    fetchPendingConfigChanges(tenant.id).then(setPendingChanges).catch(() => {})
+    fetchPendingConfigChanges(tenant.id).then(setPendingChanges).catch((err) => console.warn('Failed to load pending config changes:', err))
   }
   useEffect(loadPendingChanges, [tenant?.id])
   const findPendingChange = (configArea, receiptBranchId = null) =>

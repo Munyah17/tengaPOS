@@ -13,15 +13,6 @@ import Features from '@/components/landing/Features'
 import Pricing from '@/components/landing/Pricing'
 import Footer from '@/components/landing/Footer'
 
-const trustedBy = [
-  { name: 'RetailPro', icon: '🛒' },
-  { name: 'QuickMart', icon: '🏪' },
-  { name: 'ShopHub', icon: '🏬' },
-  { name: 'FreshStop', icon: '🥬' },
-  { name: 'TechZone', icon: '💻' },
-  { name: 'BuildIt', icon: '🔨' },
-]
-
 const steps = [
   {
     number: '1',
@@ -66,7 +57,7 @@ const desktopPoints = [
 export default function Landing() {
   const [desktopDl, setDesktopDl] = useState(null)
   useEffect(() => {
-    getDownloadInfo().then(setDesktopDl).catch(() => {})
+    getDownloadInfo().then(setDesktopDl).catch((err) => console.warn('Failed to load desktop download info:', err))
   }, [])
 
   return (
@@ -74,26 +65,6 @@ export default function Landing() {
       <AnnouncementPopup />
       <Navbar />
       <Hero />
-
-      {/* Trusted by */}
-      <section className="border-y border-slate-100 bg-slate-50 py-8 dark:border-slate-800 dark:bg-slate-900 sm:py-10">
-        <div className="mx-auto max-w-7xl px-6">
-          <p className="mb-6 text-center text-xs font-semibold uppercase tracking-widest text-slate-400 sm:mb-8 sm:text-sm">
-            Trusted by businesses of all sizes
-          </p>
-          <div className="grid grid-cols-3 gap-x-3 gap-y-4 sm:flex sm:flex-wrap sm:items-center sm:justify-center sm:gap-8">
-            {trustedBy.map((company) => (
-              <div
-                key={company.name}
-                className="flex flex-col items-center gap-1 text-slate-500 transition-colors hover:text-slate-700 dark:hover:text-slate-300 sm:flex-row sm:gap-2"
-              >
-                <span className="text-base sm:text-lg">{company.icon}</span>
-                <span className="text-[11px] font-semibold sm:text-sm">{company.name}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
 
       <Features />
 
@@ -314,9 +285,14 @@ export default function Landing() {
                 Get Started
                 <ArrowRight className="h-4 w-4" />
               </Link>
-              <button className="inline-flex items-center gap-2 rounded-xl border border-slate-700 px-6 py-3 text-sm font-semibold text-slate-300 transition-colors hover:border-slate-600 hover:text-white">
+              <a
+                href="https://wa.me/263773909307?text=Hi%2C%20I%27d%20like%20to%20talk%20to%20sales%20about%20tengaPOS"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 rounded-xl border border-slate-700 px-6 py-3 text-sm font-semibold text-slate-300 transition-colors hover:border-slate-600 hover:text-white"
+              >
                 Talk to Sales
-              </button>
+              </a>
             </div>
 
             <p className="mt-6 text-sm text-slate-500">

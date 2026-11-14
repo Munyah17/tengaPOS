@@ -1,4 +1,4 @@
-import { useAuthStore, NAV_PERMISSIONS } from '@/stores/authStore'
+import { useAuthStore, firstAllowedPath } from '@/stores/authStore'
 import { useDemoStore } from '@/lib/demoStore'
 import { setDemoActive, DEMO_ROLE_SESSION_KEY } from '@/lib/demoMode'
 import { DEMO_TENANT, DEMO_BRANCH, DEMO_USERS } from '@/lib/demoData'
@@ -34,8 +34,7 @@ export function enterDemoMode(role = 'vendor') {
 export const switchDemoRole = enterDemoMode
 
 export function firstAllowedDemoPath(role) {
-  const allowed = NAV_PERMISSIONS[role] || NAV_PERMISSIONS.vendor
-  return `/app/${allowed[0] || 'dashboard'}`
+  return firstAllowedPath(role)
 }
 
 export function restoreDemoModeIfAny() {

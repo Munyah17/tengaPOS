@@ -138,7 +138,7 @@ export default function POS() {
   const [linkedPrescription, setLinkedPrescription] = useState(null)
   useEffect(() => {
     if (!showPrescriptionModal || isDemoRoute() || !tenant?.id) return
-    fetchPrescriptions(tenant.id).then((rows) => setFiledPrescriptions(rows.filter((p) => p.status === 'active'))).catch(() => {})
+    fetchPrescriptions(tenant.id).then((rows) => setFiledPrescriptions(rows.filter((p) => p.status === 'active'))).catch((err) => console.warn('Failed to load filed prescriptions:', err))
   }, [showPrescriptionModal, tenant?.id])
   // Bar/Liquor Store Mode: same data-driven pattern as pharmacyItems above.
   const [showAgeVerifyModal, setShowAgeVerifyModal] = useState(false)
@@ -208,7 +208,7 @@ export default function POS() {
     if (!tenant?.id) return
     fetchStaff(tenant.id)
       .then((rows) => setStaffList(branch?.id ? rows.filter((r) => r.branch_id === branch.id) : rows))
-      .catch(() => {})
+      .catch((err) => console.warn('Failed to load staff list:', err))
   }, [tenant?.id, branch?.id])
 
   // ─── Camera barcode scanning (phone/tablet camera via BarcodeDetector) ───
@@ -589,8 +589,12 @@ export default function POS() {
               toast(`Fiscalised locally — ZIMRA unreachable: ${fdmsData.warning}`, { duration: 5000 })
             }
           }
-        } catch {
-          // Non-blocking — the sale is already saved; fiscal failure is not fatal
+        } catch (fiscalErr) {
+          // Non-blocking — the sale is already saved; fiscal failure is not
+          // fatal, but it MUST be visible: a sale that never reached ZIMRA
+          // is a compliance gap the cashier needs to know about.
+          console.error('Fiscal submission failed after checkout:', fiscalErr)
+          toast.error('Sale completed, but fiscal submission failed — flag this receipt for review', { duration: 6000 })
         }
       }
     }
@@ -611,9 +615,9 @@ export default function POS() {
           return createVehicle(tenant.id, customerId, {
             make: customerDetails.vehicle,
             regNumber: customerDetails.regNumber,
-          }).catch(() => {})
+          }).catch((err) => console.warn('Failed to save vehicle for customer:', err))
         }
-      }).catch(() => {})
+      }).catch((err) => console.warn('Failed to save customer from checkout:', err))
     }
 
     // Job card -> POS checkout loop: this sale came from "Complete & Issue

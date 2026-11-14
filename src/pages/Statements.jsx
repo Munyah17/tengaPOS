@@ -22,7 +22,7 @@ export default function Statements() {
     fetchCustomers(tenant.id).then(setCustomers).catch(() => toast.error('Failed to load customers'))
     fetchDocuments(tenant.id, 'invoice')
       .then((docs) => setUnlinkedCount(docs.filter((d) => !d.customer_id).length))
-      .catch(() => {})
+      .catch((err) => console.warn('Failed to load unlinked invoices:', err))
   }, [tenant?.id])
 
   useEffect(() => {

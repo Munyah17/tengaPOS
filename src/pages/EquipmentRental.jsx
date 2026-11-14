@@ -71,7 +71,7 @@ export default function EquipmentRental() {
     fetchEquipmentRentals(tenant.id).then(setRentals).catch((err) => toast.error(err.message || 'Failed to load rentals')).finally(() => setLoading(false))
   }
   useEffect(load, [tenant?.id])
-  useEffect(() => { if (tenant?.id) fetchBranches(tenant.id).then(setBranches).catch(() => {}) }, [tenant?.id])
+  useEffect(() => { if (tenant?.id) fetchBranches(tenant.id).then(setBranches).catch((err) => console.warn('Failed to load branches:', err)) }, [tenant?.id])
 
   const filtered = useMemo(() => {
     if (filter === 'out') return rentals.filter((r) => !r.returned_at)

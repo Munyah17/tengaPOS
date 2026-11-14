@@ -62,7 +62,7 @@ export default function Dashboard() {
   const [jobCards, setJobCards] = useState([])
   useEffect(() => {
     if (!isWorkshop || !tenant?.id) return
-    fetchJobCards(tenant.id).then(setJobCards).catch(() => {})
+    fetchJobCards(tenant.id).then(setJobCards).catch((err) => console.warn('Failed to load job cards for dashboard:', err))
   }, [isWorkshop, tenant?.id])
 
   const dismissForSession = (id) => {

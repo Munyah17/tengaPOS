@@ -103,7 +103,7 @@ export default function Inventory() {
 
   const loadTransfers = () => {
     if (!tenant?.id) return
-    fetchStockTransfers(tenant.id).then(setTransfers).catch(() => {})
+    fetchStockTransfers(tenant.id).then(setTransfers).catch((err) => console.warn('Failed to load stock transfers:', err))
   }
   useEffect(loadTransfers, [tenant?.id])
 
@@ -111,7 +111,7 @@ export default function Inventory() {
   // for receipt at the destination. Vendor/managers bypass this check.
   useEffect(() => {
     if (!tenant?.id || !user?.id || role === 'vendor') return
-    fetchUserBranches(user.id).then(setUserBranchIds).catch(() => {})
+    fetchUserBranches(user.id).then(setUserBranchIds).catch((err) => console.warn('Failed to load user branch grants:', err))
   }, [tenant?.id, user?.id, role])
 
   const openTransfer = () => {
@@ -121,7 +121,7 @@ export default function Inventory() {
 
   const loadReceipts = () => {
     if (!tenant?.id) return
-    fetchStockReceipts(tenant.id).then(setReceipts).catch(() => {})
+    fetchStockReceipts(tenant.id).then(setReceipts).catch((err) => console.warn('Failed to load stock receipts:', err))
   }
   useEffect(loadReceipts, [tenant?.id])
 
@@ -132,13 +132,13 @@ export default function Inventory() {
 
   const loadAdjustments = () => {
     if (!tenant?.id) return
-    fetchStockAdjustments(tenant.id).then(setAdjustments).catch(() => {})
+    fetchStockAdjustments(tenant.id).then(setAdjustments).catch((err) => console.warn('Failed to load stock adjustments:', err))
   }
   useEffect(loadAdjustments, [tenant?.id])
 
   const loadCategories = () => {
     if (!tenant?.id) return
-    fetchCategories(tenant.id).then(setCategories).catch(() => {})
+    fetchCategories(tenant.id).then(setCategories).catch((err) => console.warn('Failed to load categories:', err))
   }
   useEffect(loadCategories, [tenant?.id])
 
@@ -329,7 +329,7 @@ export default function Inventory() {
     if (queryClient.getQueryData(['products', tenant.id])) return
     getOfflineProducts(tenant.id).then((cached) => {
       if (cached.length > 0) queryClient.setQueryData(['products', tenant.id], cached)
-    }).catch(() => {})
+    }).catch((err) => console.warn('Failed to read offline product cache:', err))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tenant?.id])
 

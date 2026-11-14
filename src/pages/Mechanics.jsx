@@ -79,7 +79,7 @@ export default function Mechanics() {
 
   const load = () => {
     if (!tenant?.id) return
-    fetchTechnicians(tenant.id).then(setTechnicians).catch(() => {})
+    fetchTechnicians(tenant.id).then(setTechnicians).catch((err) => console.warn('Failed to load technicians:', err))
     loadWithOfflineCache(['jobCards', tenant.id], () => fetchJobCards(tenant.id), { onData: setJobCards })
   }
   useEffect(load, [tenant?.id])

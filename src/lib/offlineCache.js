@@ -30,11 +30,6 @@ async function readCache(key) {
   }
 }
 
-// Plain read/write for pages using useState+useEffect instead of React
-// Query — same underlying cache, just without the queryClient integration.
-export const getCachedValue = readCache
-export const setCachedValue = writeCache
-
 /**
  * Wraps a fetcher for use as a React Query queryFn: caches every successful
  * result, and falls back to the last cached result if the fetch throws.

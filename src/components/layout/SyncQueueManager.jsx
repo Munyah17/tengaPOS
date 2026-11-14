@@ -28,7 +28,7 @@ export default function SyncQueueManager({ isOpen, onClose, onChanged }) {
 
   const load = () => {
     setLoading(true)
-    fetchAllSyncQueueItems().then(setItems).catch(() => {}).finally(() => setLoading(false))
+    fetchAllSyncQueueItems().then(setItems).catch((err) => console.warn('Failed to load offline sync queue:', err)).finally(() => setLoading(false))
   }
   useEffect(() => { if (isOpen) load() }, [isOpen])
 

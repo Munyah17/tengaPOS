@@ -26,9 +26,7 @@
     "abortcontroller-polyfill": "^1.7.8",
     "clsx": "^2.1.1",
     "core-js": "^3.49.0",
-    "date-fns": "^4.3.0",
     "dexie": "^4.4.2",
-    "dexie-react-hooks": "^4.4.0",
     "file-saver": "^2.0.5",
     "framer-motion": "^12.40.0",
     "jspdf": "^4.2.1",
@@ -43,7 +41,6 @@
     "tailwind-merge": "^3.6.0",
     "whatwg-fetch": "^3.6.20",
     "xlsx": "^0.18.5",
-    "zimra-fdms": "^0.2.0",
     "zustand": "^5.0.13"
   },
   "devDependencies": {

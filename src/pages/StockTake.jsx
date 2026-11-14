@@ -55,7 +55,7 @@ export default function StockTake() {
 
   useEffect(() => {
     if (!tenant?.id) return
-    fetchBranches(tenant.id).then(setBranches).catch(() => {})
+    fetchBranches(tenant.id).then(setBranches).catch((err) => console.warn('Failed to load branches:', err))
   }, [tenant?.id])
 
   const loadCounts = async (takeId) => {

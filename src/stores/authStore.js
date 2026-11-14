@@ -63,6 +63,58 @@ export const NAV_PERMISSIONS = {
   tech_support: ['dashboard', 'reports', 'insights', 'orders', 'transactions'],
 }
 
+// navKey → route path. Redirects must never interpolate the raw key:
+// keys like stock_take don't match their URL (stock-take), so building
+// `/app/${key}` silently dumps users on the landing page. Keep in sync
+// with ALL_NAV_ITEMS in components/layout/Sidebar.jsx.
+export const NAV_KEY_TO_PATH = {
+  dashboard: '/app/dashboard',
+  requests: '/app/requests',
+  pos: '/app/pos',
+  inventory: '/app/inventory',
+  stock_take: '/app/stock-take',
+  reorder: '/app/reorder',
+  cash_up: '/app/cash-up',
+  orders: '/app/orders',
+  kitchen: '/app/kitchen',
+  job_cards: '/app/job-cards',
+  vehicle_registry: '/app/vehicle-registry',
+  mechanics: '/app/mechanics',
+  quotations: '/app/quotations',
+  invoicing: '/app/invoicing',
+  production: '/app/production',
+  equipment_rental: '/app/equipment-rental',
+  prescriptions: '/app/prescriptions',
+  doctors: '/app/doctors',
+  insurers: '/app/insurers',
+  controlled_substances: '/app/controlled-substances',
+  appointments: '/app/appointments',
+  eye_prescriptions: '/app/optometry',
+  age_verifications: '/app/age-verifications',
+  transactions: '/app/transactions',
+  refund_audit: '/app/refund-audit',
+  security: '/app/security',
+  discount_reviews: '/app/discount-reviews',
+  reports: '/app/reports',
+  insights: '/app/insights',
+  staff: '/app/staff',
+  tasks: '/app/tasks',
+  branches: '/app/branches',
+  fiscalisation: '/app/fiscalisation',
+  payments: '/app/payments',
+  hr: '/app/hr',
+  customers: '/app/customers',
+  statements: '/app/statements',
+  accounting: '/app/accounting',
+  desktop: '/app/desktop',
+  settings: '/app/settings',
+}
+
+export function firstAllowedPath(role) {
+  const allowed = NAV_PERMISSIONS[role] || NAV_PERMISSIONS.vendor
+  return NAV_KEY_TO_PATH[allowed[0]] || '/app/dashboard'
+}
+
 async function loadProfile() {
   // Single round trip via RPC instead of up to 3 sequential queries
   // (app_users check, then users+tenants join, then a separate branches

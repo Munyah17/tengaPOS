@@ -38,7 +38,7 @@ export default function Customers() {
 
   useEffect(() => {
     if (!tenant?.id || !isPharmacy) return
-    fetchInsurers(tenant.id).then(setInsurers).catch(() => {})
+    fetchInsurers(tenant.id).then(setInsurers).catch((err) => console.warn('Failed to load insurers:', err))
   }, [tenant?.id, isPharmacy])
 
   useEffect(() => {

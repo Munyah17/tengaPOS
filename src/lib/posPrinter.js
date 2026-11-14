@@ -172,16 +172,6 @@ async function fetchWithTimeout(url, options, ms) {
   }
 }
 
-/** Whether the local Print Agent responds on this machine right now. */
-export async function isPrintAgentRunning() {
-  try {
-    const res = await fetchWithTimeout(`${PRINT_AGENT_URL}/status`, {}, 1500)
-    return res.ok
-  } catch {
-    return false
-  }
-}
-
 async function printViaAgent(bytes, comPort) {
   const res = await fetchWithTimeout(`${PRINT_AGENT_URL}/print`, {
     method: 'POST',
@@ -199,19 +189,13 @@ async function printViaAgent(bytes, comPort) {
   }
 }
 
-export function isWebUsbSupported() {
+function isWebUsbSupported() {
   return typeof navigator !== 'undefined' && 'usb' in navigator
-}
-
-// Kept for compatibility with anything checking whether direct printing is
-// possible at all on this device -- WebUSB is one of two transports now.
-export function isPosPrinterSupported() {
-  return true
 }
 
 /** A device the user already granted permission for, if any -- checking
  *  this first avoids re-prompting the USB picker on every single receipt. */
-export async function getPairedPosPrinter() {
+async function getPairedPosPrinter() {
   if (!isWebUsbSupported()) return null
   const devices = await navigator.usb.getDevices()
   return devices[0] || null
@@ -219,7 +203,7 @@ export async function getPairedPosPrinter() {
 
 /** Opens the browser's USB device picker so the cashier can select the
  *  built-in printer once -- the browser remembers the grant after that. */
-export async function pairPosPrinter() {
+async function pairPosPrinter() {
   if (!isWebUsbSupported()) {
     throw new Error('This browser can\'t talk to USB devices directly -- use Chrome or Edge.')
   }
@@ -270,7 +254,7 @@ const BLE_PRINTER_SERVICE_UUID = '49535343-fe7d-4ae5-8fa9-9fafd205e455'
 const BLE_PRINTER_WRITE_CHAR_UUID = '49535343-8841-43f4-a8d4-ecbe34729bb3'
 const BLE_WRITE_CHUNK_SIZE = 180 // conservative -- under the default BLE MTU most printers negotiate
 
-export function isWebBluetoothSupported() {
+function isWebBluetoothSupported() {
   return typeof navigator !== 'undefined' && 'bluetooth' in navigator
 }
 
@@ -395,9 +379,4 @@ export async function printToPosPrinter(lines, connectionHint, comPort) {
  *  wired up, and that's a completely normal setup, not an error. */
 export async function kickCashDrawer(connectionHint, comPort) {
   await sendRawBytes(new Uint8Array(escPosDrawerKick()), connectionHint, comPort)
-}
-
-// Retained for any existing callers -- now just the WebUSB-only path.
-export async function printRawToPosPrinter(lines) {
-  await printViaWebUsb(buildEscPosBytes(lines))
 }

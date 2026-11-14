@@ -522,17 +522,6 @@ export async function clearVoidedTransactions() {
   return data
 }
 
-export async function fetchTenantActivityLog(tenantId, limit = 50) {
-  const { data, error } = await supabase
-    .from('tenant_activity_log')
-    .select('*, users(name)')
-    .eq('tenant_id', tenantId)
-    .order('created_at', { ascending: false })
-    .limit(limit)
-  if (error) throw error
-  return data
-}
-
 // ─── Hardware Mode: Equipment Rentals ──────────────────────────────────────
 
 export async function fetchEquipmentRentals(tenantId) {
@@ -704,18 +693,6 @@ export async function completeKitchenOrder(orderId) {
 // person's name, not just the business (tenants.name) -- these are two
 // different things (e.g. "Metros Investments" the business, "Rudo
 // Chikwanha" the person who owns it).
-export async function fetchTenantVendor(tenantId) {
-  const { data, error } = await supabase
-    .from('users')
-    .select('id, name, email')
-    .eq('tenant_id', tenantId)
-    .eq('role', 'vendor')
-    .eq('is_active', true)
-    .maybeSingle()
-  if (error) throw error
-  return data
-}
-
 // ─── Staff ────────────────────────────────────────────────────────────────────
 
 export async function fetchStaff(tenantId) {
@@ -1498,11 +1475,6 @@ export async function createPrescription(tenantId, {
   if (error) throw error
   return data
 }
-export async function updatePrescriptionStatus(id, status) {
-  const { error } = await supabase.from('prescriptions').update({ status }).eq('id', id)
-  if (error) throw error
-}
-
 // Private bucket (patient data, unlike product-images) -- same tenant-
 // folder-prefix pattern as uploadProductImage/uploadDocumentLogo.
 export async function uploadPrescriptionImage(tenantId, file) {
@@ -1649,16 +1621,6 @@ export async function createEyePrescription(tenantId, {
 // Due date is computed server-side at cron time (see notify_medication_refills
 // in 1786280000_medication_refill_reminders.sql), never stored here.
 
-export async function fetchMedicationSchedules(tenantId) {
-  const { data, error } = await supabase
-    .from('medication_schedules')
-    .select('*, customers(name, phone), products(name)')
-    .eq('tenant_id', tenantId)
-    .eq('is_active', true)
-    .order('created_at', { ascending: false })
-  if (error) throw error
-  return data
-}
 export async function createMedicationSchedule(tenantId, { branchId, customerId, productId, frequencyDays, userId }) {
   const { data, error } = await supabase.from('medication_schedules').insert({
     tenant_id: tenantId, branch_id: branchId || null, customer_id: customerId,
@@ -1667,11 +1629,6 @@ export async function createMedicationSchedule(tenantId, { branchId, customerId,
   if (error) throw error
   return data
 }
-export async function deactivateMedicationSchedule(id) {
-  const { error } = await supabase.from('medication_schedules').update({ is_active: false }).eq('id', id)
-  if (error) throw error
-}
-
 // ─── Bar/Liquor Store Mode: Age Verification ───────────────────────────────
 
 export async function fetchAgeVerifications(tenantId) {
@@ -2090,6 +2047,85 @@ export async function fetchDashboardMetrics(tenantId) {
   }
 }
 
+// Per-branch rollup for the Branches page: revenue/order counts from
+// transactions, staff counts (home + extra grants), product counts
+// (home + grants), top sellers, and low-stock items — all real queries,
+// previously this page rendered hardcoded zeros.
+export async function fetchBranchOverview(tenantId) {
+  const since90 = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString()
+  const [txRes, staffRes, userGrantsRes, prodRes, prodGrantsRes, itemsRes, expRes] = await Promise.all([
+    supabase.from('transactions').select('branch_id, amount').eq('tenant_id', tenantId).eq('status', 'completed'),
+    supabase.from('users').select('id, branch_id, is_active').eq('tenant_id', tenantId).eq('is_active', true),
+    supabase.from('user_branches').select('user_id, branch_id, users!inner(tenant_id)').eq('users.tenant_id', tenantId),
+    supabase.from('products').select('id, branch_id, name, stock_qty, low_stock_threshold, sku').eq('tenant_id', tenantId).eq('is_active', true),
+    supabase.from('product_branches').select('product_id, branch_id, products!inner(tenant_id)').eq('products.tenant_id', tenantId),
+    supabase.from('expenses').select('branch_id, amount').eq('tenant_id', tenantId),
+    supabase.from('order_items')
+      .select('name, qty, total, orders!inner(branch_id, tenant_id, created_at)')
+      .eq('orders.tenant_id', tenantId)
+      .gte('orders.created_at', since90),
+  ])
+
+  const out = {}
+  const bucket = (branchId) => {
+    if (!branchId) return
+    if (!out[branchId]) out[branchId] = { revenue: 0, expenses: 0, orders: 0, staffIds: new Set(), productIds: new Set(), topAgg: {}, lowStock: [] }
+    return out[branchId]
+  }
+
+  for (const t of txRes.data || []) {
+    const b = bucket(t.branch_id)
+    if (b) { b.revenue += parseFloat(t.amount) || 0; b.orders += 1 }
+  }
+  for (const u of staffRes.data || []) {
+    const b = bucket(u.branch_id)
+    if (b) b.staffIds.add(u.id)
+  }
+  for (const e of expRes.data || []) {
+    const b = bucket(e.branch_id)
+    if (b) b.expenses += parseFloat(e.amount) || 0
+  }
+  for (const g of userGrantsRes.data || []) {
+    const b = bucket(g.branch_id)
+    if (b) b.staffIds.add(g.user_id)
+  }
+  for (const p of prodRes.data || []) {
+    const b = bucket(p.branch_id)
+    if (b) {
+      b.productIds.add(p.id)
+      if ((p.stock_qty ?? 0) <= (p.low_stock_threshold ?? 10)) {
+        b.lowStock.push({ name: p.name, qty: p.stock_qty ?? 0, reorder: p.low_stock_threshold ?? 10 })
+      }
+    }
+  }
+  for (const g of prodGrantsRes.data || []) {
+    const b = bucket(g.branch_id)
+    if (b) b.productIds.add(g.product_id)
+  }
+  for (const it of itemsRes.data || []) {
+    const b = bucket(it.orders?.branch_id)
+    if (!b) continue
+    const key = it.name
+    if (!b.topAgg[key]) b.topAgg[key] = { name: key, sold: 0, revenue: 0 }
+    b.topAgg[key].sold += it.qty || 0
+    b.topAgg[key].revenue += Number(it.total) || 0
+  }
+
+  const result = {}
+  for (const [branchId, b] of Object.entries(out)) {
+    result[branchId] = {
+      revenue: b.revenue,
+      expenses: b.expenses,
+      orders: b.orders,
+      staff: b.staffIds.size,
+      productCount: b.productIds.size,
+      topProducts: Object.values(b.topAgg).sort((a, c) => c.revenue - a.revenue).slice(0, 5).map((p) => p.name),
+      inventory: b.lowStock.sort((a, c) => a.qty - c.qty).slice(0, 8),
+    }
+  }
+  return result
+}
+
 // Cashiers/shop assistants don't get the tenant-wide Dashboard (revenue
 // across every till, everyone's low-stock alerts, etc. isn't theirs to
 // see) -- but a personal "what did I sell" summary was requested as a
@@ -2252,12 +2288,6 @@ export async function savePayrollRun(tenantId, userId, run, entries) {
   const { error: entryError } = await supabase.from('payroll_entries').insert(entryRows)
   if (entryError) throw entryError
   return runId
-}
-
-export async function updatePayrollRunStatus(runId, status) {
-  const { error } = await supabase.from('payroll_runs')
-    .update({ status, updated_at: new Date().toISOString() }).eq('id', runId)
-  if (error) throw error
 }
 
 export async function deletePayrollRun(runId) {
@@ -2933,17 +2963,6 @@ export async function createFixedAsset(tenantId, userId, asset) {
   if (error) throw error
   return data
 }
-export async function updateFixedAsset(id, asset) {
-  const { data, error } = await supabase.from('fixed_assets').update({
-    name: asset.name, category: asset.category || null, asset_type: asset.assetType || 'fixed',
-    purchase_date: asset.purchaseDate, cost: asset.cost, salvage_value: asset.salvageValue || 0,
-    useful_life_years: asset.usefulLifeYears, custodian: asset.custodian || null, location: asset.location || null,
-    notes: asset.notes || null, disposed_at: asset.disposedAt || null, disposal_value: asset.disposalValue ?? null,
-    updated_at: new Date().toISOString(),
-  }).eq('id', id).select().single()
-  if (error) throw error
-  return data
-}
 export async function deleteFixedAsset(id) {
   const { error } = await supabase.from('fixed_assets').delete().eq('id', id)
   if (error) throw error
@@ -3148,15 +3167,6 @@ export async function createBoqDocument(tenantId, userId, boq) {
     tenant_id: tenantId, boq_number: boq.boqNumber || null, title: boq.title, client_name: boq.clientName || null,
     items: boq.items || [], total: boq.total || 0, notes: boq.notes || null, created_by: userId || null,
   }).select().single()
-  if (error) throw error
-  return data
-}
-export async function updateBoqDocument(id, boq) {
-  const { data, error } = await supabase.from('boq_documents').update({
-    boq_number: boq.boqNumber || null, title: boq.title, client_name: boq.clientName || null,
-    items: boq.items || [], total: boq.total || 0, notes: boq.notes || null, status: boq.status || 'draft',
-    updated_at: new Date().toISOString(),
-  }).eq('id', id).select().single()
   if (error) throw error
   return data
 }

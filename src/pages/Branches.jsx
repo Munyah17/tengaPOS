@@ -8,7 +8,7 @@ import {
 import { formatCurrency } from '@/utils/formatters'
 import { useAuthStore } from '@/stores/authStore'
 import Modal from '@/components/common/Modal'
-import { fetchBranches, insertBranch, updateBranch, deleteBranch, fetchStaff, fetchUserBranchGrants, assignUserBranch, unassignUserBranch, setStaffHomeBranch } from '@/lib/db'
+import { fetchBranches, insertBranch, updateBranch, deleteBranch, fetchStaff, fetchUserBranchGrants, assignUserBranch, unassignUserBranch, setStaffHomeBranch, fetchBranchOverview } from '@/lib/db'
 import { loadWithOfflineCache } from '@/lib/offlineCache'
 import toast from 'react-hot-toast'
 
@@ -23,7 +23,7 @@ const BLANK = { name: '', location: '', address: '', phone: '', manager: '', sta
 
 function BranchDetail({ branch, onBack, staff = [], grants = [], allBranches = [], canManageAccess = false, onGrant, onRevoke, onSetHome, accessBusy = null }) {
   const profit = branch.revenue - branch.expenses
-  const margin = ((profit / branch.revenue) * 100).toFixed(1)
+  const margin = branch.revenue > 0 ? ((profit / branch.revenue) * 100).toFixed(1) : '—'
   const grantSet = new Set(grants.filter((g) => g.branch_id === branch.id).map((g) => g.user_id))
 
   return (
@@ -90,6 +90,9 @@ function BranchDetail({ branch, onBack, staff = [], grants = [], allBranches = [
         {/* Top products */}
         <div className="rounded-2xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900">
           <h3 className="mb-4 text-sm font-bold text-slate-900 dark:text-white">Top Sellers</h3>
+          {branch.topProducts.length === 0 ? (
+            <p className="text-sm text-slate-400">No sales recorded for this branch yet.</p>
+          ) : (
           <ul className="space-y-2">
             {branch.topProducts.map((p, i) => (
               <li key={p} className="flex items-center gap-3">
@@ -100,11 +103,15 @@ function BranchDetail({ branch, onBack, staff = [], grants = [], allBranches = [
               </li>
             ))}
           </ul>
+          )}
         </div>
 
         {/* Inventory snapshot */}
         <div className="rounded-2xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900 lg:col-span-2">
-          <h3 className="mb-4 text-sm font-bold text-slate-900 dark:text-white">Inventory Snapshot</h3>
+          <h3 className="mb-4 text-sm font-bold text-slate-900 dark:text-white">Low Stock</h3>
+          {branch.inventory.length === 0 ? (
+            <p className="text-sm text-slate-400">Nothing running low at this branch.</p>
+          ) : (
           <div className="space-y-3">
             {branch.inventory.map((item) => {
               const pct = Math.min((item.qty / (item.reorder * 3)) * 100, 100)
@@ -129,6 +136,7 @@ function BranchDetail({ branch, onBack, staff = [], grants = [], allBranches = [
               )
             })}
           </div>
+          )}
         </div>
 
         {/* Staff access — Vendor-only. Shows who can act in this branch:
@@ -240,11 +248,24 @@ export default function Branches() {
 
   const loadBranches = () => {
     if (!tenant?.id) return
-    loadWithOfflineCache(['branches', tenant.id], () => fetchBranches(tenant.id), {
-      onData: (data) => setBranches(data.map(b => ({
+    loadWithOfflineCache(['branches', tenant.id], async () => {
+      const [rows, overview] = await Promise.all([fetchBranches(tenant.id), fetchBranchOverview(tenant.id).catch(() => ({}))])
+      return { rows, overview }
+    }, {
+      onData: (res) => {
+        // Older cached payloads were a bare branch array, not {rows, overview}
+        const rows = res?.rows || res || []
+        const overview = res?.overview || {}
+        setBranches(rows.map(b => ({
         ...b, isMain: b.is_main, status: b.is_active ? 'active' : 'inactive',
-        location: b.address || '', manager: '', staff: 0, revenue: 0, expenses: 0, orders: 0, topProducts: [], inventory: [],
-      }))),
+        location: b.address || '', manager: '',
+        staff: overview?.[b.id]?.staff ?? 0,
+        revenue: overview?.[b.id]?.revenue ?? 0,
+        expenses: overview?.[b.id]?.expenses ?? 0, orders: overview?.[b.id]?.orders ?? 0,
+        topProducts: overview?.[b.id]?.topProducts ?? [],
+        inventory: overview?.[b.id]?.inventory ?? [],
+      })))
+      },
       onError: () => toast.error('Failed to load branches'),
       onLoadingChange: setLoading,
     })
@@ -262,8 +283,8 @@ export default function Branches() {
   // branch detail — powers the Staff Access card.
   useEffect(() => {
     if (!viewing || !canManage || !tenant?.id) return
-    fetchStaff(tenant.id).then(setStaff).catch(() => {})
-    fetchUserBranchGrants(tenant.id).then(setGrants).catch(() => {})
+    fetchStaff(tenant.id).then(setStaff).catch((err) => console.warn('Failed to load staff for branch access:', err))
+    fetchUserBranchGrants(tenant.id).then(setGrants).catch((err) => console.warn('Failed to load branch grants:', err))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [viewing?.id, canManage, tenant?.id])
 

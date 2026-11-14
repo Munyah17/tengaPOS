@@ -198,8 +198,8 @@ export default function Invoicing({ standalone = false } = {}) {
 
   useEffect(() => {
     if (!tenant?.id) return
-    fetchProducts(tenant.id).then(setProducts).catch(() => {})
-    fetchCustomers(tenant.id).then(setCustomers).catch(() => {})
+    fetchProducts(tenant.id).then(setProducts).catch((err) => console.warn('Failed to load products for invoicing:', err))
+    fetchCustomers(tenant.id).then(setCustomers).catch((err) => console.warn('Failed to load customers for invoicing:', err))
   }, [tenant?.id])
 
   // VAT only actually applies when it's both activated as a plan feature

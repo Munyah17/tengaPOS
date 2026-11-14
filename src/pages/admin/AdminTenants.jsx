@@ -147,22 +147,16 @@ const PLAN_PREF_LABELS = { byod: 'BYOD (own device)', combo: 'Hardware Combo', u
 // Enterprise/Business plan can grant or revoke any single feature by hand —
 // independent of that add-on's own request/approve flow — instead of being
 // limited to whatever the plan-tier defaults bundle together.
+// Only flags the app actually enforces are listed — toggles for
+// pos/inventory/kitchen/etc. used to appear here but nothing in the
+// tenant app ever read them, so admins could "disable" features that
+// kept working. max_users_per_branch and branches/reports limits live
+// in the numeric fields elsewhere on this form.
 const BOOL_FEATURES = [
-  { key: 'pos',            label: 'POS / Sales' },
-  { key: 'inventory',      label: 'Inventory Management' },
-  { key: 'transactions',   label: 'Transaction History' },
-  { key: 'staff',          label: 'Staff Management' },
-  { key: 'tasks',          label: 'Task Manager' },
-  { key: 'kitchen',        label: 'Kitchen Display' },
-  { key: 'orders',         label: 'Orders Board' },
-  { key: 'dining_board',   label: 'Customer Dining Board' },
-  { key: 'drive_through',  label: 'Drive-Through Mode' },
   { key: 'fiscalisation',  label: 'Fiscalisation (ZIMRA)' },
   { key: 'vat',            label: 'VAT' },
   { key: 'accounting_erp', label: 'Accounting & ERP (HR, Payroll, Invoicing)' },
   { key: 'ai_insights',    label: 'AI Insights' },
-  { key: 'api_access',     label: 'API Access' },
-  { key: 'custom_integrations', label: 'Custom Integrations' },
 ]
 
 const BUSINESS_MODES = [
@@ -535,7 +529,7 @@ export function TenantModal({ tenant, technicians, onClose, onSaved }) {
         : 'Tenant updated')
       const emailTemplate = { tenant_approved: 'approved', tenant_suspended: 'suspended', tenant_reinstated: 'reinstated' }[action]
       if (emailTemplate) {
-        supabase.functions.invoke('send-tenant-email', { body: { tenant_id: tenant.id, template: emailTemplate } }).catch(() => {})
+        supabase.functions.invoke('send-tenant-email', { body: { tenant_id: tenant.id, template: emailTemplate } }).catch((err) => console.warn('Tenant notification email failed to send:', err))
       }
       onSaved()
     }
@@ -568,7 +562,7 @@ export function TenantModal({ tenant, technicians, onClose, onSaved }) {
     toast.success(kind === 'reject' ? `${tenant.name} rejected` : `${tenant.name} put on hold`)
     supabase.functions.invoke('send-tenant-email', {
       body: { tenant_id: tenant.id, template: kind === 'reject' ? 'rejected' : 'stalled', extra: { reason: decisionReason.trim() } },
-    }).catch(() => {})
+    }).catch((err) => console.warn('Tenant notification email failed to send:', err))
     setDecisionBusy(false)
     onSaved()
   }

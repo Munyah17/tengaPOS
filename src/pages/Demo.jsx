@@ -1,4 +1,4 @@
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { ShieldCheck, Store, UserCog, ShoppingBag, Users2, ArrowRight, Sparkles } from 'lucide-react'
 import posIcon from '@/assets/pos-icon.png'
@@ -115,9 +115,9 @@ export default function Demo() {
           className="mt-10 text-center text-sm text-slate-500"
         >
           Ready to run this for real?{' '}
-          <a href="/register" className="font-medium text-brand-400 hover:text-brand-300">
+          <Link to="/register" className="font-medium text-brand-400 hover:text-brand-300">
             Create your account
-          </a>
+          </Link>
         </motion.p>
       </div>
     </div>

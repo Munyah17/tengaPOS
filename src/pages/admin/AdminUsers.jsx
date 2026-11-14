@@ -206,7 +206,7 @@ function EditUserModal({ user, tenants, onClose, onDone }) {
   useEffect(() => {
     invokeManageUser({ action: 'get_auth_info', user_id: user.id })
       .then((res) => setAuthInfo(res.auth))
-      .catch(() => {})
+      .catch((err) => console.warn('Failed to load auth info for user:', err))
   }, [user.id])
 
   const isBanned = authInfo?.banned_until && new Date(authInfo.banned_until) > new Date()

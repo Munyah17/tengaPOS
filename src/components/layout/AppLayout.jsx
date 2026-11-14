@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Outlet, useLocation, useNavigate } from 'react-router-dom'
+import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import { Gamepad2 } from 'lucide-react'
 import Sidebar from './Sidebar'
@@ -300,9 +300,9 @@ export default function AppLayout() {
                   <option key={r} value={r}>{ROLE_LABELS[r]}</option>
                 ))}
               </select>
-              <a href="/register" className="rounded-lg bg-white/20 px-3 py-1 text-xs font-bold hover:bg-white/30">
+              <Link to="/register" className="rounded-lg bg-white/20 px-3 py-1 text-xs font-bold hover:bg-white/30">
                 Sign Up
-              </a>
+              </Link>
               <button onClick={handleExitDemo} className="rounded-lg bg-white/15 px-3 py-1 text-xs font-bold hover:bg-white/25">
                 Exit Demo
               </button>

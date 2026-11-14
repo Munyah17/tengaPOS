@@ -1,5 +1,4 @@
 import { useDemoStore } from '@/lib/demoStore'
-import { DEMO_TENANT_ID } from '@/lib/demoData'
 
 // Demo-mode counterparts to src/lib/db.js -- same function names/signatures/
 // return shapes the real pages already consume, sourced from the in-memory
@@ -385,8 +384,4 @@ export async function fetchReportMetrics(_tenantId, { startDate, endDate } = {})
   const branchData = [{ branch: branchName, revenue: mtdRevenue, orders: mtdOrders }]
 
   return { mtdRevenue, mtdOrders, avgOrderValue, productsSold, monthlyData: Object.values(monthMap), branchData }
-}
-
-export function getDemoTenantId() {
-  return DEMO_TENANT_ID
 }

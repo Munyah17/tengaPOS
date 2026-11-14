@@ -388,8 +388,8 @@ export default function JobCards() {
     if (!tenant?.id) return
     loadWithOfflineCache(['jobCards', tenant.id], () => fetchJobCards(tenant.id), { onData: setJobCards })
     loadWithOfflineCache(['customers', tenant.id], () => fetchCustomers(tenant.id), { onData: setCustomers })
-    fetchTechnicians(tenant.id).then(setTechnicians).catch(() => {})
-    fetchProducts(tenant.id).then(setProducts).catch(() => {})
+    fetchTechnicians(tenant.id).then(setTechnicians).catch((err) => console.warn('Failed to load technicians:', err))
+    fetchProducts(tenant.id).then(setProducts).catch((err) => console.warn('Failed to load products for job cards:', err))
   }
   useEffect(load, [tenant?.id])
 

@@ -51,7 +51,6 @@ export const purchaseStripeCheckout = (purchaseId) =>
 // ─── Public: installer download ───
 export const getDownloadInfo = (os = 'win32-x64', channel = 'stable') =>
   call(`/v1/download/info?os=${os}&channel=${channel}`)
-export const getMeta = () => call('/v1/meta')
 
 // ─── Super admin: releases ───
 export const listReleases = () => call('/v1/releases')

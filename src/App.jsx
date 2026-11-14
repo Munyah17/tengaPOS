@@ -3,7 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { Toaster } from 'react-hot-toast'
 import { useEffect, lazy, Suspense } from 'react'
 import { useThemeStore } from '@/stores/themeStore'
-import { useAuthStore, NAV_PERMISSIONS } from '@/stores/authStore'
+import { useAuthStore, NAV_PERMISSIONS, firstAllowedPath } from '@/stores/authStore'
 import AppLayout from '@/components/layout/AppLayout'
 import AdminLayout from '@/components/admin/AdminLayout'
 
@@ -144,8 +144,7 @@ function ProtectedRoute({ children }) {
 
 function AppIndexRedirect() {
   const { role } = useAuthStore()
-  const allowed = NAV_PERMISSIONS[role] || NAV_PERMISSIONS.vendor
-  return <Navigate to={allowed[0] || 'dashboard'} replace />
+  return <Navigate to={firstAllowedPath(role)} replace />
 }
 
 // Cashiers/shop assistants get the account-scoped MyDashboard instead of
@@ -167,7 +166,7 @@ function RequireNav({ navKey, children }) {
   const { role } = useAuthStore()
   const allowed = NAV_PERMISSIONS[role] || NAV_PERMISSIONS.vendor
   if (!allowed.includes(navKey)) {
-    return <Navigate to={`/app/${allowed[0] || 'dashboard'}`} replace />
+    return <Navigate to={firstAllowedPath(role)} replace />
   }
   return children
 }
@@ -274,6 +273,10 @@ export default function App() {
             <Route path="requests" element={<RequireNav navKey="requests"><Requests /></RequireNav>} />
             <Route path="desktop" element={<RequireNav navKey="desktop"><DesktopApp /></RequireNav>} />
             <Route path="settings" element={<RequireNav navKey="settings"><Settings /></RequireNav>} />
+            {/* Unknown /app/* paths used to fall through to the global
+                catch-all and eject signed-in users to the public landing
+                page — send them back to their own dashboard instead. */}
+            <Route path="*" element={<AppIndexRedirect />} />
           </Route>
 
           {/* Super Admin Portal */}

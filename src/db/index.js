@@ -28,6 +28,17 @@ db.version(2).stores({
   if (item.failed === undefined) item.failed = 0
 }))
 
+// v1 declared transactions/transactionItems/categories/customers tables
+// that were never actually used (real data lives in Supabase; only
+// products/syncQueue/settings are touched). `null` in a stores() spec
+// deletes the table on upgrade for existing installs.
+db.version(3).stores({
+  transactions: null,
+  transactionItems: null,
+  categories: null,
+  customers: null,
+})
+
 export async function addToSyncQueue(tableName, operation, data) {
   await db.syncQueue.add({
     table_name: tableName,
