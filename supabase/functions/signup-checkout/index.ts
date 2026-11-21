@@ -20,8 +20,6 @@ const FALLBACK_PLAN_PRICES: Record<string, { price: number; renewalMonths: numbe
   standard_plan: { price: 170, renewalMonths: 6 },
   pro_package:   { price: 200, renewalMonths: 6 },
 }
-// Paid outside the app and confirmed by platform staff (confirm_cash_signup).
-const MANUAL_PROVIDERS = ['cash', 'bank_transfer', 'mobile_transfer']
 // Optional, BYOD only -- the in-app self-serve onboarding stays free either way.
 const BYOD_ONBOARDING_FEE = 30
 // A separate, ongoing hosting subscription on top of the plan itself, new
@@ -85,9 +83,8 @@ serve(async (req) => {
     const { data: { user: caller }, error: authErr } = await admin.auth.getUser(jwt)
     if (authErr || !caller) return json({ error: 'Not authenticated' }, 401)
 
-    const { plan_type, provider, return_url, type, period, invoice_id, onboarding, payer_reference, payer_name } = await req.json()
-    if (!['stripe', 'paynow', ...MANUAL_PROVIDERS].includes(provider)) return json({ error: 'Unsupported payment method' }, 400)
-    const isManual = MANUAL_PROVIDERS.includes(provider)
+    const { plan_type, provider, return_url, type, period, invoice_id, onboarding } = await req.json()
+    if (!['stripe', 'paynow', 'cash'].includes(provider)) return json({ error: 'provider must be stripe, paynow, or cash' }, 400)
 
     const isFiscal = type === 'fiscalisation'
     const isAccountingErp = type === 'accounting_erp'
@@ -112,7 +109,7 @@ serve(async (req) => {
       // Cash claims never come through here — they go straight to
       // request_platform_invoice_cash_confirmation from the tenant's own
       // authenticated session, no service role needed for that path.
-      if (isManual) return json({ error: 'Use the "paid by cash/transfer" option instead' }, 400)
+      if (provider === 'cash') return json({ error: 'Use the "paid by cash/transfer" option instead' }, 400)
       if (!invoice_id) return json({ error: 'Missing invoice_id' }, 400)
       const { data: inv } = await admin.from('platform_invoices').select('*').eq('id', invoice_id).maybeSingle()
       if (!inv || inv.tenant_id !== tenantId) return json({ error: 'Invoice not found' }, 404)
@@ -188,26 +185,18 @@ serve(async (req) => {
     // (fiscalisation/accounting_erp/ai_insights) already have their own
     // cash-request tables and Settings.jsx flows; don't create a second,
     // conflicting cash pathway for those here.
-    // Direct bank / mobile-money transfers follow the same manual path:
-    // the customer pays outside the app and quotes their transaction
-    // reference, platform staff confirm it against the statement.
-    if (isManual) {
+    if (provider === 'cash') {
       if (checkoutKind !== 'plan') {
         return json({ error: 'Cash requests for add-ons are submitted from Settings, not here' }, 400)
       }
-      const payerReference = String(payer_reference || '').trim().slice(0, 80)
-      const payerName = String(payer_name || '').trim().slice(0, 120)
-      if (provider !== 'cash' && !payerReference) return json({ error: 'Enter the transaction reference from your receipt' }, 400)
-      if (provider === 'mobile_transfer' && !payerName) return json({ error: 'Enter the sender name shown on the transfer' }, 400)
       const { error: insertErr } = await admin.from('signup_checkouts').insert({
         tenant_id: tenantId,
         plan_type: planKey,
-        provider,
+        provider: 'cash',
         reference,
         amount: plan.amount,
         currency: 'USD',
         status: 'pending_cash',
-        ...(provider !== 'cash' ? { payer_reference: payerReference, payer_name: payerName || null } : {}),
       })
       if (insertErr) return json({ error: insertErr.message }, 500)
       return json({ cash: true, reference })

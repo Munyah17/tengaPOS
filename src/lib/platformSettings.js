@@ -64,38 +64,6 @@ export function useFiscalPricing() {
   return pricing
 }
 
-// Where customers send direct bank / mobile-money transfers. Deliberately
-// empty by default: the real account details are entered by the Super
-// Admin and live only in platform_settings, never in the codebase. A
-// method stays hidden at checkout until it is enabled and filled in.
-export const EMPTY_MANUAL_PAYMENT_DETAILS = {
-  bank: { enabled: false, accountName: '', bankName: '', branch: '', accountNumber: '' },
-  mobile: { enabled: false, number: '', name: '' },
-  popWhatsapp: '',
-}
-
-export function mergeManualPaymentDetails(v) {
-  return {
-    bank: { ...EMPTY_MANUAL_PAYMENT_DETAILS.bank, ...(v?.bank || {}) },
-    mobile: { ...EMPTY_MANUAL_PAYMENT_DETAILS.mobile, ...(v?.mobile || {}) },
-    popWhatsapp: v?.popWhatsapp || '',
-  }
-}
-
-/** Direct-transfer details for checkout, with a ready flag per method. */
-export function useManualPaymentDetails() {
-  const [details, setDetails] = useState(EMPTY_MANUAL_PAYMENT_DETAILS)
-  useEffect(() => {
-    getSetting('manual_payment_details', null).then((v) => setDetails(mergeManualPaymentDetails(v)))
-  }, [])
-  const { bank, mobile } = details
-  return {
-    ...details,
-    bankReady: !!(bank.enabled && bank.accountName && bank.bankName && bank.accountNumber),
-    mobileReady: !!(mobile.enabled && mobile.number && mobile.name),
-  }
-}
-
 /** Public site banner (landing page), toggled by Super Admin. */
 export function useSiteBanner() {
   const [banner, setBanner] = useState(null)
