@@ -65,12 +65,28 @@ serve(async (req) => {
     const { reference } = await req.json()
     if (!reference) return json({ error: 'Missing reference' }, 400)
 
+    // Caller must be a signed-in member of the tenant that owns this
+    // session — the reference is guessable enough (timestamp + 5 chars)
+    // that leaving this open leaks payment statuses across tenants.
+    const jwt = (req.headers.get('Authorization') || '').replace('Bearer ', '')
+    const { data: { user: caller }, error: authErr } = await supabase.auth.getUser(jwt)
+    if (authErr || !caller) return json({ error: 'Not authenticated' }, 401)
+
+    const { data: callerRow } = await supabase
+      .from('users')
+      .select('tenant_id')
+      .eq('id', caller.id)
+      .maybeSingle()
+
     const { data: sessionRow, error: sessionErr } = await supabase
       .from('payment_sessions')
-      .select('id, status, poll_url, tenants(paynow_integration_key)')
+      .select('id, tenant_id, status, poll_url, tenants(paynow_integration_key)')
       .eq('reference', reference)
       .single()
     if (sessionErr || !sessionRow) return json({ error: 'Session not found' }, 404)
+    if (!callerRow || sessionRow.tenant_id !== callerRow.tenant_id) {
+      return json({ error: 'Session not found' }, 404)
+    }
 
     // Already resolved -- by the webhook, or a previous call to this same
     // function. Nothing to reconcile; just report what we already have.

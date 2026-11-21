@@ -89,6 +89,8 @@ const SuperAdminApiKeys = lazy(() => import('@/pages/admin/SuperAdminApiKeys'))
 const SuperAdminDesktopReleases = lazy(() => import('@/pages/admin/SuperAdminDesktopReleases'))
 const SuperAdminDesktopFleet = lazy(() => import('@/pages/admin/SuperAdminDesktopFleet'))
 const ApiDocs = lazy(() => import('@/pages/ApiDocs'))
+const Privacy = lazy(() => import('@/pages/Privacy'))
+const Terms = lazy(() => import('@/pages/Terms'))
 const DesktopApp = lazy(() => import('@/pages/DesktopApp'))
 const Checkout = lazy(() => import('@/pages/Checkout'))
 
@@ -220,6 +222,9 @@ export default function App() {
           <Route path="/checkout" element={<Checkout />} />
           {/* Public developer docs for the Public API — no auth required */}
           <Route path="/developers" element={<ApiDocs />} />
+          {/* Public legal pages linked from the landing footer */}
+          <Route path="/privacy" element={<Privacy />} />
+          <Route path="/terms" element={<Terms />} />
 
           {/* Tenant app routes */}
           <Route

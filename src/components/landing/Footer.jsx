@@ -1,15 +1,32 @@
 import { ExternalLink } from 'lucide-react'
 
+const WHATSAPP_URL = 'https://wa.me/263773909307'
+
 const footerLinks = {
-  Product: ['Features', 'Pricing', 'Retail POS', 'Restaurant POS', 'Inventory'],
+  Product: [
+    { label: 'Features', href: '/#features' },
+    { label: 'Pricing', href: '/#pricing' },
+    { label: 'Retail POS', href: '/#features' },
+    { label: 'Restaurant POS', href: '/dining' },
+    { label: 'Inventory', href: '/#features' },
+  ],
   Resources: [
     { label: 'Get Barcodes', href: 'https://www.scancode.co.zw', external: true },
-    'Documentation',
-    'API Reference',
-    'Status',
+    { label: 'Documentation', href: '/developers' },
+    { label: 'API Reference', href: '/developers' },
+    { label: 'Support', href: WHATSAPP_URL, external: true },
   ],
-  Company: ['About', 'Careers', 'Contact', 'Partners'],
-  Legal: ['Privacy Policy', 'Terms of Service', 'Cookie Policy'],
+  Company: [
+    { label: 'About', href: '/#features' },
+    { label: 'Careers', href: WHATSAPP_URL, external: true },
+    { label: 'Contact', href: WHATSAPP_URL, external: true },
+    { label: 'Partners', href: 'https://www.scancode.co.zw', external: true },
+  ],
+  Legal: [
+    { label: 'Privacy Policy', href: '/privacy' },
+    { label: 'Terms of Service', href: '/terms' },
+    { label: 'Cookie Policy', href: '/privacy#cookies' },
+  ],
 }
 
 export default function Footer() {
@@ -37,31 +54,28 @@ export default function Footer() {
             <div key={group}>
               <h4 className="mb-4 text-sm font-semibold text-white">{group}</h4>
               <ul className="space-y-2.5">
-                {links.map((link) => {
-                  const isObj = typeof link === 'object'
-                  return (
-                    <li key={isObj ? link.label : link}>
-                      {isObj && link.external ? (
-                        <a
-                          href={link.href}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="flex items-center gap-1 text-sm text-slate-500 transition-colors hover:text-white"
-                        >
-                          {link.label}
-                          <ExternalLink className="h-3 w-3" />
-                        </a>
-                      ) : (
-                        <a
-                          href="#"
-                          className="text-sm text-slate-500 transition-colors hover:text-white"
-                        >
-                          {isObj ? link.label : link}
-                        </a>
-                      )}
-                    </li>
-                  )
-                })}
+                {links.map((link) => (
+                  <li key={link.label}>
+                    {link.external ? (
+                      <a
+                        href={link.href}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-1 text-sm text-slate-500 transition-colors hover:text-white"
+                      >
+                        {link.label}
+                        <ExternalLink className="h-3 w-3" />
+                      </a>
+                    ) : (
+                      <a
+                        href={link.href}
+                        className="text-sm text-slate-500 transition-colors hover:text-white"
+                      >
+                        {link.label}
+                      </a>
+                    )}
+                  </li>
+                ))}
               </ul>
             </div>
           ))}

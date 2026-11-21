@@ -51,11 +51,17 @@ serve(async (req) => {
   try {
     const admin = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!)
 
-    // Same caller check as send-tenant-email: platform staff via a real
-    // JWT, or the service-role cron path (no caller resolved at all).
+    // Callers: platform staff via a real JWT, or pg_cron using the
+    // service-role key itself as the bearer token. Anything else is
+    // rejected — an open relay here lets strangers send WhatsApp messages
+    // to ANY phone number from the business's own sender account.
     const jwt = (req.headers.get('Authorization') || '').replace('Bearer ', '')
     const { data: { user: caller } } = await admin.auth.getUser(jwt)
-    if (caller) {
+    if (!caller) {
+      if (jwt !== Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')) {
+        return json({ error: 'Not authenticated' }, 401)
+      }
+    } else {
       const { data: appUser } = await admin.from('app_users').select('role').eq('id', caller.id).maybeSingle()
       if (!appUser || !['super_admin', 'admin'].includes(appUser.role)) {
         return json({ error: 'Not authorized' }, 403)

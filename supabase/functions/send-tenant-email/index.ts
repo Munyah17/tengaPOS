@@ -131,6 +131,21 @@ serve(async (req) => {
     const admin = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!)
     const body = await req.json()
 
+    // Caller must be platform staff (Super Admin/Admin) or the pg_cron
+    // service-role call — checked BEFORE any branch, including
+    // daily_digest, which otherwise let any signed-in user (or nobody at
+    // all) fire reminder emails to every tenant's owner on demand.
+    const jwt = (req.headers.get('Authorization') || '').replace('Bearer ', '')
+    const { data: { user: caller } } = await admin.auth.getUser(jwt)
+    if (caller) {
+      const { data: appUser } = await admin.from('app_users').select('role').eq('id', caller.id).maybeSingle()
+      if (!appUser || !['super_admin', 'admin'].includes(appUser.role)) {
+        return json({ error: 'Not authorized' }, 403)
+      }
+    } else if (jwt !== Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')) {
+      return json({ error: 'Not authenticated' }, 401)
+    }
+
     if (body.mode === 'daily_digest') {
       const { data: pending } = await admin
         .from('pending_config_changes')
@@ -163,17 +178,8 @@ serve(async (req) => {
     const { tenant_id, template: templateName, extra } = body
     if (!tenant_id || !templateName) return json({ error: 'tenant_id and template are required' }, 400)
 
-    // Caller must be platform staff (Super Admin/Admin) or the pg_cron
-    // service-role call — never trust a client-supplied recipient address.
-    const jwt = (req.headers.get('Authorization') || '').replace('Bearer ', '')
-    const { data: { user: caller } } = await admin.auth.getUser(jwt)
-    if (caller) {
-      const { data: appUser } = await admin.from('app_users').select('role').eq('id', caller.id).maybeSingle()
-      if (!appUser || !['super_admin', 'admin'].includes(appUser.role)) {
-        return json({ error: 'Not authorized' }, 403)
-      }
-    }
-    // (no caller + valid service-role JWT falls through here — that's the cron path)
+    // (Caller already verified above: platform staff JWT or the
+    // service-role bearer — never trust a client-supplied recipient.)
 
     const [{ data: tenant }, { data: owner }] = await Promise.all([
       admin.from('tenants').select('name').eq('id', tenant_id).maybeSingle(),
