@@ -5,7 +5,7 @@ import {
   CheckCircle, ShieldCheck, Loader2, ArrowLeft, Banknote,
 } from 'lucide-react'
 import posIcon from '@/assets/pos-icon.png'
-import paynowBanner from '@/assets/paynow-banner.svg'
+import paynowBanner from '@/assets/paynow-banner.png'
 import stripeBanner from '@/assets/stripe-banner.png'
 import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/stores/authStore'
@@ -53,6 +53,53 @@ const PLANS = [
     features: ['Everything in Standard', 'Dining board & Drive-through', 'Advanced reports · 3 branches'],
   },
 ]
+
+const BANNER_PROVIDERS = [
+  { key: 'paynow', label: 'Paynow', banner: paynowBanner, ring: 'ring-sky-400' },
+  { key: 'stripe', label: 'Stripe', banner: stripeBanner, ring: 'ring-indigo-400' },
+]
+
+function PayWithSelector({ provider, onChange, className = '' }) {
+  return (
+    <div className={className}>
+      <p className="mb-2 text-center text-xs font-bold uppercase tracking-widest text-slate-500">Pay with</p>
+      <div className="space-y-3">
+        {BANNER_PROVIDERS.map(({ key, label, banner, ring }) => {
+          const selected = provider === key
+          return (
+            <button
+              key={key}
+              type="button"
+              onClick={() => onChange(key)}
+              aria-pressed={selected}
+              aria-label={`Pay with ${label}`}
+              className={`relative block w-full rounded-2xl bg-white px-4 py-3 transition-all ${
+                selected ? `ring-4 ${ring}` : 'opacity-80 ring-1 ring-white/10 hover:opacity-100'
+              }`}
+            >
+              <img src={banner} alt="" className="mx-auto h-auto w-full max-w-md" />
+              {selected && (
+                <CheckCircle className="absolute right-2 top-2 h-5 w-5 rounded-full bg-white text-green-600" />
+              )}
+            </button>
+          )
+        })}
+        <button
+          type="button"
+          onClick={() => onChange('cash')}
+          aria-pressed={provider === 'cash'}
+          className={`flex w-full items-center justify-center gap-1.5 rounded-2xl bg-white px-4 py-3 text-sm font-bold transition-all ${
+            provider === 'cash'
+              ? 'text-amber-700 ring-4 ring-amber-400'
+              : 'text-slate-700 opacity-80 ring-1 ring-white/10 hover:opacity-100'
+          }`}
+        >
+          <Banknote className="h-5 w-5" /> Cash
+        </button>
+      </div>
+    </div>
+  )
+}
 
 export default function Checkout() {
   const navigate = useNavigate()
@@ -216,18 +263,7 @@ export default function Checkout() {
                 ))}
               </div>
 
-              <p className="mb-2 mt-6 text-center text-xs font-bold uppercase tracking-widest text-slate-500">Pay with</p>
-              <div className="grid grid-cols-3 gap-3">
-                <button onClick={() => setProvider('paynow')} className={`flex items-center justify-center rounded-xl border px-4 py-3 transition-all ${provider === 'paynow' ? 'border-green-500 bg-white' : 'border-white/10 bg-white/90 hover:border-white/25'}`}>
-                  <img src={paynowBanner} alt="Paynow" className="h-6 w-auto" />
-                </button>
-                <button onClick={() => setProvider('stripe')} className={`flex items-center justify-center rounded-xl border px-4 py-3 transition-all ${provider === 'stripe' ? 'border-indigo-500 bg-white' : 'border-white/10 bg-white/90 hover:border-white/25'}`}>
-                  <img src={stripeBanner} alt="Stripe" className="h-6 w-auto" />
-                </button>
-                <button onClick={() => setProvider('cash')} className={`flex items-center justify-center gap-1.5 rounded-xl border px-4 py-3 text-sm font-bold transition-all ${provider === 'cash' ? 'border-amber-500 bg-white text-amber-700' : 'border-white/10 bg-white/90 text-slate-700 hover:border-white/25'}`}>
-                  <Banknote className="h-5 w-5" /> Cash
-                </button>
-              </div>
+              <PayWithSelector provider={provider} onChange={setProvider} className="mt-6" />
 
               <button
                 onClick={startCheckout}
@@ -343,39 +379,7 @@ export default function Checkout() {
             </label>
           )}
 
-          <p className="mb-2 text-center text-xs font-bold uppercase tracking-widest text-slate-500">Pay with</p>
-          <div className="grid grid-cols-3 gap-3">
-            <button
-              onClick={() => setProvider('paynow')}
-              className={`flex items-center justify-center rounded-xl border px-4 py-3 transition-all ${
-                provider === 'paynow'
-                  ? 'border-green-500 bg-white'
-                  : 'border-white/10 bg-white/90 hover:border-white/25'
-              }`}
-            >
-              <img src={paynowBanner} alt="Paynow" className="h-6 w-auto" />
-            </button>
-            <button
-              onClick={() => setProvider('stripe')}
-              className={`flex items-center justify-center rounded-xl border px-4 py-3 transition-all ${
-                provider === 'stripe'
-                  ? 'border-indigo-500 bg-white'
-                  : 'border-white/10 bg-white/90 hover:border-white/25'
-              }`}
-            >
-              <img src={stripeBanner} alt="Stripe" className="h-6 w-auto" />
-            </button>
-            <button
-              onClick={() => setProvider('cash')}
-              className={`flex items-center justify-center gap-1.5 rounded-xl border px-4 py-3 text-sm font-bold transition-all ${
-                provider === 'cash'
-                  ? 'border-amber-500 bg-white text-amber-700'
-                  : 'border-white/10 bg-white/90 text-slate-700 hover:border-white/25'
-              }`}
-            >
-              <Banknote className="h-5 w-5" /> Cash
-            </button>
-          </div>
+          <PayWithSelector provider={provider} onChange={setProvider} />
 
           <button
             onClick={startCheckout}
