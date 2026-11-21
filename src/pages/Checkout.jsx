@@ -2,14 +2,14 @@ import { useEffect, useState } from 'react'
 import { useNavigate, useSearchParams, Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import {
-  CheckCircle, ShieldCheck, Loader2, ArrowLeft, Banknote,
+  CheckCircle, ShieldCheck, Loader2, ArrowLeft, Banknote, Landmark, Smartphone, Copy, MessageCircle,
 } from 'lucide-react'
 import posIcon from '@/assets/pos-icon.png'
 import paynowBanner from '@/assets/paynow-banner.png'
 import stripeBanner from '@/assets/stripe-banner.png'
 import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/stores/authStore'
-import { usePlanPricing } from '@/lib/platformSettings'
+import { usePlanPricing, useManualPaymentDetails } from '@/lib/platformSettings'
 import toast from 'react-hot-toast'
 
 const PLANS = [
@@ -59,7 +59,14 @@ const BANNER_PROVIDERS = [
   { key: 'stripe', label: 'Stripe', banner: stripeBanner, ring: 'ring-indigo-400' },
 ]
 
-function PayWithSelector({ provider, onChange, className = '' }) {
+const MANUAL_METHODS = [
+  { key: 'bank_transfer', label: 'Bank transfer', icon: Landmark },
+  { key: 'mobile_transfer', label: 'EcoCash / InnBucks', icon: Smartphone },
+  { key: 'cash', label: 'Cash', icon: Banknote },
+]
+
+function PayWithSelector({ provider, onChange, methods = [], className = '' }) {
+  const manual = MANUAL_METHODS.filter((m) => methods.includes(m.key))
   return (
     <div className={className}>
       <p className="mb-2 text-center text-xs font-bold uppercase tracking-widest text-slate-500">Pay with</p>
@@ -84,19 +91,147 @@ function PayWithSelector({ provider, onChange, className = '' }) {
             </button>
           )
         })}
-        <button
-          type="button"
-          onClick={() => onChange('cash')}
-          aria-pressed={provider === 'cash'}
-          className={`flex w-full items-center justify-center gap-1.5 rounded-2xl bg-white px-4 py-3 text-sm font-bold transition-all ${
-            provider === 'cash'
-              ? 'text-amber-700 ring-4 ring-amber-400'
-              : 'text-slate-700 opacity-80 ring-1 ring-white/10 hover:opacity-100'
-          }`}
-        >
-          <Banknote className="h-5 w-5" /> Cash
-        </button>
+        {manual.length > 0 && (
+          <div className={`grid gap-3 ${manual.length === 1 ? 'grid-cols-1' : manual.length === 2 ? 'grid-cols-2' : 'grid-cols-1 sm:grid-cols-3'}`}>
+            {manual.map(({ key, label, icon: Icon }) => (
+              <button
+                key={key}
+                type="button"
+                onClick={() => onChange(key)}
+                aria-pressed={provider === key}
+                className={`flex items-center justify-center gap-2 rounded-2xl bg-white px-3 py-3 text-sm font-semibold transition-all ${
+                  provider === key
+                    ? 'text-slate-900 ring-4 ring-amber-400'
+                    : 'text-slate-700 opacity-80 ring-1 ring-white/10 hover:opacity-100'
+                }`}
+              >
+                <Icon className="h-4 w-4 flex-shrink-0" /> {label}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
+    </div>
+  )
+}
+
+const money = (n) => `$${Number(n).toFixed(2)}`
+
+function CopyValue({ value }) {
+  const [copied, setCopied] = useState(false)
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(String(value).replace(/\s+/g, ''))
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1500)
+    } catch { toast.error('Could not copy — please type it in') }
+  }
+  return (
+    <button type="button" onClick={copy} className="inline-flex items-center gap-1 text-xs font-medium text-brand-300 hover:text-brand-200">
+      {copied ? <CheckCircle className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+      {copied ? 'Copied' : 'Copy'}
+    </button>
+  )
+}
+
+const fieldClass = 'mt-1.5 w-full rounded-xl border border-white/15 bg-white/5 px-3.5 py-2.5 text-sm text-white placeholder:text-slate-500 focus:border-brand-400 focus:outline-none'
+
+// Pay-to details and the proof fields for a direct bank or mobile-money
+// transfer. The money moves outside the app, so the customer quotes the
+// reference from their receipt and platform staff match it by hand.
+function TransferPanel({ method, details, lines, total, payerReference, onReference, payerName, onName, popUrl }) {
+  const isBank = method === 'bank_transfer'
+  const rows = isBank
+    ? [
+        ['Account name', details.bank.accountName],
+        ['Bank', details.bank.bankName],
+        ...(details.bank.branch ? [['Branch', details.bank.branch]] : []),
+        ['USD account', details.bank.accountNumber, true],
+      ]
+    : [
+        ['Number', details.mobile.number, true],
+        ['Name', details.mobile.name],
+      ]
+  return (
+    <div className="mt-4 rounded-2xl border border-white/10 bg-white/5 p-4 text-left sm:p-5">
+      <dl className="space-y-1.5 border-b border-white/10 pb-3 text-sm">
+        {lines.map(([label, amount]) => (
+          <div key={label} className="flex justify-between gap-4 text-slate-300">
+            <dt>{label}</dt>
+            <dd className="tabular-nums">{money(amount)}</dd>
+          </div>
+        ))}
+        <div className="flex justify-between gap-4 font-semibold text-white">
+          <dt>Total</dt>
+          <dd className="tabular-nums">{money(total)}</dd>
+        </div>
+      </dl>
+
+      <p className="mt-4 text-sm font-semibold text-white">
+        {isBank ? `Transfer ${money(total)} to:` : `Send ${money(total)} via EcoCash or InnBucks to:`}
+      </p>
+      <dl className="mt-2 divide-y divide-white/10 text-sm">
+        {rows.map(([label, value, copyable]) => (
+          <div key={label} className="flex items-center justify-between gap-4 py-2">
+            <dt className="text-slate-400">{label}</dt>
+            <dd className="flex items-center gap-3 text-right font-medium text-white">
+              <span className="break-all">{value}</span>
+              {copyable && <CopyValue value={value} />}
+            </dd>
+          </div>
+        ))}
+        <div className="flex items-center justify-between gap-4 py-2">
+          <dt className="text-slate-400">Amount</dt>
+          <dd className="font-medium tabular-nums text-white">{money(total)}</dd>
+        </div>
+      </dl>
+
+      <label className="mt-4 block text-sm font-medium text-slate-200">
+        Transaction reference <span className="text-red-400">*</span>
+        <input
+          value={payerReference}
+          onChange={(e) => onReference(e.target.value)}
+          maxLength={80}
+          placeholder="Transaction ID"
+          className={fieldClass}
+        />
+        <span className="mt-1 block text-xs font-normal text-slate-400">
+          e.g. the EcoCash / bank transaction ID from your receipt
+        </span>
+      </label>
+      {!isBank && (
+        <label className="mt-3 block text-sm font-medium text-slate-200">
+          Sender name (EcoCash / InnBucks) <span className="text-red-400">*</span>
+          <input
+            value={payerName}
+            onChange={(e) => onName(e.target.value)}
+            maxLength={120}
+            placeholder="Sender name"
+            className={fieldClass}
+          />
+          <span className="mt-1 block text-xs font-normal text-slate-400">
+            Name of the person, agent or organisation that sent the money. Must match the sender name shown on the
+            mobile money transfer.
+          </span>
+        </label>
+      )}
+
+      {popUrl && (
+        <>
+          <p className="mt-4 text-xs leading-relaxed text-slate-400">
+            After paying, send your proof of payment on WhatsApp to {details.popWhatsapp} with your name, email, phone
+            and transaction reference — we'll activate your account as soon as it's confirmed.
+          </p>
+          <a
+            href={popUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl border border-green-500/40 py-2.5 text-sm font-semibold text-green-300 transition-colors hover:bg-green-500/10"
+          >
+            <MessageCircle className="h-4 w-4" /> Send PoP on WhatsApp
+          </a>
+        </>
+      )}
     </div>
   )
 }
@@ -104,7 +239,7 @@ function PayWithSelector({ provider, onChange, className = '' }) {
 export default function Checkout() {
   const navigate = useNavigate()
   const [params] = useSearchParams()
-  const { isAuthenticated, tenant, initAuth } = useAuthStore()
+  const { isAuthenticated, tenant, profile, initAuth } = useAuthStore()
   const { pricing } = usePlanPricing()
   const planPrice = (plan) => pricing[plan.key]?.price ?? plan.price
   // Set server-side by notify_trial_reminders() from day 4 of the trial-
@@ -119,6 +254,15 @@ export default function Checkout() {
   const [redirecting, setRedirecting] = useState(false)
   const [confirming, setConfirming] = useState(false)
   const [cashSubmitted, setCashSubmitted] = useState(false)
+  const manualDetails = useManualPaymentDetails()
+  const [payerReference, setPayerReference] = useState('')
+  const [payerName, setPayerName] = useState('')
+  const isTransfer = provider === 'bank_transfer' || provider === 'mobile_transfer'
+  const manualMethods = [
+    ...(manualDetails.bankReady ? ['bank_transfer'] : []),
+    ...(manualDetails.mobileReady ? ['mobile_transfer'] : []),
+    'cash',
+  ]
 
   const returnStatus = params.get('status')
   const returnRef = params.get('ref')
@@ -165,7 +309,26 @@ export default function Checkout() {
     return () => clearInterval(timer)
   }, [returnRef, returnStatus, initAuth, navigate])
 
+  const chosenPlan = PLANS.find((p) => p.key === selectedPlan)
+  const onboardingFee = wantsOnboarding && chosenPlan?.onboardingEligible ? 30 : 0
+  const planTotal = finalPrice(chosenPlan) + onboardingFee
+  const popDigits = manualDetails.popWhatsapp.replace(/\D/g, '')
+  const popUrl = popDigits
+    ? `https://wa.me/${popDigits}?text=${encodeURIComponent(
+        [
+          'Proof of payment for tengaPOS',
+          `Business: ${tenant?.name || ''}`,
+          `Email: ${profile?.email || ''}`,
+          `Plan: ${chosenPlan.name}`,
+          `Amount: ${money(planTotal)}`,
+          `Transaction reference: ${payerReference.trim()}`,
+        ].join('\n'),
+      )}`
+    : ''
+
   const startCheckout = async () => {
+    if (isTransfer && !payerReference.trim()) { toast.error('Enter the transaction reference from your receipt'); return }
+    if (provider === 'mobile_transfer' && !payerName.trim()) { toast.error('Enter the sender name shown on the transfer'); return }
     setRedirecting(true)
     try {
       const { data: { session } } = await supabase.auth.getSession()
@@ -175,6 +338,7 @@ export default function Checkout() {
             plan_type: selectedPlan,
             provider,
             onboarding: wantsOnboarding,
+            ...(isTransfer ? { payer_reference: payerReference.trim(), payer_name: payerName.trim() } : {}),
             return_url: `${window.location.origin}/checkout`,
           }
       const { data, error } = await supabase.functions.invoke('signup-checkout', {
@@ -271,7 +435,7 @@ export default function Checkout() {
                 className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-brand-600 py-3.5 text-sm font-bold text-white transition-colors hover:bg-brand-700 disabled:opacity-60"
               >
                 {redirecting ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}
-                {redirecting ? 'Redirecting…' : provider === 'cash' ? `Request Cash Payment — $${hostingAmount}` : `Continue to secure checkout — $${hostingAmount}`}
+                {redirecting ? 'Redirecting…' : `Continue to secure checkout — $${hostingAmount}`}
               </button>
             </>
           )}
@@ -358,8 +522,19 @@ export default function Checkout() {
               <Banknote className="mx-auto mb-2 h-8 w-8 text-amber-400" />
               <h3 className="font-bold text-white">Request submitted</h3>
               <p className="mt-1 text-sm text-amber-200/80">
-                We'll activate your account as soon as your cash payment is confirmed. No further action needed here.
+                We'll activate your account as soon as your {isTransfer ? 'transfer' : 'cash payment'} is confirmed.
+                {isTransfer && popUrl ? ' Send your proof of payment on WhatsApp to speed this up.' : ' No further action needed here.'}
               </p>
+              {isTransfer && popUrl && (
+                <a
+                  href={popUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="mt-3 inline-flex items-center justify-center gap-2 rounded-xl bg-green-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-green-700"
+                >
+                  <MessageCircle className="h-4 w-4" /> Send PoP on WhatsApp
+                </a>
+              )}
             </div>
           ) : (
           <>
@@ -379,7 +554,24 @@ export default function Checkout() {
             </label>
           )}
 
-          <PayWithSelector provider={provider} onChange={setProvider} />
+          <PayWithSelector provider={provider} onChange={setProvider} methods={manualMethods} />
+
+          {isTransfer && (
+            <TransferPanel
+              method={provider}
+              details={manualDetails}
+              lines={[
+                [chosenPlan.name, finalPrice(chosenPlan)],
+                ...(onboardingFee ? [['Physical onboarding', onboardingFee]] : []),
+              ]}
+              total={planTotal}
+              payerReference={payerReference}
+              onReference={setPayerReference}
+              payerName={payerName}
+              onName={setPayerName}
+              popUrl={popUrl}
+            />
+          )}
 
           <button
             onClick={startCheckout}
@@ -388,14 +580,16 @@ export default function Checkout() {
           >
             {redirecting ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}
             {redirecting
-              ? 'Redirecting to secure checkout…'
-              : provider === 'cash'
-                ? `Request Cash Payment — $${finalPrice(PLANS.find((p) => p.key === selectedPlan)) + (wantsOnboarding && PLANS.find((p) => p.key === selectedPlan)?.onboardingEligible ? 30 : 0)}`
-                : `Continue to secure checkout — $${finalPrice(PLANS.find((p) => p.key === selectedPlan)) + (wantsOnboarding && PLANS.find((p) => p.key === selectedPlan)?.onboardingEligible ? 30 : 0)}`}
+              ? (isTransfer || provider === 'cash' ? 'Submitting…' : 'Redirecting to secure checkout…')
+              : isTransfer
+                ? `I've sent ${money(planTotal)} — continue`
+                : provider === 'cash'
+                  ? `Request Cash Payment — $${planTotal}`
+                  : `Continue to secure checkout — $${planTotal}`}
           </button>
 
           <p className="mt-3 text-center text-xs text-white">
-            {provider === 'cash'
+            {isTransfer || provider === 'cash'
               ? "We'll confirm your payment manually and activate your account — usually within a business day."
               : `You'll be redirected to ${provider === 'stripe' ? 'Stripe' : 'Paynow'}'s secure hosted page. tengaPOS never sees or stores your payment details.`}
           </p>

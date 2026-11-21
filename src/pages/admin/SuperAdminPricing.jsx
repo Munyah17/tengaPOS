@@ -1,7 +1,10 @@
 import { useEffect, useState } from 'react'
 import { Check, X, Save, Loader2, DollarSign, Megaphone, Image, Trash2 } from 'lucide-react'
 import { PLANS, DEFAULT_FEATURES } from '@/lib/planCatalog'
-import { getSetting, updateSetting, DEFAULT_PLAN_PRICING, DEFAULT_FISCAL_PRICING } from '@/lib/platformSettings'
+import {
+  getSetting, updateSetting, DEFAULT_PLAN_PRICING, DEFAULT_FISCAL_PRICING,
+  EMPTY_MANUAL_PAYMENT_DETAILS, mergeManualPaymentDetails,
+} from '@/lib/platformSettings'
 import { stripLeadingZero } from '@/utils/formatters'
 import { useAuthStore } from '@/stores/authStore'
 import { supabase } from '@/lib/supabase'
@@ -26,6 +29,7 @@ export default function SuperAdminPricing() {
   const { user, role } = useAuthStore()
   const [planPricing, setPlanPricing] = useState(DEFAULT_PLAN_PRICING)
   const [fiscalPricing, setFiscalPricing] = useState(DEFAULT_FISCAL_PRICING)
+  const [manualPay, setManualPay] = useState(EMPTY_MANUAL_PAYMENT_DETAILS)
   const [banner, setBanner] = useState({ enabled: false, title: '', text: '', type: 'info', imageUrl: '', buttons: [] })
   const [saving, setSaving] = useState(false)
   const [uploadingImage, setUploadingImage] = useState(false)
@@ -50,6 +54,7 @@ export default function SuperAdminPricing() {
   useEffect(() => {
     getSetting('plan_pricing', DEFAULT_PLAN_PRICING).then((v) => setPlanPricing({ ...DEFAULT_PLAN_PRICING, ...(v || {}) }))
     getSetting('fiscalisation_pricing', DEFAULT_FISCAL_PRICING).then((v) => setFiscalPricing({ ...DEFAULT_FISCAL_PRICING, ...(v || {}) }))
+    getSetting('manual_payment_details', null).then((v) => setManualPay(mergeManualPaymentDetails(v)))
     getSetting('site_banner', null).then((v) => v && setBanner((b) => ({ ...b, ...v, buttons: v.buttons || [] })))
   }, [])
 
@@ -59,6 +64,9 @@ export default function SuperAdminPricing() {
       buttons[index] = { ...(buttons[index] || { label: '', url: '' }), [field]: value }
       return { ...b, buttons }
     })
+
+  const setManualField = (group, field, value) =>
+    setManualPay((m) => (group ? { ...m, [group]: { ...m[group], [field]: value } } : { ...m, [field]: value }))
 
   const setPlanPrice = (key, price) =>
     setPlanPricing((p) => ({ ...p, [key]: { ...p[key], price: Number(price) || 0 } }))
@@ -71,6 +79,7 @@ export default function SuperAdminPricing() {
       if (isSuperAdmin) {
         await updateSetting('plan_pricing', planPricing, user?.id)
         await updateSetting('fiscalisation_pricing', fiscalPricing, user?.id)
+        await updateSetting('manual_payment_details', manualPay, user?.id)
       }
       if (canEditBanner) {
         await updateSetting('site_banner', banner, user?.id)
@@ -213,6 +222,65 @@ export default function SuperAdminPricing() {
           ))}
         </div>
       </div>
+
+      {/* Direct transfer details shown at checkout */}
+      {isSuperAdmin && (
+        <div className="mb-6 rounded-2xl border border-slate-200 bg-white p-5 dark:border-white/10 dark:bg-white/5">
+          <div className="mb-1 flex items-center gap-2">
+            <DollarSign className="h-5 w-5 text-green-500" />
+            <h2 className="font-bold text-slate-900 dark:text-white">Direct Transfer Details (checkout)</h2>
+          </div>
+          <p className="mb-4 text-xs text-slate-500">
+            Where customers send money when they choose Bank transfer or EcoCash / InnBucks at checkout. A method only
+            appears once it is switched on and filled in. You confirm each payment on the tenant's Plan tab.
+          </p>
+          <div className="grid gap-5 lg:grid-cols-2">
+            {[
+              {
+                group: 'bank', title: 'Bank transfer',
+                fields: [['accountName', 'Account name'], ['bankName', 'Bank'], ['branch', 'Branch (optional)'], ['accountNumber', 'USD account number']],
+              },
+              {
+                group: 'mobile', title: 'EcoCash / InnBucks',
+                fields: [['number', 'Mobile number'], ['name', 'Registered name']],
+              },
+            ].map(({ group, title, fields }) => (
+              <div key={group} className="rounded-xl border border-slate-100 p-4 dark:border-white/5">
+                <label className="mb-3 flex items-center justify-between gap-3 text-sm font-semibold text-slate-900 dark:text-white">
+                  {title}
+                  <input
+                    type="checkbox"
+                    checked={!!manualPay[group].enabled}
+                    onChange={(e) => setManualField(group, 'enabled', e.target.checked)}
+                    className="h-4 w-4"
+                  />
+                </label>
+                <div className="space-y-2.5">
+                  {fields.map(([field, label]) => (
+                    <label key={field} className="block text-xs font-medium text-slate-500">
+                      {label}
+                      <input
+                        value={manualPay[group][field] || ''}
+                        onChange={(e) => setManualField(group, field, e.target.value)}
+                        className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 dark:border-white/10 dark:bg-white/5 dark:text-white"
+                      />
+                    </label>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+          <label className="mt-4 block max-w-sm text-xs font-medium text-slate-500">
+            WhatsApp number for proof of payment
+            <input
+              value={manualPay.popWhatsapp}
+              onChange={(e) => setManualField(null, 'popWhatsapp', e.target.value)}
+              placeholder="+263 7X XXX XXXX"
+              className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 dark:border-white/10 dark:bg-white/5 dark:text-white"
+            />
+          </label>
+        </div>
+      )}
 
       {/* Fiscalisation add-on pricing */}
       <div className="mb-6 rounded-2xl border border-slate-200 bg-white p-5 dark:border-white/10 dark:bg-white/5">
