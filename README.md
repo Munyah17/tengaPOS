@@ -4,7 +4,7 @@ A premium, production-grade cloud-based POS and Inventory Management System buil
 
 ## Tech Stack
 
-- **Frontend:** React 19 + Vite + TailwindCSS v4
+- **Frontend:** React 19 + Vite + TailwindCSS v3
 - **State:** Zustand + TanStack Query
 - **Animations:** Framer Motion
 - **Backend:** Supabase (PostgreSQL, Auth, Realtime, Storage, Edge Functions, RLS)
@@ -36,14 +36,9 @@ npm run dev
 - **ZIMRA Fiscalisation:** Optional fiscal compliance add-on
 - **White Label:** Optional custom branding with tenant subdomains
 
-## Business Model
+## Pricing
 
-| Plan | Price |
-|------|-------|
-| Hardware + System Combo | FREE for 6 months, $10/6mo renewal |
-| Software Only | $50/month |
-| ZIMRA Fiscalisation | $20/device/month |
-| White Label Branding | $50 once-off |
+Plans and add-on prices are managed in the Super Admin pricing page and shown on the public landing page; there is no free trial.
 
 ## Architecture
 

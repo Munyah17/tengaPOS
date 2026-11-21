@@ -95,10 +95,6 @@ export const adminListEvents = (params = {}) => {
 }
 export const adminGetStats = () => call('/v1/admin/stats')
 export const adminListDownloads = () => call('/v1/admin/downloads')
-export const adminListReports = (params = {}) => {
-  const q = new URLSearchParams(Object.entries(params).filter(([, v]) => v)).toString()
-  return call(`/v1/admin/reports${q ? `?${q}` : ''}`)
-}
 export const adminListInfringements = (params = {}) => {
   const q = new URLSearchParams(Object.entries(params).filter(([, v]) => v)).toString()
   return call(`/v1/admin/infringements${q ? `?${q}` : ''}`)

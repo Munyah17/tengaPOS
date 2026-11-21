@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { ChefHat, Clock, CheckCircle, Timer, Flame, Volume2, VolumeX, Car, Store } from 'lucide-react'
 import { Link } from 'react-router-dom'
@@ -41,7 +41,7 @@ function playBeep() {
       osc.start(ctx.currentTime + start); osc.stop(ctx.currentTime + start + dur)
     }
     play(880, 0, 0.12); play(880, 0.18, 0.12); play(1100, 0.36, 0.18)
-  } catch {}
+  } catch { /* audio unavailable */ }
 }
 
 // ─── Order card ───────────────────────────────────────────────────────────────

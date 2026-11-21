@@ -49,7 +49,7 @@ function playBeep() {
     gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.3)
     osc.start(ctx.currentTime)
     osc.stop(ctx.currentTime + 0.3)
-  } catch {}
+  } catch { /* audio unavailable */ }
 }
 
 function RestaurantOrders({ orders }) {
@@ -76,7 +76,6 @@ function RestaurantOrders({ orders }) {
     <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
       {orders.map((order, i) => {
         const st = ORDER_STATUS[order.status] || ORDER_STATUS.received
-        const Icon = st.icon
         const isOverdue = order.elapsed > 20
         const hasRinged = ringed[order.id]
 

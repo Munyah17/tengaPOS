@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react'
 import {
-  BarChart3, TrendingUp, Building2, Users, DollarSign,
-  RefreshCw, Clock, CheckCircle, XCircle, Crown, Zap, Star,
-  Smartphone, Briefcase, Calendar, AlertTriangle, ChevronDown, ChevronUp,
+  TrendingUp, Building2, Users, DollarSign,
+  RefreshCw, Clock, XCircle,
+  Calendar, ChevronDown, ChevronUp,
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { PLANS } from '@/lib/planCatalog'
@@ -24,16 +24,6 @@ const PLAN_ONCE_OFF = {
 
 function fmt$(n) {
   return '$' + (n ?? 0).toLocaleString('en-US')
-}
-
-function timeAgo(iso) {
-  if (!iso) return 'Never'
-  const diff = Math.floor((Date.now() - new Date(iso)) / 1000)
-  if (diff < 60) return `${diff}s ago`
-  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`
-  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`
-  if (diff < 86400 * 30) return `${Math.floor(diff / 86400)}d ago`
-  return new Date(iso).toLocaleDateString('en-ZW', { month: 'short', day: 'numeric', year: 'numeric' })
 }
 
 function KPICard({ icon: Icon, label, value, sub, color = 'indigo', delta }) {

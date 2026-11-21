@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Shield, Globe, KeyRound, User, CreditCard, Loader2, ExternalLink } from 'lucide-react'
+import { Shield, Globe, KeyRound, User, CreditCard, Loader2 } from 'lucide-react'
 import { useAuthStore } from '@/stores/authStore'
 import { supabase } from '@/lib/supabase'
 import toast from 'react-hot-toast'

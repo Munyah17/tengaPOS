@@ -51,7 +51,6 @@ export default function TopBar({ onMenuClick }) {
   const { notifications, markAllRead } = useTenantNotifications({ tenantId: tenant?.id, posMode, role, userId: profile?.id })
   const canSeeSettings = (NAV_PERMISSIONS[role] || NAV_PERMISSIONS.vendor).includes('settings')
 
-  const isRestaurant = posMode === 'restaurant'
   const enabledModes = tenant?.enabled_modes?.length ? tenant.enabled_modes : [tenant?.pos_mode || 'retail']
   const activeMeta = MODE_META[posMode] || MODE_META.retail
   const isReadOnly = role === 'tech_support'

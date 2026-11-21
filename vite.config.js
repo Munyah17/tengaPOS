@@ -56,7 +56,7 @@ export default defineConfig({
     buildVersionPlugin(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['favicon.png', 'robots.txt'],
+      includeAssets: ['favicon.png', 'pwa-192.png', 'pwa-512.png', 'robots.txt'],
       manifest: {
         name: 'tengaPOS - Cloud POS & Inventory',
         short_name: 'tengaPOS',
@@ -66,8 +66,8 @@ export default defineConfig({
         display: 'standalone',
         start_url: '/',
         icons: [
-          { src: '/favicon.png', sizes: '192x192', type: 'image/png' },
-          { src: '/favicon.png', sizes: '512x512', type: 'image/png' },
+          { src: '/pwa-192.png', sizes: '192x192', type: 'image/png' },
+          { src: '/pwa-512.png', sizes: '512x512', type: 'image/png' },
         ],
       },
       workbox: {

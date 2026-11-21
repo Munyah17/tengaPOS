@@ -33,28 +33,3 @@ export const PAYMENT_METHODS = [
   { id: 'mastercard', label: 'Mastercard', icon: 'CreditCard' },
   { id: 'pos_terminal', label: 'POS Terminal', icon: 'Monitor' },
 ]
-
-export const ORDER_STATUSES = [
-  { id: 'received', label: 'Received', color: 'bg-blue-500' },
-  { id: 'waiting', label: 'Waiting', color: 'bg-yellow-500' },
-  { id: 'cooking', label: 'Cooking', color: 'bg-orange-500' },
-  { id: 'ready', label: 'Ready for Collection', color: 'bg-green-500' },
-]
-
-export const USER_ROLES = {
-  developer: ['super_admin', 'admin', 'associate'],
-  vendor: ['vendor', 'shop_manager', 'supervisor', 'cashier', 'shop_assistant', 'tech_support'],
-}
-
-export const ROLE_PERMISSIONS = {
-  super_admin: ['*'],
-  admin: ['manage_vendors', 'view_analytics', 'manage_system'],
-  associate: ['view_analytics', 'support_vendors'],
-  vendor: ['manage_store', 'manage_staff', 'view_analytics', 'manage_inventory', 'manage_tasks', 'pos_access'],
-  shop_manager: ['manage_branch', 'manage_staff', 'view_analytics', 'manage_inventory', 'pos_access'],
-  supervisor: ['view_analytics', 'manage_inventory', 'pos_access', 'void_transactions'],
-  cashier: ['pos_access'],
-  shop_assistant: ['pos_access', 'view_inventory'],
-  tech_support: ['view_system', 'manage_devices'],
-}
-
