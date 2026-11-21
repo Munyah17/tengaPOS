@@ -126,6 +126,20 @@ serve(async (req) => {
       return new Response(JSON.stringify({ received: true }), { status: 200 })
     }
 
+    // Idempotency for plan/add-on checkouts: Stripe retries webhook
+    // delivery, and this branch previously re-applied activation AND
+    // re-inserted the subscription_payments row on every retry (duplicate
+    // ledger rows, and each retry pushed renewal further out). If the
+    // checkout is already 'paid', this delivery is a replay — stop here.
+    const { data: existingCheckout } = await admin
+      .from('signup_checkouts')
+      .select('status')
+      .eq('reference', reference)
+      .maybeSingle()
+    if (existingCheckout?.status === 'paid') {
+      return new Response(JSON.stringify({ received: true }), { status: 200 })
+    }
+
     const months = metaMonths || PLAN_MONTHS[planType] || 6
     const renewal = new Date(now)
     renewal.setMonth(renewal.getMonth() + months)
@@ -190,31 +204,37 @@ serve(async (req) => {
       }).eq('id', tenantId)
     }
 
-    // Mark checkout + record the payment
+    // Mark checkout + record the payment. The UPDATE is conditioned on
+    // the row NOT already being 'paid', so between two racing webhook
+    // deliveries only the one that actually flips the row writes the
+    // ledger entry + audit log — a losing delivery's `checkout` is null.
     const { data: checkout } = await admin
       .from('signup_checkouts')
       .update({ status: 'paid', updated_at: now.toISOString() })
       .eq('reference', reference)
+      .neq('status', 'paid')
       .select('id, amount')
       .maybeSingle()
 
-    await admin.from('subscription_payments').insert({
-      tenant_id: tenantId,
-      checkout_id: checkout?.id || null,
-      provider: 'stripe',
-      provider_ref: session.payment_intent || session.id,
-      plan_type: planType,
-      amount: (session.amount_total ?? 0) / 100 || checkout?.amount || 0,
-      currency: (session.currency || 'usd').toUpperCase(),
-    })
+    if (checkout) {
+      await admin.from('subscription_payments').insert({
+        tenant_id: tenantId,
+        checkout_id: checkout.id,
+        provider: 'stripe',
+        provider_ref: session.payment_intent || session.id,
+        plan_type: planType,
+        amount: (session.amount_total ?? 0) / 100 || checkout?.amount || 0,
+        currency: (session.currency || 'usd').toUpperCase(),
+      })
 
-    await admin.from('audit_logs').insert({
-      action: 'subscription_paid',
-      actor_email: 'stripe-webhook',
-      target_type: 'tenant',
-      target_id: tenantId,
-      details: { plan_type: planType, reference, provider: 'stripe' },
-    })
+      await admin.from('audit_logs').insert({
+        action: 'subscription_paid',
+        actor_email: 'stripe-webhook',
+        target_type: 'tenant',
+        target_id: tenantId,
+        details: { plan_type: planType, reference, provider: 'stripe' },
+      })
+    }
 
     return new Response(JSON.stringify({ received: true }), { status: 200 })
   } catch (err: unknown) {

@@ -278,7 +278,12 @@ export default function Pricing() {
             className="mt-10 text-center text-sm text-slate-500 dark:text-slate-500"
           >
             Business/Enterprise hosting and support terms are quoted individually.{' '}
-            <a href="#" className="font-medium text-brand-600 hover:underline dark:text-brand-400">
+            <a
+              href="https://wa.me/263773909307"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-medium text-brand-600 hover:underline dark:text-brand-400"
+            >
               Contact us to learn more.
             </a>
           </motion.p>

@@ -16,6 +16,25 @@ Deno.serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
     )
 
+    // Caller must be signed in; when a tenant_id is supplied it must be
+    // their own (the ping reads that tenant's fiscal device config).
+    const jwt = (req.headers.get('authorization') || '').replace(/^Bearer\s+/i, '')
+    const { data: { user: caller } } = await supabase.auth.getUser(jwt)
+    if (!caller) {
+      return new Response(JSON.stringify({ error: 'Not authenticated' }), {
+        status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
+    }
+    if (tenant_id) {
+      const { data: callerRow } = await supabase
+        .from('users').select('tenant_id, is_active').eq('id', caller.id).maybeSingle()
+      if (!callerRow?.is_active || callerRow.tenant_id !== tenant_id) {
+        return new Response(JSON.stringify({ error: 'Not authorized for this tenant' }), {
+          status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        })
+      }
+    }
+
     let device_id = deviceID
     let model_name = 'tengaPOS-v2'
     let model_version = '2.0.0'

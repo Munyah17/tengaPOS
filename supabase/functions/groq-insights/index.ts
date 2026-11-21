@@ -3,6 +3,7 @@
 // All tenants share this platform key (it is free / open-source quota).
 // Requires a valid Supabase JWT (authenticated tenant users only).
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -23,6 +24,28 @@ serve(async (req) => {
   try {
     const apiKey = Deno.env.get('GROQ_API_KEY')
     if (!apiKey) return json({ error: 'AI service not configured (missing GROQ_API_KEY secret)' }, 503)
+
+    // Caller must be a signed-in tenant user whose tenant actually has the
+    // paid AI Insights add-on — otherwise the platform's shared Groq quota
+    // is a free proxy for anyone with a JWT (or nobody at all).
+    const admin = createClient(
+      Deno.env.get('SUPABASE_URL')!,
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
+    )
+    const jwt = (req.headers.get('Authorization') || '').replace('Bearer ', '')
+    const { data: { user: caller } } = await admin.auth.getUser(jwt)
+    if (!caller) return json({ error: 'Not authenticated' }, 401)
+
+    const { data: callerRow } = await admin
+      .from('users')
+      .select('tenant_id, is_active, tenants(features)')
+      .eq('id', caller.id)
+      .maybeSingle()
+    // deno-lint-ignore no-explicit-any
+    const features = (callerRow?.tenants as any)?.features || {}
+    if (!callerRow?.is_active || !callerRow.tenant_id || features.ai_insights !== true) {
+      return json({ error: 'AI Insights isn\'t active for this business — subscribe in Settings to turn it on.' }, 403)
+    }
 
     const { prompt } = await req.json()
     if (!prompt || typeof prompt !== 'string') return json({ error: 'prompt is required' }, 400)

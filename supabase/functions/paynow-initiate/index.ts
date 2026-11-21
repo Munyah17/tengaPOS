@@ -40,6 +40,27 @@ serve(async (req) => {
       return json({ error: 'Missing required fields: tenant_id, amount, items' }, 400)
     }
 
+    // Caller must be a signed-in member of the tenant the checkout is for.
+    // Without this, anyone could open Paynow sessions against any
+    // tenant_id (fake payment records, and — paired with a tampered
+    // amount — under-priced settlements like desktop licenses).
+    const jwt = (req.headers.get('Authorization') || '').replace('Bearer ', '')
+    const { data: { user: caller }, error: authErr } = await supabase.auth.getUser(jwt)
+    if (authErr || !caller) return json({ error: 'Not authenticated' }, 401)
+
+    const { data: callerRow } = await supabase
+      .from('users')
+      .select('tenant_id, is_active')
+      .eq('id', caller.id)
+      .maybeSingle()
+    if (!callerRow?.is_active || callerRow.tenant_id !== tenant_id) {
+      return json({ error: 'Not authorized for this tenant' }, 403)
+    }
+
+    if (!(Number(amount) > 0)) {
+      return json({ error: 'Amount must be greater than zero' }, 400)
+    }
+
     // Fetch the vendor's Paynow credentials from tenants table (server-side only)
     const { data: tenant, error: tenantErr } = await supabase
       .from('tenants')
