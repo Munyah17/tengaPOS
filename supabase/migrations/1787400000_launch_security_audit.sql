@@ -15,10 +15,12 @@
 DROP POLICY IF EXISTS "service_insert_sessions" ON public.payment_sessions;
 DROP POLICY IF EXISTS "service_update_sessions" ON public.payment_sessions;
 
+DROP POLICY IF EXISTS "tenant_insert_own_sessions" ON public.payment_sessions;
 CREATE POLICY "tenant_insert_own_sessions"
   ON public.payment_sessions FOR INSERT
   WITH CHECK (tenant_id = public.get_user_tenant_id());
 
+DROP POLICY IF EXISTS "tenant_update_own_sessions" ON public.payment_sessions;
 CREATE POLICY "tenant_update_own_sessions"
   ON public.payment_sessions FOR UPDATE
   USING (tenant_id = public.get_user_tenant_id())
@@ -46,6 +48,7 @@ DROP POLICY IF EXISTS "service_insert_notifications" ON public.admin_notificatio
 -- ever write it.
 ALTER TABLE public.job_card_counters ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "tenant_read_own_counter" ON public.job_card_counters;
 CREATE POLICY "tenant_read_own_counter"
   ON public.job_card_counters FOR SELECT
   USING (tenant_id = public.get_user_tenant_id());
