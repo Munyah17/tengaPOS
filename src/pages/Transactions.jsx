@@ -3,7 +3,7 @@ import { useState, useMemo, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { withOfflineCache, seedFromOfflineCache } from '@/lib/offlineCache'
-import { RefreshCw, X, Ban, CheckCircle, ShieldCheck, XCircle, Undo2, Wrench, Trash2, Loader2 } from 'lucide-react'
+import { RefreshCw, X, Ban, CheckCircle, ShieldCheck, XCircle, Undo2, Wrench, Trash2, Loader2, ArrowUpDown } from 'lucide-react'
 import ExportMenu from '@/components/common/ExportMenu'
 import DateInput, { TimeField } from '@/components/common/DateInput'
 import ValidateReturnModal from '@/components/common/ValidateReturnModal'
@@ -135,6 +135,28 @@ const exportColumns = [
   { header: 'Method', key: 'method' },
   { header: 'Branch', key: 'branch' },
 ]
+
+// User-selectable ordering — each key pulls the value a row sorts on, and
+// the direction toggle flips it. Date stays the default (newest first).
+const TX_SORTS = {
+  date:     { label: 'Date',      get: (t) => new Date(t.date).getTime() },
+  receipt:  { label: 'Receipt #', get: (t) => String(t.id).toLowerCase() },
+  cashier:  { label: 'Cashier',   get: (t) => String(t.cashier).toLowerCase() },
+  items:    { label: 'Items',     get: (t) => (typeof t.items === 'number' ? t.items : -1) },
+  total:    { label: 'Total',     get: (t) => t.total },
+  method:   { label: 'Method',    get: (t) => String(t.method).toLowerCase() },
+  branch:   { label: 'Branch',    get: (t) => String(t.branch).toLowerCase() },
+}
+
+function sortRows(rows, key, dir, sorts) {
+  const get = sorts[key]?.get || sorts.date.get
+  return [...rows].sort((a, b) => {
+    const va = get(a)
+    const vb = get(b)
+    const cmp = typeof va === 'number' && typeof vb === 'number' ? va - vb : String(va).localeCompare(String(vb))
+    return dir === 'asc' ? cmp : -cmp
+  })
+}
 
 export default function Transactions() {
   const { tenant, role } = useAuthStore()
@@ -336,15 +358,18 @@ export default function Transactions() {
     }
   }
 
+  const [sortKey, setSortKey] = useState('date')
+  const [sortDir, setSortDir] = useState('desc')
+
   const transactions = useMemo(() => {
-    if (!dateFrom && !dateTo) return allTransactions
-    return allTransactions.filter(t => {
+    const filtered = (!dateFrom && !dateTo) ? allTransactions : allTransactions.filter(t => {
       const d = new Date(t.date)
       if (dateFrom && d < combineDateAndTime(dateFrom, timeFrom, '00:00', 0)) return false
       if (dateTo && d > combineDateAndTime(dateTo, timeTo, '23:59', 59.999)) return false
       return true
     })
-  }, [allTransactions, dateFrom, dateTo, timeFrom, timeTo])
+    return sortRows(filtered, sortKey, sortDir, TX_SORTS)
+  }, [allTransactions, dateFrom, dateTo, timeFrom, timeTo, sortKey, sortDir])
 
   const dateFiltered = dateFrom || dateTo
   const transactionsTotal = useMemo(() => transactions.reduce((s, t) => s + t.total, 0), [transactions])
@@ -392,6 +417,25 @@ export default function Transactions() {
                 <X className="h-3.5 w-3.5" />
               </button>
             )}
+          </div>
+          <div className="flex items-center gap-1.5">
+            <select
+              value={sortKey}
+              onChange={(e) => setSortKey(e.target.value)}
+              className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 focus:border-brand-500 focus:outline-none dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300"
+              title="Sort transactions by"
+            >
+              {Object.entries(TX_SORTS).map(([key, s]) => (
+                <option key={key} value={key}>Sort: {s.label}</option>
+              ))}
+            </select>
+            <button
+              onClick={() => setSortDir((d) => (d === 'desc' ? 'asc' : 'desc'))}
+              className="rounded-xl border border-slate-200 bg-white p-2 text-slate-500 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
+              title={sortDir === 'desc' ? 'Descending — click for ascending' : 'Ascending — click for descending'}
+            >
+              <ArrowUpDown className="h-4 w-4" />
+            </button>
           </div>
           <button onClick={load} className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
             <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />

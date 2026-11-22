@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { motion } from 'framer-motion'
-import { Eye, Bell, CheckCircle, Clock, Flame, Timer, Car, Store, X, Trash2, Loader2, Printer } from 'lucide-react'
+import { Eye, Bell, CheckCircle, Clock, Flame, Timer, Car, Store, X, Trash2, Loader2, Printer, ArrowUpDown } from 'lucide-react'
 import ExportMenu from '@/components/common/ExportMenu'
 import DateInput, { TimeField } from '@/components/common/DateInput'
 import Modal from '@/components/common/Modal'
@@ -33,6 +33,28 @@ const exportColumns = [
   { header: 'Total', key: 'total' },
   { header: 'Method', key: 'method' },
 ]
+
+// User-selectable ordering — each key pulls the value a row sorts on, and
+// the direction toggle flips it. Date stays the default (newest first);
+// everything else lets staff read the list the way they need to.
+const ORDER_SORTS = {
+  date:     { label: 'Date',      get: (o) => new Date(o.date).getTime() },
+  receipt:  { label: 'Receipt #', get: (o) => String(o.id).toLowerCase() },
+  customer: { label: 'Customer',  get: (o) => String(o.customer).toLowerCase() },
+  items:    { label: 'Items',     get: (o) => o.items },
+  total:    { label: 'Total',     get: (o) => o.total },
+  status:   { label: 'Status',    get: (o) => String(o.status).toLowerCase() },
+}
+
+function sortRows(rows, key, dir, sorts) {
+  const get = sorts[key]?.get || sorts.date.get
+  return [...rows].sort((a, b) => {
+    const va = get(a)
+    const vb = get(b)
+    const cmp = typeof va === 'number' && typeof vb === 'number' ? va - vb : String(va).localeCompare(String(vb))
+    return dir === 'asc' ? cmp : -cmp
+  })
+}
 
 function playBeep() {
   try {
@@ -289,15 +311,18 @@ export default function Orders() {
 
   const allOrders = dbOrders
 
+  const [sortKey, setSortKey] = useState('date')
+  const [sortDir, setSortDir] = useState('desc')
+
   const orders = useMemo(() => {
-    if (!dateFrom && !dateTo) return allOrders
-    return allOrders.filter(o => {
+    const filtered = (!dateFrom && !dateTo) ? allOrders : allOrders.filter(o => {
       const d = new Date(o.date)
       if (dateFrom && d < combineDateAndTime(dateFrom, timeFrom, '00:00', 0)) return false
       if (dateTo && d > combineDateAndTime(dateTo, timeTo, '23:59', 59.999)) return false
       return true
     })
-  }, [allOrders, dateFrom, dateTo, timeFrom, timeTo])
+    return sortRows(filtered, sortKey, sortDir, ORDER_SORTS)
+  }, [allOrders, dateFrom, dateTo, timeFrom, timeTo, sortKey, sortDir])
 
   const dateFiltered = dateFrom || dateTo
   const ordersTotal = useMemo(() => orders.reduce((s, o) => s + o.total, 0), [orders])
@@ -324,6 +349,25 @@ export default function Orders() {
                   <X className="h-3.5 w-3.5" />
                 </button>
               )}
+            </div>
+            <div className="flex items-center gap-1.5">
+              <select
+                value={sortKey}
+                onChange={(e) => setSortKey(e.target.value)}
+                className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 focus:border-brand-500 focus:outline-none dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300"
+                title="Sort orders by"
+              >
+                {Object.entries(ORDER_SORTS).map(([key, s]) => (
+                  <option key={key} value={key}>Sort: {s.label}</option>
+                ))}
+              </select>
+              <button
+                onClick={() => setSortDir((d) => (d === 'desc' ? 'asc' : 'desc'))}
+                className="rounded-xl border border-slate-200 bg-white p-2 text-slate-500 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
+                title={sortDir === 'desc' ? 'Descending — click for ascending' : 'Ascending — click for descending'}
+              >
+                <ArrowUpDown className="h-4 w-4" />
+              </button>
             </div>
             <ExportMenu data={orders} columns={exportColumns} title={`Orders${dateFiltered ? ` (${dateFrom || '…'} to ${dateTo || '…'})` : ''}`} filename="tengapos_orders" />
           </div>
