@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import {
-  Cpu, CheckCircle, AlertTriangle, Loader, Power, PowerOff,
-  Calendar, Hash, Wifi, ToggleLeft, ToggleRight, Sun, Moon,
+  Cpu, CheckCircle, Loader, Power, PowerOff,
+  Calendar, Hash, Wifi, Sun, Moon, ShieldCheck,
 } from 'lucide-react'
 import { useFiscalStore } from '@/stores/fiscalStore'
 import { useAuthStore } from '@/stores/authStore'
@@ -170,9 +170,8 @@ export default function Fiscalisation() {
         tin: fiscalForm.tin,
         vatNumber: fiscalForm.vatNumber
       })
-      if (result?.error) throw new Error(result.error)
-      toast.success('Device registered with ZIMRA! Ready to use.')
-      fiscal.setRegistered(true)
+      toast.success(result?.warning ? 'Device is already registered with ZIMRA.' : 'Device registered with ZIMRA! Ready to use.')
+      fiscal.setRegistered({ isRegistered: true, certificateValidTill: fiscal.certificateValidTill })
     } catch (err) {
       toast.error('Registration failed: ' + (err.message || 'Unknown error'))
     } finally {
@@ -435,6 +434,21 @@ export default function Fiscalisation() {
             >
               Save Configuration
             </button>
+            {!fiscal.isRegistered && (
+              <button
+                onClick={handleRegisterDevice}
+                disabled={registerLoading || !isSupabaseConfigured || locked || !fiscalForm.activationKey}
+                className="flex items-center gap-2 rounded-xl bg-green-600 px-6 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-50"
+                title={!fiscalForm.activationKey ? 'Enter your ZIMRA activation key first' : undefined}
+              >
+                {registerLoading ? (
+                  <Loader className="h-4 w-4 animate-spin" />
+                ) : (
+                  <ShieldCheck className="h-4 w-4" />
+                )}
+                Register Device
+              </button>
+            )}
             <button
               onClick={handlePing}
               disabled={pingLoading || !isSupabaseConfigured || locked}

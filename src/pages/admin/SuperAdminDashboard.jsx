@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
-  TrendingUp, Users, Building2, DollarSign,
+  TrendingUp, Building2,
   Clock, CheckCircle, AlertTriangle, ChevronRight, LifeBuoy,
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'

@@ -96,10 +96,6 @@ export function formatDateTime(date) {
   }).format(new Date(date))
 }
 
-export function formatNumber(num) {
-  return new Intl.NumberFormat('en-US').format(num)
-}
-
 // First letter of the first two significant words ("Munyah's Store" -> "MS");
 // one-word names take its first two letters ("Bunya" -> "BU"). Always 2
 // letters, padded with 'X' if the name can't supply that many.

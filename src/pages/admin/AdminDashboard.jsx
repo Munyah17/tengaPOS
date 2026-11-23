@@ -1,12 +1,10 @@
 import { useState, useEffect } from 'react'
-import { LifeBuoy, AlertCircle, CheckCircle, Clock, Users, TrendingUp } from 'lucide-react'
+import { LifeBuoy, AlertCircle, CheckCircle, Clock, Users } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
-import { useAuthStore } from '@/stores/authStore'
 import { Link } from 'react-router-dom'
 import { toLocalDateStr } from '@/utils/formatters'
 
 export default function AdminDashboard() {
-  const { role } = useAuthStore()
   const [stats, setStats] = useState({
     openTickets: 0,
     inProgress: 0,
