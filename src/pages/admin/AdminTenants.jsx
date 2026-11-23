@@ -30,6 +30,7 @@ const STATUS_BADGE = {
   stalled:   { bg: 'bg-orange-500/20', text: 'text-orange-400', label: 'Stalled',  icon: PauseCircle },
 }
 
+const MANUAL_METHOD_LABELS = { cash: 'Cash', bank_transfer: 'Bank transfer', mobile_transfer: 'EcoCash / InnBucks transfer' }
 const TEAM_SIZE_LABELS = { '1-5': '1–5', '6-15': '6–15', '16-30': '16–30', '31-50': '31–50', '50+': '50+' }
 const PLAN_PREF_LABELS = { byod: 'BYOD (own device)', combo: 'Hardware Combo', undecided: 'Not sure yet' }
 
@@ -174,7 +175,7 @@ export function TenantModal({ tenant, technicians, onClose, onSaved }) {
   const [pendingCashCheckout, setPendingCashCheckout] = useState(null)
   const [cashLoading, setCashLoading] = useState(false)
   useEffect(() => {
-    supabase.from('signup_checkouts').select('id, plan_type, amount, reference, created_at')
+    supabase.from('signup_checkouts').select('*')
       .eq('tenant_id', tenant.id).eq('status', 'pending_cash')
       .order('created_at', { ascending: false }).limit(1).maybeSingle()
       .then(({ data }) => setPendingCashCheckout(data || null))
@@ -186,7 +187,7 @@ export function TenantModal({ tenant, technicians, onClose, onSaved }) {
     try {
       const { error } = await supabase.rpc('confirm_cash_signup', { p_checkout_id: pendingCashCheckout.id })
       if (error) throw error
-      toast.success(`${tenant.name}'s cash payment confirmed — plan activated`)
+      toast.success(`${tenant.name}'s payment confirmed — plan activated`)
       setPendingCashCheckout(null)
       onSaved()
     } catch (err) {
@@ -726,7 +727,13 @@ export function TenantModal({ tenant, technicians, onClose, onSaved }) {
               {pendingCashCheckout && (
                 <div className="mt-2 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-500/20 bg-amber-500/5 px-4 py-3">
                   <p className="text-sm text-amber-500 dark:text-amber-400">
-                    Cash payment pending — {PLANS[pendingCashCheckout.plan_type]?.label || pendingCashCheckout.plan_type}, ${pendingCashCheckout.amount}
+                    {MANUAL_METHOD_LABELS[pendingCashCheckout.provider] || 'Cash'} payment pending — {PLANS[pendingCashCheckout.plan_type]?.label || pendingCashCheckout.plan_type}, ${pendingCashCheckout.amount}
+                    {pendingCashCheckout.payer_reference && (
+                      <span className="mt-0.5 block text-xs">
+                        Ref: <b>{pendingCashCheckout.payer_reference}</b>
+                        {pendingCashCheckout.payer_name ? <> · Sender: <b>{pendingCashCheckout.payer_name}</b></> : null}
+                      </span>
+                    )}
                   </p>
                   <button
                     onClick={confirmCashPayment}

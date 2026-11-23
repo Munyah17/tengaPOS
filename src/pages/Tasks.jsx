@@ -1,9 +1,9 @@
 import { useState, useRef, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
-  Plus, CheckCircle, Clock, AlertCircle, User, Paperclip, X,
-  ChevronDown, Search, Calendar, Flag, FileText, Image, File,
-  CheckSquare, Square, Upload, Send, Edit3, Trash2, Info, MessageCircle,
+  Plus, CheckCircle, Clock, AlertCircle, User, Paperclip,
+  ChevronDown, Search, Calendar, FileText, Image, File,
+  CheckSquare, Upload, Send, Trash2, Info, MessageCircle,
 } from 'lucide-react'
 import Modal from '@/components/common/Modal'
 import DateInput from '@/components/common/DateInput'

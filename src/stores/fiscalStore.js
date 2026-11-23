@@ -5,7 +5,11 @@
  */
 import { create } from 'zustand'
 
-export const useFiscalStore = create((set, get) => ({
+// ZIMRA's invoice validation portal. The old default returned 404.
+const DEFAULT_QR_URL = 'https://fdms.zimra.co.zw'
+const LEGACY_QR_URL = 'https://www.zimra.co.zw/verify'
+
+export const useFiscalStore = create((set) => ({
   // Credentials — populated by loadFromDB()
   deviceID:             '',
   activationKey:        '',
@@ -20,7 +24,7 @@ export const useFiscalStore = create((set, get) => ({
   isEnabled:            false,
   isRegistered:         false,
   certificateValidTill: null,
-  qrUrl:                'https://www.zimra.co.zw/verify',
+  qrUrl:                DEFAULT_QR_URL,
 
   // Runtime state (volatile, per-session)
   fiscalDayStatus:        'closed',
@@ -46,7 +50,7 @@ export const useFiscalStore = create((set, get) => ({
     isEnabled:            row.is_enabled            ?? false,
     isRegistered:         row.is_registered         ?? false,
     certificateValidTill: row.certificate_valid_till ?? null,
-    qrUrl:                row.qr_url               || 'https://www.zimra.co.zw/verify',
+    qrUrl:                row.qr_url && row.qr_url !== LEGACY_QR_URL ? row.qr_url : DEFAULT_QR_URL,
     fiscalDayStatus:      row.fiscal_day_status     || 'closed',
     fiscalDayNo:          row.fiscal_day_no         ?? 0,
     lastReceiptGlobalNo:  row.last_receipt_global_no ?? 0,
