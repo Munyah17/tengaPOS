@@ -101,11 +101,20 @@ serve(async (req) => {
     // Resolve the caller's tenant server-side — never trust a client tenant_id
     const { data: userRow } = await admin
       .from('users')
-      .select('tenant_id, email, tenants(name, plan_type, trial_discount_expires_at)')
+      .select('tenant_id, email, role, tenants(name, plan_type, trial_discount_expires_at)')
       .eq('id', caller.id)
       .single()
     if (!userRow?.tenant_id) return json({ error: 'No tenant found for this account' }, 400)
     const tenantId = userRow.tenant_id
+
+    // Add-on checkouts subscribe the whole business to a recurring charge,
+    // so only the owner can start one — the UI already hides these from
+    // shop managers (SHOP_MANAGER_HIDDEN_SECTIONS / CAN_MANAGE), this is
+    // the server-side enforcement.
+    const isAddon = isFiscal || isAccountingErp || isAiInsights || isWhatsappReceipts || isHosting || isDesktopCloudSync
+    if (isAddon && userRow.role !== 'vendor') {
+      return json({ error: 'Only the business owner can purchase add-ons' }, 403)
+    }
 
     // Live pricing from platform_settings (Super Admin controlled)
     let plan: { amount: number; label: string; months: number } | null = null
