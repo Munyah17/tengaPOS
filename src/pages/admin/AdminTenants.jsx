@@ -171,9 +171,14 @@ export function TenantModal({ tenant, technicians, onClose, onSaved }) {
     setPlanType(plan)
     // Plan defaults must not wipe paid add-on flags a tenant already has —
     // each pairs with an *_expires_at column that governs real expiry (the
-    // hourly lock_expired_* crons), so carrying them forward is safe.
+    // hourly lock_expired_* crons), so carrying them forward is safe. A flag
+    // whose paid expiry already passed (still true inside the grace window)
+    // must NOT carry over — keeping it would read as a manual grant and the
+    // save path below would clear the expiry, unlocking it forever.
     const keepAddons = Object.fromEntries(
-      Object.keys(ADDON_EXPIRY_COL).filter((flag) => features[flag] === true).map((flag) => [flag, true]),
+      Object.entries(ADDON_EXPIRY_COL)
+        .filter(([flag, col]) => features[flag] === true && (!tenant[col] || new Date(tenant[col]) > new Date()))
+        .map(([flag]) => [flag, true]),
     )
     setFeatures({ ...DEFAULT_FEATURES[plan], ...keepAddons })
     setBackupConfig(DEFAULT_BACKUP[plan])
