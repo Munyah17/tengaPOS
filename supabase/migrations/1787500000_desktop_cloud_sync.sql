@@ -8,3 +8,18 @@ ALTER TABLE public.tenants
 
 CREATE INDEX IF NOT EXISTS idx_tenants_desktop_cloud_sync_expires
   ON public.tenants(desktop_cloud_sync_expires_at);
+
+-- signup_checkouts.plan_type must accept every add-on plan key
+-- signup-checkout writes; the fiscal-era CHECK only knew fiscal_*, which
+-- rejected (and silently dropped) erp_/ai_/wa_/hosting_/dcs_* rows.
+ALTER TABLE public.signup_checkouts
+  DROP CONSTRAINT IF EXISTS signup_checkouts_plan_type_check;
+ALTER TABLE public.signup_checkouts
+  ADD CONSTRAINT signup_checkouts_plan_type_check
+  CHECK (
+    plan_type IN (
+      'byod_monthly', 'byod_yearly', 'combo_6month',
+      'standard_plan', 'pro_package', 'business', 'enterprise'
+    )
+    OR plan_type ~ '^(fiscal|erp|ai|wa|hosting|dcs)_(monthly|quarterly|halfyear|yearly)$'
+  );
