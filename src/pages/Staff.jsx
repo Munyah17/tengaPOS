@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
-import { Plus, RefreshCw, ToggleLeft, ToggleRight, Eye, EyeOff, X, Loader2, Pencil, Building2, Trash2 } from 'lucide-react'
+import { Plus, RefreshCw, ToggleLeft, ToggleRight, Eye, EyeOff, Loader2, Pencil, Building2, Trash2 } from 'lucide-react'
 import Button from '@/components/common/Button'
 import Modal from '@/components/common/Modal'
 import ExportMenu from '@/components/common/ExportMenu'
@@ -11,7 +11,6 @@ import {
   updateStaffJobTitle, fetchUserBranches, assignUserBranch, unassignUserBranch,
 } from '@/lib/dataLayer'
 import { loadWithOfflineCache } from '@/lib/offlineCache'
-import { supabase } from '@/lib/supabase'
 import { invokeEdgeFunction } from '@/lib/edgeFunction'
 import ShiftRoster from '@/components/staff/ShiftRoster'
 import toast from 'react-hot-toast'

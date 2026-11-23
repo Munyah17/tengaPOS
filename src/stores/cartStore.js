@@ -115,7 +115,7 @@ export const useCartStore = create((set, get) => ({
   // no VAT at all, matching how VAT actually works (these are legally
   // distinct from "standard-rated" under the VAT Act, not just "off").
   getTax: () => {
-    const { vatEnabled, vatRate, items, discount, discountType } = get()
+    const { vatEnabled, vatRate, items } = get()
     if (!vatEnabled) return 0
 
     const lineTotal = (item) => item.price * item.quantity * (1 - (item.itemDiscount || 0) / 100)

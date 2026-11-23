@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import {
   Sparkles, TrendingUp, Package, DollarSign, AlertCircle,
@@ -133,7 +133,7 @@ function InsightCard({ insight, i }) {
 }
 
 export default function Insights() {
-  const { profile, tenant } = useAuthStore()
+  const { tenant } = useAuthStore()
   const { posMode } = useThemeStore()
 
   const [timeline, setTimeline] = useState('this_month')
@@ -143,7 +143,6 @@ export default function Insights() {
   const [error, setError] = useState(null)
   const [products, setProducts] = useState([])
   const [dataLoading, setDataLoading] = useState(false)
-  const reportRef = useRef(null)
 
   const tlMeta = TIMELINES.find((t) => t.key === timeline) || TIMELINES[2]
 

@@ -8,8 +8,8 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Link } from 'react-router-dom'
 import {
-  Inbox, Printer, Ban, Undo2, CreditCard, CheckCircle, XCircle,
-  ShieldCheck, ChevronRight, RefreshCw, ClipboardEdit,
+  Inbox, Printer, Ban, Undo2, CreditCard,
+  ChevronRight, RefreshCw, ClipboardEdit,
 } from 'lucide-react'
 import { useAuthStore } from '@/stores/authStore'
 import {
