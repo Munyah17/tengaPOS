@@ -31,6 +31,18 @@ const STATUS_BADGE = {
 }
 
 const TEAM_SIZE_LABELS = { '1-5': '1–5', '6-15': '6–15', '16-30': '16–30', '31-50': '31–50', '50+': '50+' }
+
+// Paid add-ons each pair a features flag with an *_expires_at column
+// (governed by the hourly lock_expired_* crons). Used both to preserve
+// the flags across plan changes and to clear stale expiries on manual
+// grants below.
+const ADDON_EXPIRY_COL = {
+  accounting_erp: 'accounting_erp_expires_at',
+  ai_insights: 'ai_insights_expires_at',
+  whatsapp_receipts: 'whatsapp_receipts_expires_at',
+  fiscalisation: 'fiscal_expires_at',
+  desktop_cloud_sync: 'desktop_cloud_sync_expires_at',
+}
 const PLAN_PREF_LABELS = { byod: 'BYOD (own device)', combo: 'Hardware Combo', undecided: 'Not sure yet' }
 
 // Every paid add-on's unlock flag is included here too, so a custom
@@ -157,7 +169,13 @@ export function TenantModal({ tenant, technicians, onClose, onSaved }) {
 
   const applyPlanDefaults = (plan) => {
     setPlanType(plan)
-    setFeatures(DEFAULT_FEATURES[plan])
+    // Plan defaults must not wipe paid add-on flags a tenant already has —
+    // each pairs with an *_expires_at column that governs real expiry (the
+    // hourly lock_expired_* crons), so carrying them forward is safe.
+    const keepAddons = Object.fromEntries(
+      Object.keys(ADDON_EXPIRY_COL).filter((flag) => features[flag] === true).map((flag) => [flag, true]),
+    )
+    setFeatures({ ...DEFAULT_FEATURES[plan], ...keepAddons })
     setBackupConfig(DEFAULT_BACKUP[plan])
     if (!['business', 'enterprise'].includes(plan)) {
       setWhitelabel({})
@@ -355,12 +373,6 @@ export function TenantModal({ tenant, technicians, onClose, onSaved }) {
     // the feature "turns itself off" within the hour. Clearing the stale
     // expiry marks it an indefinite manual grant — a future paid expiry is
     // left untouched so paid periods still auto-lock at expiry + grace.
-    const ADDON_EXPIRY_COL = {
-      accounting_erp: 'accounting_erp_expires_at',
-      ai_insights: 'ai_insights_expires_at',
-      whatsapp_receipts: 'whatsapp_receipts_expires_at',
-      fiscalisation: 'fiscal_expires_at',
-    }
     for (const [flag, col] of Object.entries(ADDON_EXPIRY_COL)) {
       if (features[flag] === true && tenant[col] && new Date(tenant[col]) < now) {
         updates[col] = null
