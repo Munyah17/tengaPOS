@@ -23,3 +23,15 @@ ALTER TABLE public.signup_checkouts
     )
     OR plan_type ~ '^(fiscal|erp|ai|wa|hosting|dcs)_(monthly|quarterly|halfyear|yearly)$'
   );
+
+-- byod_yearly is a real plan (signup-checkout prices it) but the tenants
+-- plan check never learned it — settlement would mark the checkout paid
+-- while the tenant update failed. Keep the two constraints in step.
+ALTER TABLE public.tenants
+  DROP CONSTRAINT IF EXISTS tenants_plan_type_check;
+ALTER TABLE public.tenants
+  ADD CONSTRAINT tenants_plan_type_check
+  CHECK (plan_type IN (
+    'byod_monthly', 'byod_yearly',
+    'standard_plan', 'pro_package', 'business', 'enterprise'
+  ));
