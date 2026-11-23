@@ -47,6 +47,10 @@ const ACCOUNTING_ERP_PRICES: Record<string, number> = { monthly: 5, quarterly: 1
 const AI_INSIGHTS_PRICES: Record<string, number> = { monthly: 1, quarterly: 3, halfyear: 5, yearly: 9 }
 // Only monthly/yearly -- no quarterly/halfyear tier was asked for.
 const WHATSAPP_RECEIPTS_PRICES: Record<string, number> = { monthly: 5, yearly: 50 }
+// Cloud Hosting Fee for standalone desktop terminals -- unlocks
+// business-data cloud sync (entitlements.features.cloud_sync). Base $10/mo;
+// usage-tiered pricing lands with the sync engine itself.
+const DESKTOP_CLOUD_SYNC_PRICES: Record<string, number> = { monthly: 10, yearly: 100 }
 const PLAN_LABELS: Record<string, string> = {
   byod_monthly: 'tengaPOS BYOD Monthly (1 month)',
   byod_yearly: 'tengaPOS BYOD Yearly (12 months)',
@@ -91,6 +95,7 @@ serve(async (req) => {
     const isAiInsights = type === 'ai_insights'
     const isWhatsappReceipts = type === 'whatsapp_receipts'
     const isHosting = type === 'hosting'
+    const isDesktopCloudSync = type === 'desktop_cloud_sync'
     const isPlatformInvoice = type === 'platform_invoice'
 
     // Resolve the caller's tenant server-side — never trust a client tenant_id
@@ -150,6 +155,11 @@ serve(async (req) => {
       const price = period === 'yearly' ? hostingTable.yearly : period === 'monthly' ? hostingTable.monthly : undefined
       if (!months || !price) return json({ error: 'Invalid hosting period' }, 400)
       plan = { amount: price, label: `tengaPOS Hosting — ${PERIOD_LABEL[period as string]}`, months }
+    } else if (isDesktopCloudSync) {
+      const months = period === 'yearly' ? 12 : period === 'monthly' ? 1 : 0
+      const price = DESKTOP_CLOUD_SYNC_PRICES[period as string]
+      if (!months || !price) return json({ error: 'Invalid cloud sync period' }, 400)
+      plan = { amount: price, label: `tengaPOS Desktop Cloud Sync — ${PERIOD_LABEL[period as string]}`, months }
     } else {
       const { data: pp } = await admin.from('platform_settings').select('value').eq('key', 'plan_pricing').maybeSingle()
       const table = { ...FALLBACK_PLAN_PRICES, ...((pp?.value as Record<string, { price: number; renewalMonths: number }>) || {}) }
@@ -174,9 +184,9 @@ serve(async (req) => {
       plan = { amount, label, months: p.renewalMonths }
     }
 
-    const checkoutKind = isPlatformInvoice ? 'platform_invoice' : isFiscal ? 'fiscalisation' : isAccountingErp ? 'accounting_erp' : isAiInsights ? 'ai_insights' : isWhatsappReceipts ? 'whatsapp_receipts' : isHosting ? 'hosting' : 'plan'
-    const planKey = isPlatformInvoice ? 'platform_invoice' : isFiscal ? `fiscal_${period}` : isAccountingErp ? `erp_${period}` : isAiInsights ? `ai_${period}` : isWhatsappReceipts ? `wa_${period}` : isHosting ? `hosting_${period}` : plan_type
-    const refPrefix = isPlatformInvoice ? 'PINV' : isFiscal ? 'FIS' : isAccountingErp ? 'ERP' : isAiInsights ? 'AI' : isWhatsappReceipts ? 'WA' : isHosting ? 'HOST' : 'SUB'
+    const checkoutKind = isPlatformInvoice ? 'platform_invoice' : isFiscal ? 'fiscalisation' : isAccountingErp ? 'accounting_erp' : isAiInsights ? 'ai_insights' : isWhatsappReceipts ? 'whatsapp_receipts' : isHosting ? 'hosting' : isDesktopCloudSync ? 'desktop_cloud_sync' : 'plan'
+    const planKey = isPlatformInvoice ? 'platform_invoice' : isFiscal ? `fiscal_${period}` : isAccountingErp ? `erp_${period}` : isAiInsights ? `ai_${period}` : isWhatsappReceipts ? `wa_${period}` : isHosting ? `hosting_${period}` : isDesktopCloudSync ? `dcs_${period}` : plan_type
+    const refPrefix = isPlatformInvoice ? 'PINV' : isFiscal ? 'FIS' : isAccountingErp ? 'ERP' : isAiInsights ? 'AI' : isWhatsappReceipts ? 'WA' : isHosting ? 'HOST' : isDesktopCloudSync ? 'DCS' : 'SUB'
     const reference = `${refPrefix}-${Date.now()}-${Math.random().toString(36).slice(2, 7).toUpperCase()}`
     const amountStr = plan.amount.toFixed(2)
     const returnUrl = return_url || 'https://www.tengapos.co.zw/checkout'

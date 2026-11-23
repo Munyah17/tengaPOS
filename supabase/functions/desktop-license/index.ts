@@ -205,6 +205,16 @@ async function entitlementsFor(
       receipt_printing: true,
       local_users: true,
       ...(typeof tenant.features === 'object' && tenant.features ? tenant.features as object : {}),
+      // Cloud Hosting Fee — paid add-on (signup-checkout type
+      // 'desktop_cloud_sync') that unlocks business-data cloud sync on
+      // standalone terminals. Expiry lives on the tenant row so a lapsed
+      // subscription silently drops the flag at the next lease renewal.
+      cloud_sync: Boolean(
+        tenant.features && typeof tenant.features === 'object' && (tenant.features as Record<string, unknown>).desktop_cloud_sync
+          && tenant.desktop_cloud_sync_expires_at
+          && Date.parse(tenant.desktop_cloud_sync_expires_at as string) > Date.now(),
+      ),
+      cloud_sync_expires_at: (tenant.desktop_cloud_sync_expires_at as string) || null,
     },
     plan_expires_at: (tenant.next_renewal_date as string) || (tenant.trial_ends_at as string) || null,
   }

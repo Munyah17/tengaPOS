@@ -253,10 +253,18 @@ Derived server-side from the tenant's existing `plan_type`/`features` — no new
   "plan": "pro_package",
   "max_devices": 3,
   "modules": ["core_pos", "inventory", "reports"],
-  "features": { "offline_sales": true, "receipt_printing": true, "local_users": true },
+  "features": {
+    "offline_sales": true,
+    "receipt_printing": true,
+    "local_users": true,
+    "cloud_sync": false,
+    "cloud_sync_expires_at": null
+  },
   "plan_expires_at": "ISO|null"
 }
 ```
+
+**`cloud_sync` (Cloud Hosting Fee):** paid add-on that unlocks business-data cloud sync on standalone terminals — sold via `signup-checkout` `type: 'desktop_cloud_sync'` (`$10/mo`, `$100/yr`; usage tiers later), settled through the same Stripe/Paynow plumbing as other add-ons (`tenants.features.desktop_cloud_sync` + `tenants.desktop_cloud_sync_expires_at`). The flag is computed at every activation/renewal — a lapsed subscription drops it at the next lease, silently. Offline POS never depends on it.
 
 Embedded inside every lease — changing plan mid-term takes effect at next check-in. `max_devices` enforced at `/activate` (409 on overflow).
 

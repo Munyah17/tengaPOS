@@ -180,6 +180,14 @@ serve(async (req) => {
         features: { ...(t?.features || {}), whatsapp_receipts: true },
         whatsapp_receipts_expires_at: renewal.toISOString(),
       }).eq('id', tenantId)
+    } else if (kind === 'desktop_cloud_sync') {
+      // Cloud Hosting Fee -- unlocks business-data cloud sync on standalone
+      // desktop terminals for the paid period (entitlements.features.cloud_sync).
+      const { data: t } = await admin.from('tenants').select('features').eq('id', tenantId).maybeSingle()
+      await admin.from('tenants').update({
+        features: { ...(t?.features || {}), desktop_cloud_sync: true },
+        desktop_cloud_sync_expires_at: renewal.toISOString(),
+      }).eq('id', tenantId)
     } else if (kind === 'hosting') {
       // Extends hosting_expires_at -- App.jsx gates access for a Standard/
       // Pro tenant whose hosting has lapsed (new-signup tenants only, see
