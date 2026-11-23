@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   Monitor, Download, KeyRound, Plus, Copy, Check, RefreshCw,
-  Ban, RotateCcw, Wifi, WifiOff, Clock, Laptop, ShoppingCart,
+  Ban, RotateCcw, Wifi, WifiOff, Clock, Laptop, ShoppingCart, Cloud,
 } from 'lucide-react'
 import { useAuthStore } from '@/stores/authStore'
+import { supabase } from '@/lib/supabase'
 import Modal from '@/components/common/Modal'
 import {
   getDownloadInfo, createActivationCode, listActivationCodes,
@@ -53,6 +54,8 @@ export default function DesktopApp() {
   const [buyLabel, setBuyLabel] = useState('')
   const [buying, setBuying] = useState(false)
   const [copied, setCopied] = useState(false)
+  const [syncPeriod, setSyncPeriod] = useState('monthly')
+  const [syncBuying, setSyncBuying] = useState(null)   // 'paynow' | 'stripe' | null
   const [revoking, setRevoking] = useState(null)    // device object pending confirm
 
   const load = useCallback(async () => {
@@ -138,6 +141,32 @@ export default function DesktopApp() {
     }
   }
 
+  // Cloud Hosting Fee — paid add-on that unlocks business-data cloud sync
+  // on standalone terminals (license alone is fully offline by design).
+  // Settles via the same signup-checkout plumbing as the other add-ons.
+  const buyCloudSync = async (provider) => {
+    setSyncBuying(provider)
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      const { data, error } = await supabase.functions.invoke('signup-checkout', {
+        body: {
+          type: 'desktop_cloud_sync',
+          period: syncPeriod,
+          provider,
+          return_url: `${window.location.origin}/app/desktop`,
+        },
+        headers: { Authorization: `Bearer ${session?.access_token}` },
+      })
+      if (error) throw new Error(error.message)
+      if (data?.error) throw new Error(data.error)
+      if (!data?.url) throw new Error('No checkout URL returned')
+      window.location.href = data.url
+    } catch (err) {
+      toast.error(err.message || 'Could not start checkout')
+      setSyncBuying(null)
+    }
+  }
+
   const revokeCode = async (codeId) => {
     try {
       await revokeActivationCode(codeId)
@@ -164,6 +193,11 @@ export default function DesktopApp() {
   }
 
   const activeDevices = useMemo(() => devices.filter((d) => d.status === 'active'), [devices])
+  const cloudSyncActive = Boolean(
+    tenant?.features?.desktop_cloud_sync
+    && tenant?.desktop_cloud_sync_expires_at
+    && new Date(tenant.desktop_cloud_sync_expires_at) > new Date(),
+  )
 
   return (
     <div className="p-4 sm:p-6">
@@ -236,6 +270,59 @@ export default function DesktopApp() {
             </div>
           ) : (
             <p className="text-xs text-slate-400">Only the business owner can issue activation codes.</p>
+          )}
+        </div>
+      </div>
+
+      {/* Cloud Sync — the Cloud Hosting Fee add-on */}
+      <div className="mb-6 rounded-2xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="flex items-start gap-3">
+            <div className={`rounded-xl p-2.5 ${cloudSyncActive ? 'bg-emerald-100 dark:bg-emerald-900/40' : 'bg-slate-100 dark:bg-slate-800'}`}>
+              <Cloud className={`h-5 w-5 ${cloudSyncActive ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-500 dark:text-slate-400'}`} />
+            </div>
+            <div>
+              <h2 className="font-bold text-slate-900 dark:text-white">
+                Cloud Sync{cloudSyncActive ? ' — active' : ''}
+              </h2>
+              <p className="mt-1 max-w-xl text-sm text-slate-500">
+                Desktop terminals are offline-first and work forever without a subscription.
+                Cloud Sync is the optional Cloud Hosting Fee that lets a terminal sync its
+                local sales and inventory back to your cloud account.
+                {cloudSyncActive
+                  ? ` Active until ${fmt(tenant.desktop_cloud_sync_expires_at)}.`
+                  : ' From $10/month per business — pricing scales with data size and compute needs.'}
+              </p>
+            </div>
+          </div>
+          {canManage && !cloudSyncActive && (
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="flex overflow-hidden rounded-xl border border-slate-200 dark:border-slate-700">
+                {[['monthly', '$10/mo'], ['yearly', '$100/yr']].map(([p, label]) => (
+                  <button
+                    key={p}
+                    onClick={() => setSyncPeriod(p)}
+                    className={`px-3 py-2 text-xs font-bold ${syncPeriod === p ? 'bg-brand-600 text-white' : 'text-slate-600 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-800'}`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+              <button
+                onClick={() => buyCloudSync('paynow')}
+                disabled={!!syncBuying}
+                className="rounded-xl bg-brand-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-brand-700 disabled:opacity-60"
+              >
+                {syncBuying === 'paynow' ? 'Redirecting…' : 'Subscribe with Paynow'}
+              </button>
+              <button
+                onClick={() => buyCloudSync('stripe')}
+                disabled={!!syncBuying}
+                className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-60 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+              >
+                {syncBuying === 'stripe' ? 'Redirecting…' : 'Stripe'}
+              </button>
+            </div>
           )}
         </div>
       </div>

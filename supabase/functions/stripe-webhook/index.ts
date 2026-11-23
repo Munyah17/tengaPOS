@@ -180,6 +180,21 @@ serve(async (req) => {
         features: { ...(t?.features || {}), whatsapp_receipts: true },
         whatsapp_receipts_expires_at: renewal.toISOString(),
       }).eq('id', tenantId)
+    } else if (kind === 'desktop_cloud_sync') {
+      // Cloud Hosting Fee -- unlocks business-data cloud sync on standalone
+      // desktop terminals for the paid period (entitlements.features.cloud_sync).
+      // Stack on top of paid coverage still running: paying a monthly
+      // checkout while an annual term is active must extend it, not shrink
+      // it back to now + 1 month.
+      const { data: t } = await admin.from('tenants').select('features, desktop_cloud_sync_expires_at').eq('id', tenantId).maybeSingle()
+      const current = t?.desktop_cloud_sync_expires_at ? new Date(t.desktop_cloud_sync_expires_at) : null
+      const dcsBase = current && current > now ? current : now
+      const dcsExpiry = new Date(dcsBase)
+      dcsExpiry.setMonth(dcsExpiry.getMonth() + months)
+      await admin.from('tenants').update({
+        features: { ...(t?.features || {}), desktop_cloud_sync: true },
+        desktop_cloud_sync_expires_at: dcsExpiry.toISOString(),
+      }).eq('id', tenantId)
     } else if (kind === 'hosting') {
       // Extends hosting_expires_at -- App.jsx gates access for a Standard/
       // Pro tenant whose hosting has lapsed (new-signup tenants only, see

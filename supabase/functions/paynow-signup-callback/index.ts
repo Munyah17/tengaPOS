@@ -103,6 +103,7 @@ serve(async (req) => {
       const isAiInsights = String(checkout.plan_type).startsWith('ai_')
       const isWhatsappReceipts = String(checkout.plan_type).startsWith('wa_')
       const isHosting = String(checkout.plan_type).startsWith('hosting_')
+      const isDesktopCloudSync = String(checkout.plan_type).startsWith('dcs_')
       const FISCAL_MONTHS: Record<string, number> = {
         fiscal_monthly: 1, fiscal_quarterly: 3, fiscal_halfyear: 6, fiscal_yearly: 12,
       }
@@ -118,6 +119,9 @@ serve(async (req) => {
       const HOSTING_MONTHS: Record<string, number> = {
         hosting_monthly: 1, hosting_yearly: 12,
       }
+      const DCS_MONTHS: Record<string, number> = {
+        dcs_monthly: 1, dcs_yearly: 12,
+      }
       const months = isFiscal
         ? (FISCAL_MONTHS[checkout.plan_type] || 1)
         : isAccountingErp
@@ -128,6 +132,8 @@ serve(async (req) => {
         ? (WHATSAPP_MONTHS[checkout.plan_type] || 1)
         : isHosting
         ? (HOSTING_MONTHS[checkout.plan_type] || 1)
+        : isDesktopCloudSync
+        ? (DCS_MONTHS[checkout.plan_type] || 1)
         : (PLAN_MONTHS[checkout.plan_type] || 6)
       const now = new Date()
       const renewal = new Date(now)
@@ -168,6 +174,21 @@ serve(async (req) => {
         await admin.from('tenants').update({
           features: { ...(t?.features || {}), whatsapp_receipts: true },
           whatsapp_receipts_expires_at: renewal.toISOString(),
+        }).eq('id', checkout.tenant_id)
+      } else if (isDesktopCloudSync) {
+        // Cloud Hosting Fee -- unlocks business-data cloud sync on standalone
+        // desktop terminals for the paid period (entitlements.features.cloud_sync).
+        // Stack on top of paid coverage still running: paying a monthly
+        // checkout while an annual term is active must extend it, not shrink
+        // it back to now + 1 month.
+        const { data: t } = await admin.from('tenants').select('features, desktop_cloud_sync_expires_at').eq('id', checkout.tenant_id).maybeSingle()
+        const current = t?.desktop_cloud_sync_expires_at ? new Date(t.desktop_cloud_sync_expires_at) : null
+        const dcsBase = current && current > now ? current : now
+        const dcsExpiry = new Date(dcsBase)
+        dcsExpiry.setMonth(dcsExpiry.getMonth() + months)
+        await admin.from('tenants').update({
+          features: { ...(t?.features || {}), desktop_cloud_sync: true },
+          desktop_cloud_sync_expires_at: dcsExpiry.toISOString(),
         }).eq('id', checkout.tenant_id)
       } else if (isHosting) {
         await admin.from('tenants').update({ hosting_expires_at: renewal.toISOString() }).eq('id', checkout.tenant_id)
